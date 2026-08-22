@@ -37,8 +37,8 @@ button, input, textarea { font: inherit; }
 .topbar { display: flex; gap: 16px; justify-content: space-between; align-items: end; margin-bottom: 14px; }
 .eyebrow { margin: 0 0 4px; color: var(--accent-2); text-transform: uppercase; letter-spacing: .14em; font-size: .72rem; }
 h1 { margin: 0; font-size: clamp(1.35rem, 3vw, 2rem); }
-.header-actions, .day-nav { display: flex; gap: 8px; flex-wrap: wrap; }
-.day-nav { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 2px; }
+.header-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.day-nav { display: flex; flex-wrap: wrap; gap: 0; padding: 0; border: 1px solid var(--line); border-radius: 16px; overflow: hidden; background: var(--panel); }
 .day-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 6px; }
 .day-toolbar-actions { display: flex; gap: 8px; align-items: center; }
 .mini-menu { position: relative; }
@@ -118,7 +118,8 @@ h1 { margin: 0; font-size: clamp(1.35rem, 3vw, 2rem); }
 .editor-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .danger { background: rgba(251,113,133,.14); }
 .day-btn { position: relative; display: inline-flex; align-items: center; gap: 8px; padding-right: 34px; }
-.day-toolbar .day-btn { flex: 1 1 120px; justify-content: center; }
+.day-toolbar .day-btn { flex: 1 1 120px; justify-content: center; border: 0; border-right: 1px solid var(--line); border-radius: 0; box-shadow: none; }
+.day-toolbar .day-btn:last-child { border-right: 0; }
 .day-close {
   display: inline-flex;
   align-items: center;
@@ -141,11 +142,23 @@ h1 { margin: 0; font-size: clamp(1.35rem, 3vw, 2rem); }
 .empty-state { padding: 24px; text-align: center; color: var(--muted); border: 1px dashed var(--line); border-radius: 20px; }
 @media (max-width: 780px) {
   .topbar, .day-header, .exercise-title-row { align-items: stretch; flex-direction: column; }
+  .header-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .header-actions > button, .header-actions > .mini-menu { width: 100%; }
+  .header-actions .mode-btn, .header-actions summary { text-align: center; width: 100%; }
   .day-toolbar, .editor-day-header { align-items: stretch; flex-direction: column; }
-  .mini-menu-panel { right: auto; left: 0; min-width: 180px; }
+  .mini-menu-panel { right: 0; left: auto; min-width: 200px; }
   .exercise-card { grid-template-columns: 1fr; }
   .exercise-image { min-height: 220px; max-height: 260px; }
   .editor-row { grid-template-columns: 1fr 1fr; }
+}
+
+@media (max-width: 420px) {
+  .app-shell { padding: 12px; }
+  .header-actions { gap: 6px; }
+  .header-actions > button, .header-actions summary { padding: 10px 8px; font-size: .9rem; }
+  .day-toolbar .day-btn { flex: 1 1 33.333%; min-width: 0; padding: 10px 6px; font-size: .86rem; }
+  .day-toolbar .day-btn:nth-child(3n) { border-right: 0; }
+  .day-toolbar .day-btn:nth-last-child(-n+3) { border-bottom: 0; }
 }
 
 :root[data-theme="light"] .exercise-card,

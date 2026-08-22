@@ -42,16 +42,16 @@ async function init() {
 }
 
 function bindShellEvents() {
-  els.workoutModeBtn.addEventListener("click", () => setMode("workout"));
-  els.editorModeBtn.addEventListener("click", () => setMode("editor"));
-  els.themeLightBtn.addEventListener("click", () => setTheme("light"));
-  els.themeDarkBtn.addEventListener("click", () => setTheme("dark"));
+  els.workoutModeBtn?.addEventListener("click", () => setMode("workout"));
+  els.editorModeBtn?.addEventListener("click", () => setMode("editor"));
+  els.themeLightBtn?.addEventListener("click", () => setTheme("light"));
+  els.themeDarkBtn?.addEventListener("click", () => setTheme("dark"));
   document.addEventListener("click", handleGlobalClick);
-  els.addDayMenuBtn.addEventListener("click", () => { addDay(); closeMenus(); });
-  els.exportBtnGlobal.addEventListener("click", () => { exportData(); closeMenus(); });
-  els.importBtnGlobal.addEventListener("click", () => { importData(); closeMenus(); });
-  els.restoreLocalBtnGlobal.addEventListener("click", () => { restoreLocalData(); closeMenus(); });
-  els.restoreRoutineBtnGlobal.addEventListener("click", () => { restoreBaseRoutine(); closeMenus(); });
+  els.addDayMenuBtn?.addEventListener("click", () => { addDay(); closeMenus(); });
+  els.exportBtnGlobal?.addEventListener("click", () => { exportData(); closeMenus(); });
+  els.importBtnGlobal?.addEventListener("click", () => { importData(); closeMenus(); });
+  els.restoreLocalBtnGlobal?.addEventListener("click", () => { restoreLocalData(); closeMenus(); });
+  els.restoreRoutineBtnGlobal?.addEventListener("click", () => { restoreBaseRoutine(); closeMenus(); });
 }
 
 function setMode(mode) {
@@ -128,6 +128,7 @@ function ensureLocalShape() {
   state.custom.days ||= {};
   state.custom.daysAdded ||= [];
   state.custom.daysRemoved ||= [];
+  state.custom.dayOrder ||= [];
   for (const exercise of state.exercises) {
     state.custom.exercises[exercise.id] ||= {};
   }
@@ -172,6 +173,13 @@ function getMergedRoutine() {
       )
       .sort((a, b) => a.order - b.order);
     return { ...day, ...dayCustom, exercises };
+  });
+  const savedOrder = state.custom.dayOrder || [];
+  const rank = new Map(savedOrder.map((id, index) => [id, index]));
+  days.sort((a, b) => {
+    const aRank = rank.has(a.id) ? rank.get(a.id) : savedOrder.length + allDays.findIndex((day) => day.id === a.id);
+    const bRank = rank.has(b.id) ? rank.get(b.id) : savedOrder.length + allDays.findIndex((day) => day.id === b.id);
+    return aRank - bRank;
   });
   return { ...state.base, days };
 }
@@ -232,16 +240,10 @@ function renderWorkout(day) {
         <h2 class="day-title">${day.title}</h2>
         <p class="day-subtitle">${day.subtitle}</p>
       </div>
-      <div class="editor-actions">
-        <button class="action-btn" id="exportBtn" type="button">Exportar datos</button>
-        <button class="action-btn" id="importBtn" type="button">Importar datos</button>
-      </div>
     </div>
     <div class="cards" id="cards"></div>
   `;
   els.app.appendChild(section);
-  section.querySelector("#exportBtn").addEventListener("click", exportData);
-  section.querySelector("#importBtn").addEventListener("click", importData);
   const cards = section.querySelector("#cards");
   day.exercises.forEach(({ exerciseId, series, reps, rest, exercise }) => {
     cards.appendChild(buildWorkoutCard(exercise, series, reps, rest));
@@ -277,14 +279,10 @@ function renderEditor(routine) {
         <h2 class="day-title">Editor</h2>
         <p class="day-subtitle">Edita rutina, orden, imágenes y PR sin tocar código.</p>
       </div>
-      <div class="editor-actions">
-        <button class="action-btn" id="addDayInlineBtn" type="button">Añadir día</button>
-      </div>
     </div>
     <div class="editor-grid" id="editorGrid"></div>
   `;
   els.app.appendChild(panel);
-  panel.querySelector("#addDayInlineBtn").addEventListener("click", addDay);
   const grid = panel.querySelector("#editorGrid");
   const day = routine.days.find((d) => d.id === state.activeDay) || routine.days[0];
   if (!day) {
@@ -314,9 +312,9 @@ function renderEditor(routine) {
     if (confirm(`¿Eliminar ${day.label} - ${day.title}?`)) removeDay(day.id);
   });
   dayBox.querySelectorAll("[data-day-field]").forEach((input) => {
-    input.addEventListener("change", () => {
-      updateDayField(day.id, input.dataset.dayField, input.value);
-    });
+    const saveField = (shouldRender) => updateDayField(day.id, input.dataset.dayField, input.value, shouldRender);
+    input.addEventListener("input", () => saveField(false));
+    input.addEventListener("change", () => saveField(true));
   });
 
   const exerciseList = document.createElement("div");
@@ -357,11 +355,13 @@ function renderEditor(routine) {
 
 function bindEditorRow(row, dayId, exerciseId) {
   row.querySelectorAll("input").forEach((input) => {
-    input.addEventListener("change", () => {
+    const saveField = (shouldRender) => {
       const field = input.dataset.field;
       const value = input.type === "number" ? Number(input.value) : input.value;
-      updateExerciseField(dayId, exerciseId, field, value);
-    });
+      updateExerciseField(dayId, exerciseId, field, value, shouldRender);
+    };
+    input.addEventListener("input", () => saveField(false));
+    input.addEventListener("change", () => saveField(true));
   });
   row.querySelector('[data-action="up"]').addEventListener("click", () => moveExercise(dayId, exerciseId, -1));
   row.querySelector('[data-action="down"]').addEventListener("click", () => moveExercise(dayId, exerciseId, 1));
@@ -374,7 +374,7 @@ function updatePr(exerciseId, value) {
   render();
 }
 
-function updateExerciseField(dayId, exerciseId, field, value) {
+function updateExerciseField(dayId, exerciseId, field, value, shouldRender = true) {
   const dayCustom = state.custom.days[dayId] ||= {};
   const overrides = dayCustom.exercises ||= {};
   const current = overrides[exerciseId] ||= {};
@@ -383,7 +383,7 @@ function updateExerciseField(dayId, exerciseId, field, value) {
     state.custom.exercises[exerciseId] = { ...(state.custom.exercises[exerciseId] || {}), [field]: value };
   }
   saveLocalData();
-  render();
+  if (shouldRender) render();
 }
 
 function moveExercise(dayId, exerciseId, delta) {
@@ -409,46 +409,25 @@ function moveDay(dayId, delta) {
   const index = visibleDays.findIndex((day) => day.id === dayId);
   const target = index + delta;
   if (index < 0 || target < 0 || target >= visibleDays.length) return;
-  [visibleDays[index], visibleDays[target]] = [visibleDays[target], visibleDays[index]];
-  const baseIds = new Set(state.base.days.map((day) => day.id));
-  state.base.days = visibleDays
-    .filter((day) => baseIds.has(day.id))
-    .map((day) => ({
-      id: day.id,
-      label: day.label,
-      title: day.title,
-      subtitle: day.subtitle,
-      exercises: day.exercises.map((entry) => ({
-        exerciseId: entry.exerciseId,
-        series: entry.series,
-        reps: entry.reps,
-        rest: entry.rest,
-      })),
-    }));
-  state.custom.daysAdded = visibleDays
-    .filter((day) => !baseIds.has(day.id))
-    .map((day) => ({
-      id: day.id,
-      label: day.label,
-      title: day.title,
-      subtitle: day.subtitle,
-      exercises: day.exercises.map((entry) => ({
-        exerciseId: entry.exerciseId,
-        series: entry.series,
-        reps: entry.reps,
-        rest: entry.rest,
-      })),
-    }));
+  const orderedIds = visibleDays.map((day) => day.id);
+  [orderedIds[index], orderedIds[target]] = [orderedIds[target], orderedIds[index]];
+  state.custom.dayOrder = orderedIds;
   saveLocalData();
   render();
 }
 
-function updateDayField(dayId, field, value) {
+function updateDayField(dayId, field, value, shouldRender = true) {
   const day = state.base.days.find((d) => d.id === dayId);
-  if (!day) return;
-  day[field] = value;
+  if (day) {
+    const dayCustom = state.custom.days[dayId] ||= {};
+    dayCustom[field] = value;
+  } else {
+    const addedDay = state.custom.daysAdded.find((d) => d.id === dayId);
+    if (!addedDay) return;
+    addedDay[field] = value;
+  }
   saveLocalData();
-  render();
+  if (shouldRender) render();
 }
 
 function removeExercise(dayId, exerciseId) {
