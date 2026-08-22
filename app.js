@@ -14,8 +14,7 @@ const state = {
 const els = {
   app: document.getElementById("app"),
   dayNav: document.getElementById("dayNav"),
-  workoutModeBtn: document.getElementById("workoutModeBtn"),
-  editorModeBtn: document.getElementById("editorModeBtn"),
+  modeToggleBtn: document.getElementById("modeToggleBtn"),
   themeLightBtn: document.getElementById("themeLightBtn"),
   themeDarkBtn: document.getElementById("themeDarkBtn"),
   addDayMenuBtn: document.getElementById("addDayMenuBtn"),
@@ -42,8 +41,7 @@ async function init() {
 }
 
 function bindShellEvents() {
-  els.workoutModeBtn?.addEventListener("click", () => setMode("workout"));
-  els.editorModeBtn?.addEventListener("click", () => setMode("editor"));
+  els.modeToggleBtn?.addEventListener("click", () => setMode(state.mode === "workout" ? "editor" : "workout"));
   els.themeLightBtn?.addEventListener("click", () => setTheme("light"));
   els.themeDarkBtn?.addEventListener("click", () => setTheme("dark"));
   document.addEventListener("click", handleGlobalClick);
@@ -71,6 +69,13 @@ function applyTheme(theme) {
   const themeColor = theme === "light" ? "#f8fafc" : "#0f172a";
   const meta = document.querySelector('meta[name="theme-color"]');
   if (meta) meta.setAttribute("content", themeColor);
+  [els.themeLightBtn, els.themeDarkBtn].forEach((button) => button?.classList.remove("active"));
+  const activeButton = theme === "light" ? els.themeLightBtn : els.themeDarkBtn;
+  activeButton?.classList.add("active");
+  activeButton?.setAttribute("aria-pressed", "true");
+  [els.themeLightBtn, els.themeDarkBtn]
+    .filter((button) => button && button !== activeButton)
+    .forEach((button) => button.setAttribute("aria-pressed", "false"));
 }
 
 function handleGlobalClick(event) {
@@ -146,6 +151,8 @@ function getMergedRoutine() {
     const dayCustom = state.custom.days[day.id] || {};
     const removed = new Set(dayCustom.removed || []);
     const orderMap = dayCustom.order || {};
+    const savedExerciseOrder = dayCustom.exerciseOrder || [];
+    const exerciseRank = new Map(savedExerciseOrder.map((id, index) => [id, index]));
     const overrides = dayCustom.exercises || {};
     const added = dayCustom.addedExercises || [];
     const exercises = (day.exercises || [])
@@ -157,7 +164,7 @@ function getMergedRoutine() {
         return {
           ...entry,
           ...entryOverride,
-          order: orderMap[entry.exerciseId] ?? index,
+          order: exerciseRank.has(entry.exerciseId) ? exerciseRank.get(entry.exerciseId) : (orderMap[entry.exerciseId] ?? index),
           exercise: { ...baseExercise, ...localExercise },
         };
       })
@@ -167,7 +174,7 @@ function getMergedRoutine() {
           series: entry.series,
           reps: entry.reps,
           rest: entry.rest,
-          order: orderMap[entry.exerciseId] ?? (1000 + index),
+          order: exerciseRank.has(entry.exerciseId) ? exerciseRank.get(entry.exerciseId) : (orderMap[entry.exerciseId] ?? (1000 + index)),
           exercise: { ...(state.custom.exercises[entry.exerciseId] || {}), id: entry.exerciseId },
         }))
       )
@@ -189,10 +196,10 @@ function render() {
   state.activeDay = routine.days.some((d) => d.id === state.activeDay) ? state.activeDay : pickInitialDayId();
   persistActiveDay();
   renderDayNav(routine.days);
-  els.workoutModeBtn.classList.toggle("active", state.mode === "workout");
-  els.editorModeBtn.classList.toggle("active", state.mode === "editor");
-  els.workoutModeBtn.setAttribute("aria-pressed", String(state.mode === "workout"));
-  els.editorModeBtn.setAttribute("aria-pressed", String(state.mode === "editor"));
+  els.modeToggleBtn.classList.toggle("active", state.mode === "editor");
+  els.modeToggleBtn.textContent = state.mode === "workout" ? "✎" : "✓";
+  els.modeToggleBtn.setAttribute("aria-label", state.mode === "workout" ? "Cambiar a modo editar" : "Volver al entreno");
+  els.modeToggleBtn.setAttribute("aria-pressed", String(state.mode === "editor"));
   if (els.addDayMenuBtn) els.addDayMenuBtn.hidden = state.mode !== "editor";
 
   const day = routine.days.find((d) => d.id === state.activeDay) || routine.days[0];
@@ -272,7 +279,7 @@ function buildWorkoutCard(exercise, series, reps, rest) {
 function renderEditor(routine) {
   els.app.innerHTML = "";
   const panel = document.createElement("section");
-  panel.className = "editor-panel";
+  panel.className = "editor-shell";
   panel.innerHTML = `
     <div class="day-header">
       <div>
@@ -390,16 +397,13 @@ function moveExercise(dayId, exerciseId, delta) {
   const dayCustom = state.custom.days[dayId] ||= {};
   const orderMap = dayCustom.order ||= {};
   const visible = getMergedRoutine().days.find((d) => d.id === dayId)?.exercises || [];
-  const ordered = visible
-    .map((entry, index) => ({ id: entry.exerciseId, order: orderMap[entry.exerciseId] ?? index }))
-    .sort((a, b) => a.order - b.order);
-  const index = ordered.findIndex((entry) => entry.id === exerciseId);
+  const ordered = visible.map((entry) => entry.exerciseId);
+  const index = ordered.indexOf(exerciseId);
   const target = index + delta;
   if (index < 0 || target < 0 || target >= ordered.length) return;
-  const temp = ordered[index].order;
-  ordered[index].order = ordered[target].order;
-  ordered[target].order = temp;
-  ordered.forEach((item, idx) => { orderMap[item.id] = idx; });
+  [ordered[index], ordered[target]] = [ordered[target], ordered[index]];
+  dayCustom.exerciseOrder = ordered;
+  ordered.forEach((id, idx) => { orderMap[id] = idx; });
   saveLocalData();
   render();
 }

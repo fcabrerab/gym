@@ -7,7 +7,7 @@
   <link rel="manifest" href="./manifest.json">
   <link rel="icon" href="./images/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="./images/icon.svg">
-  <link rel="stylesheet" href="./styles.css?v=4">
+  <link rel="stylesheet" href="./styles.css?v=6">
   <title>Gym Routine</title>
 </head>
 <body>
@@ -18,18 +18,13 @@
         <h1>Gym Routine</h1>
       </div>
       <div class="header-actions">
-        <button id="workoutModeBtn" class="mode-btn active" type="button" aria-pressed="true">Entreno</button>
-        <button id="editorModeBtn" class="mode-btn" type="button" aria-pressed="false">Editar</button>
-        <details class="mini-menu">
-          <summary class="mode-btn">Tema</summary>
-          <div class="mini-menu-panel">
-            <button id="themeLightBtn" class="theme-chip" type="button">Claro</button>
-            <button id="themeDarkBtn" class="theme-chip" type="button">Oscuro</button>
-          </div>
-        </details>
+        <button id="modeToggleBtn" class="mode-btn icon-btn active" type="button" aria-label="Cambiar a modo editar" aria-pressed="false">✎</button>
         <details class="mini-menu">
           <summary class="mode-btn" aria-label="Abrir menú">☰</summary>
           <div class="mini-menu-panel">
+            <div class="menu-section-title">Tema</div>
+            <button id="themeLightBtn" class="theme-chip" type="button">Claro</button>
+            <button id="themeDarkBtn" class="theme-chip" type="button">Oscuro</button>
             <button id="addDayMenuBtn" class="theme-chip" type="button">Añadir día</button>
             <small class="menu-help">Crea un día nuevo en la rutina.</small>
             <button class="theme-chip" id="exportBtnGlobal" type="button">Exportar datos</button>
@@ -73,6 +68,6 @@
     </article>
   </template>
 
-  <script src="./app.js?v=4" type="module"></script>
+  <script src="./app.js?v=6" type="module"></script>
 </body>
 </html>
