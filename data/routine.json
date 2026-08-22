@@ -1,0 +1,41 @@
+{
+  "days": [
+    {
+      "id": "day-1",
+      "label": "Día 1",
+      "title": "Push",
+      "subtitle": "Empuje",
+      "exercises": [
+        { "exerciseId": "machine-chest-press", "series": 3, "reps": "8-12", "rest": "2:00" },
+        { "exerciseId": "pec-deck", "series": 3, "reps": "10-15", "rest": "1:30" },
+        { "exerciseId": "machine-shoulder-press", "series": 3, "reps": "8-12", "rest": "2:00" },
+        { "exerciseId": "rope-triceps-pushdown", "series": 3, "reps": "10-15", "rest": "1:15" }
+      ]
+    },
+    {
+      "id": "day-2",
+      "label": "Día 2",
+      "title": "Lower",
+      "subtitle": "Pierna",
+      "exercises": [
+        { "exerciseId": "leg-press", "series": 4, "reps": "10-15", "rest": "2:00" },
+        { "exerciseId": "leg-extension", "series": 3, "reps": "12-15", "rest": "1:30" },
+        { "exerciseId": "seated-leg-curl", "series": 3, "reps": "10-15", "rest": "1:30" },
+        { "exerciseId": "calf-raise", "series": 4, "reps": "12-20", "rest": "1:00" }
+      ]
+    },
+    {
+      "id": "day-3",
+      "label": "Día 3",
+      "title": "Pull",
+      "subtitle": "Tirón",
+      "exercises": [
+        { "exerciseId": "incline-dumbbell-curl", "series": 3, "reps": "8-12", "rest": "1:30" },
+        { "exerciseId": "hammer-curl", "series": 3, "reps": "10-12", "rest": "1:15" },
+        { "exerciseId": "preacher-curl", "series": 3, "reps": "8-12", "rest": "1:30" },
+        { "exerciseId": "lat-pulldown", "series": 4, "reps": "8-12", "rest": "2:00" },
+        { "exerciseId": "seated-row", "series": 4, "reps": "8-12", "rest": "2:00" }
+      ]
+    }
+  ]
+}

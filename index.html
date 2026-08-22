@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0f172a">
+  <link rel="manifest" href="./manifest.json">
+  <link rel="icon" href="./images/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="./images/icon.svg">
+  <link rel="stylesheet" href="./styles.css">
+  <title>Gym Routine</title>
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">Rutina personal</p>
+        <h1>Gym Routine</h1>
+      </div>
+      <div class="mode-switch" role="tablist" aria-label="Modo">
+        <button id="workoutModeBtn" class="mode-btn active" type="button" aria-pressed="true">Entreno</button>
+        <button id="editorModeBtn" class="mode-btn" type="button" aria-pressed="false">Editar</button>
+      </div>
+    </header>
+
+    <nav class="day-nav" id="dayNav" aria-label="Navegación de días"></nav>
+    <main id="app" class="app-main" aria-live="polite"></main>
+  </div>
+
+  <template id="exerciseCardTemplate">
+    <article class="exercise-card">
+      <img class="exercise-image" alt="">
+      <div class="exercise-body">
+        <div class="exercise-title-row">
+          <h2 class="exercise-name"></h2>
+          <div class="quick-pr">
+            <label class="sr-only"></label>
+            <input class="pr-input" type="number" min="0" step="0.5" inputmode="decimal">
+            <span>kg</span>
+          </div>
+        </div>
+        <div class="exercise-meta">
+          <span class="meta-pill series-pill"></span>
+          <span class="meta-pill reps-pill"></span>
+          <span class="meta-pill rest-pill"></span>
+          <span class="meta-pill muscle-pill"></span>
+        </div>
+      </div>
+    </article>
+  </template>
+
+  <script src="./app.js" type="module"></script>
+</body>
+</html>
