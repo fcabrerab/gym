@@ -17,12 +17,17 @@ const els = {
   modeToggleBtn: document.getElementById("modeToggleBtn"),
   themeLightBtn: document.getElementById("themeLightBtn"),
   themeDarkBtn: document.getElementById("themeDarkBtn"),
+  timerAlertSetting: document.getElementById("timerAlertSetting"),
+  timerSoundSetting: document.getElementById("timerSoundSetting"),
+  timerNotificationSetting: document.getElementById("timerNotificationSetting"),
   addDayMenuBtn: document.getElementById("addDayMenuBtn"),
   exportBtnGlobal: document.getElementById("exportBtnGlobal"),
   importBtnGlobal: document.getElementById("importBtnGlobal"),
   restoreLocalBtnGlobal: document.getElementById("restoreLocalBtnGlobal"),
   restoreRoutineBtnGlobal: document.getElementById("restoreRoutineBtnGlobal"),
 };
+
+const timers = new Map();
 
 const cardTemplate = document.getElementById("exerciseCardTemplate");
 
@@ -44,6 +49,7 @@ function bindShellEvents() {
   els.modeToggleBtn?.addEventListener("click", () => setMode(state.mode === "workout" ? "editor" : "workout"));
   els.themeLightBtn?.addEventListener("click", () => setTheme("light"));
   els.themeDarkBtn?.addEventListener("click", () => setTheme("dark"));
+  bindTimerSettings();
   document.addEventListener("click", handleGlobalClick);
   els.addDayMenuBtn?.addEventListener("click", () => { addDay(); closeMenus(); });
   els.exportBtnGlobal?.addEventListener("click", () => { exportData(); closeMenus(); });
@@ -76,6 +82,25 @@ function applyTheme(theme) {
   [els.themeLightBtn, els.themeDarkBtn]
     .filter((button) => button && button !== activeButton)
     .forEach((button) => button.setAttribute("aria-pressed", "false"));
+}
+
+function bindTimerSettings() {
+  state.custom.settings ||= { timerAlert: true, timerSound: true, timerNotification: true };
+  const settings = state.custom.settings;
+  const controls = [
+    [els.timerAlertSetting, "timerAlert"],
+    [els.timerSoundSetting, "timerSound"],
+    [els.timerNotificationSetting, "timerNotification"],
+  ];
+  controls.forEach(([control, key]) => {
+    if (!control) return;
+    control.checked = settings[key] !== false;
+    control.addEventListener("change", () => {
+      settings[key] = control.checked;
+      saveLocalData();
+    });
+  });
+  saveLocalData();
 }
 
 function handleGlobalClick(event) {
@@ -245,7 +270,7 @@ function renderWorkout(day) {
     <div class="day-header">
       <div>
         <h2 class="day-title">${day.title}</h2>
-        <p class="day-subtitle">${day.subtitle}</p>
+        <p class="day-subtitle">${day.subtitle} · ~${estimateRestMinutes(day)} minutos</p>
       </div>
     </div>
     <div class="cards" id="cards"></div>
@@ -255,6 +280,13 @@ function renderWorkout(day) {
   day.exercises.forEach(({ exerciseId, series, reps, rest, exercise }) => {
     cards.appendChild(buildWorkoutCard(exercise, series, reps, rest));
   });
+}
+
+function estimateRestMinutes(day) {
+  const totalSeconds = (day.exercises || []).reduce((total, entry) => {
+    return total + parseRestSeconds(entry.rest) * Number(entry.series || 0);
+  }, 0);
+  return Math.max(0, Math.round(totalSeconds / 60));
 }
 
 function buildWorkoutCard(exercise, series, reps, rest) {
@@ -273,7 +305,104 @@ function buildWorkoutCard(exercise, series, reps, rest) {
   input.value = exercise.pr ?? "";
   input.setAttribute("aria-label", `PR actual de ${exercise.name}`);
   input.addEventListener("change", () => updatePr(exercise.id, input.value));
+  const restButton = node.querySelector(".rest-btn");
+  restButton.dataset.seconds = parseRestSeconds(rest);
+  restButton.addEventListener("click", () => toggleRestTimer(restButton, parseRestSeconds(rest), exercise.name));
+  const stopButton = document.createElement("button");
+  stopButton.type = "button";
+  stopButton.className = "rest-stop-btn";
+  stopButton.textContent = "Stop";
+  stopButton.hidden = true;
+  stopButton.addEventListener("click", () => stopRestTimer(restButton, stopButton, rest));
+  restButton.after(stopButton);
   return node;
+}
+
+function parseRestSeconds(value) {
+  const match = String(value).match(/^(\d+):([0-5]\d)$/);
+  return match ? Number(match[1]) * 60 + Number(match[2]) : Math.max(0, Number(value) || 0);
+}
+
+function toggleRestTimer(button, seconds, exerciseName) {
+  const existing = timers.get(button);
+  if (existing) {
+    if (existing.paused) {
+      existing.paused = false;
+      existing.interval = setInterval(() => tickRestTimer(button, existing, exerciseName), 1000);
+      button.textContent = `Pausa ${formatTimer(existing.remaining)}`;
+    } else {
+      existing.paused = true;
+      clearInterval(existing.interval);
+      button.textContent = `Continuar ${formatTimer(existing.remaining)}`;
+    }
+    return;
+  }
+  const timer = { remaining: seconds, paused: false, interval: null };
+  timers.set(button, timer);
+  button.classList.add("timer-running");
+  const stopButton = button.nextElementSibling;
+  if (stopButton) stopButton.hidden = false;
+  button.textContent = `Pausa ${formatTimer(seconds)}`;
+  timer.interval = setInterval(() => tickRestTimer(button, timer, exerciseName), 1000);
+  if (state.custom.settings?.timerNotification && "Notification" in window && Notification.permission === "default") {
+    Notification.requestPermission().catch(() => {});
+  }
+}
+
+function tickRestTimer(button, timer, exerciseName) {
+  timer.remaining -= 1;
+  if (timer.remaining > 0) {
+    button.textContent = `${timer.paused ? "Continuar" : "Pausa"} ${formatTimer(timer.remaining)}`;
+    return;
+  }
+  clearInterval(timer.interval);
+  timers.delete(button);
+  if (button.nextElementSibling) button.nextElementSibling.hidden = true;
+  button.classList.remove("timer-running");
+  button.classList.add("timer-done");
+  button.textContent = "Descanso terminado";
+  if (state.custom.settings?.timerAlert !== false) showTimerAlert(button, exerciseName);
+  if (state.custom.settings?.timerSound !== false) playTimerSound();
+  if (state.custom.settings?.timerNotification !== false && "Notification" in window && Notification.permission === "granted") {
+    new Notification("Descanso terminado", { body: `${exerciseName}: listo para la siguiente serie.` });
+  }
+  setTimeout(() => { if (button.isConnected) { button.classList.remove("timer-done"); button.textContent = `Descanso ${button.dataset.seconds}`; } }, 4500);
+}
+
+function stopRestTimer(button, stopButton, originalRest) {
+  const timer = timers.get(button);
+  if (timer) clearInterval(timer.interval);
+  timers.delete(button);
+  button.classList.remove("timer-running", "timer-alert", "timer-done");
+  button.textContent = `Descanso ${originalRest}`;
+  stopButton.hidden = true;
+}
+
+function formatTimer(totalSeconds) {
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
+
+function showTimerAlert(button, exerciseName) {
+  button.classList.add("timer-alert");
+  button.setAttribute("aria-label", `Descanso terminado para ${exerciseName}`);
+  setTimeout(() => button.classList.remove("timer-alert"), 4500);
+}
+
+function playTimerSound() {
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextClass) return;
+  const context = new AudioContextClass();
+  const oscillator = context.createOscillator();
+  const gain = context.createGain();
+  oscillator.frequency.value = 880;
+  gain.gain.setValueAtTime(0.001, context.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.18, context.currentTime + 0.02);
+  gain.gain.exponentialRampToValueAtTime(0.001, context.currentTime + 0.45);
+  oscillator.connect(gain).connect(context.destination);
+  oscillator.start();
+  oscillator.stop(context.currentTime + 0.45);
 }
 
 function renderEditor(routine) {

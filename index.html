@@ -7,7 +7,7 @@
   <link rel="manifest" href="./manifest.json">
   <link rel="icon" href="./images/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="./images/icon.svg">
-  <link rel="stylesheet" href="./styles.css?v=6">
+  <link rel="stylesheet" href="./styles.css?v=8">
   <title>Gym Routine</title>
 </head>
 <body>
@@ -25,6 +25,10 @@
             <div class="menu-section-title">Tema</div>
             <button id="themeLightBtn" class="theme-chip" type="button">Claro</button>
             <button id="themeDarkBtn" class="theme-chip" type="button">Oscuro</button>
+            <div class="menu-section-title">Avisos del temporizador</div>
+            <label class="menu-check"><input id="timerAlertSetting" type="checkbox"> Alerta visual</label>
+            <label class="menu-check"><input id="timerSoundSetting" type="checkbox"> Sonido</label>
+            <label class="menu-check"><input id="timerNotificationSetting" type="checkbox"> Notificación</label>
             <button id="addDayMenuBtn" class="theme-chip" type="button">Añadir día</button>
             <small class="menu-help">Crea un día nuevo en la rutina.</small>
             <button class="theme-chip" id="exportBtnGlobal" type="button">Exportar datos</button>
@@ -53,21 +57,21 @@
       <div class="exercise-body">
         <div class="exercise-title-row">
           <h2 class="exercise-name"></h2>
+        </div>
+        <div class="exercise-meta">
           <div class="quick-pr">
             <input class="pr-input" type="number" min="0" step="0.5" inputmode="decimal">
             <span>kg</span>
           </div>
-        </div>
-        <div class="exercise-meta">
           <span class="meta-pill series-pill"></span>
           <span class="meta-pill reps-pill"></span>
-          <span class="meta-pill rest-pill"></span>
+          <button class="meta-pill rest-pill rest-btn" type="button"></button>
           <span class="meta-pill muscle-pill"></span>
         </div>
       </div>
     </article>
   </template>
 
-  <script src="./app.js?v=6" type="module"></script>
+  <script src="./app.js?v=8" type="module"></script>
 </body>
 </html>
