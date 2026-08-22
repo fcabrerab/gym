@@ -4,7 +4,7 @@ const MODE_KEY = "gym-ui-mode-v1";
 const state = {
   base: null,
   custom: loadLocalData(),
-  activeDay: "day-1",
+  activeDay: localStorage.getItem("gym-active-day-v1") || null,
   mode: localStorage.getItem(MODE_KEY) || "workout",
 };
 
@@ -23,6 +23,8 @@ async function init() {
   state.base = await loadJson("./data/routine.json");
   state.exercises = await loadJson("./data/exercises.json");
   ensureLocalShape();
+  state.activeDay = pickInitialDayId();
+  persistActiveDay();
   bindShellEvents();
   render();
   registerServiceWorker();
@@ -37,6 +39,29 @@ function setMode(mode) {
   state.mode = mode;
   localStorage.setItem(MODE_KEY, mode);
   render();
+}
+
+function persistActiveDay() {
+  if (state.activeDay) localStorage.setItem("gym-active-day-v1", state.activeDay);
+}
+
+function pickInitialDayId() {
+  const days = state.base?.days || [];
+  const ids = days.map((d) => d.id);
+  const todayMap = {
+    monday: "monday-rest",
+    tuesday: "tuesday-push",
+    wednesday: "wednesday-lower-a",
+    thursday: "thursday-pull",
+    friday: "friday-rest",
+    saturday: "saturday-lower-b",
+    sunday: "sunday-upper",
+  };
+  const weekday = new Intl.DateTimeFormat("en-US", { weekday: "long" }).format(new Date()).toLowerCase();
+  const preferred = todayMap[weekday];
+  if (state.activeDay && ids.includes(state.activeDay)) return state.activeDay;
+  if (preferred && ids.includes(preferred)) return preferred;
+  return ids[0] || null;
 }
 
 function loadLocalData() {
@@ -56,6 +81,8 @@ function saveLocalData() {
 function ensureLocalShape() {
   state.custom.exercises ||= {};
   state.custom.days ||= {};
+  state.custom.daysAdded ||= [];
+  state.custom.daysRemoved ||= [];
   for (const exercise of state.exercises) {
     state.custom.exercises[exercise.id] ||= {};
   }
@@ -63,13 +90,19 @@ function ensureLocalShape() {
 }
 
 function getMergedRoutine() {
-  const days = state.base.days.map((day) => {
+  const baseDays = state.base.days.filter((day) => !(state.custom.daysRemoved || []).includes(day.id));
+  const addedDays = (state.custom.daysAdded || []).map((day) => ({
+    ...day,
+    exercises: day.exercises || [],
+  }));
+  const allDays = [...baseDays, ...addedDays];
+  const days = allDays.map((day) => {
     const dayCustom = state.custom.days[day.id] || {};
     const removed = new Set(dayCustom.removed || []);
     const orderMap = dayCustom.order || {};
     const overrides = dayCustom.exercises || {};
     const added = dayCustom.addedExercises || [];
-    const exercises = day.exercises
+    const exercises = (day.exercises || [])
       .filter((entry) => !removed.has(entry.exerciseId))
       .map((entry, index) => {
         const baseExercise = state.exercises.find((e) => e.id === entry.exerciseId);
@@ -100,6 +133,8 @@ function getMergedRoutine() {
 
 function render() {
   const routine = getMergedRoutine();
+  state.activeDay = routine.days.some((d) => d.id === state.activeDay) ? state.activeDay : pickInitialDayId();
+  persistActiveDay();
   renderDayNav(routine.days);
   els.workoutModeBtn.classList.toggle("active", state.mode === "workout");
   els.editorModeBtn.classList.toggle("active", state.mode === "editor");
@@ -108,6 +143,7 @@ function render() {
 
   const day = routine.days.find((d) => d.id === state.activeDay) || routine.days[0];
   state.activeDay = day.id;
+  persistActiveDay();
   if (state.mode === "workout") renderWorkout(day);
   else renderEditor(routine);
 }
@@ -121,10 +157,21 @@ function renderDayNav(days) {
     btn.textContent = day.label;
     btn.addEventListener("click", () => {
       state.activeDay = day.id;
+      persistActiveDay();
       render();
     });
     els.dayNav.appendChild(btn);
   });
+}
+
+function selectNeighborDay(days, delta) {
+  const index = days.findIndex((day) => day.id === state.activeDay);
+  if (index < 0) return;
+  const next = days[index + delta];
+  if (!next) return;
+  state.activeDay = next.id;
+  persistActiveDay();
+  render();
 }
 
 function renderWorkout(day) {
@@ -193,40 +240,65 @@ function renderEditor(routine) {
   panel.querySelector("#restoreLocalBtn").addEventListener("click", restoreLocalData);
   panel.querySelector("#restoreRoutineBtn").addEventListener("click", restoreBaseRoutine);
   const grid = panel.querySelector("#editorGrid");
-  routine.days.forEach((day) => {
-    const dayBox = document.createElement("div");
-    dayBox.className = "editor-item";
-    dayBox.innerHTML = `<strong>${day.label} - ${day.title}</strong><span class="muted">${day.subtitle}</span>`;
-    day.exercises.forEach((entry) => {
-      const row = document.createElement("div");
-      row.className = "editor-item";
-      row.innerHTML = `
-        <div class="editor-row">
-          <input data-field="name" value="${escapeHtml(entry.exercise.name)}" placeholder="Nombre">
-          <input data-field="series" type="number" min="1" value="${entry.series}">
-          <input data-field="reps" value="${escapeHtml(entry.reps)}" placeholder="Repeticiones">
-          <input data-field="rest" value="${escapeHtml(entry.rest)}" placeholder="Descanso">
-          <input data-field="muscleGroup" value="${escapeHtml(entry.exercise.muscleGroup)}" placeholder="Grupo muscular">
-          <input data-field="image" value="${escapeHtml(entry.exercise.image)}" placeholder="Ruta imagen">
-          <input data-field="pr" type="number" min="0" step="0.5" value="${entry.exercise.pr ?? ""}" placeholder="PR">
-        </div>
-        <div class="editor-actions">
-          <button class="order-btn" data-action="up" type="button">Subir</button>
-          <button class="order-btn" data-action="down" type="button">Bajar</button>
-          <button class="order-btn danger" data-action="remove" type="button">Eliminar</button>
-        </div>
-      `;
-      bindEditorRow(row, day.id, entry.exercise.id);
-      dayBox.appendChild(row);
-    });
-    const addBtn = document.createElement("button");
-    addBtn.className = "action-btn";
-    addBtn.type = "button";
-    addBtn.textContent = `Añadir ejercicio a ${day.label}`;
-    addBtn.addEventListener("click", () => addExercise(day.id));
-    dayBox.appendChild(addBtn);
-    grid.appendChild(dayBox);
+  const day = routine.days.find((d) => d.id === state.activeDay) || routine.days[0];
+  if (!day) {
+    grid.innerHTML = '<div class="empty-state">No hay días en la rutina.</div>';
+    return;
+  }
+  const dayBox = document.createElement("div");
+  dayBox.className = "editor-item editor-day";
+  dayBox.innerHTML = `
+    <div class="editor-day-header">
+      <div>
+        <strong>${day.label} - ${day.title}</strong>
+        <div class="muted">${day.subtitle}</div>
+      </div>
+      <div class="editor-actions">
+        <button class="action-btn" id="prevDayBtn" type="button">Día anterior</button>
+        <button class="action-btn" id="nextDayBtn" type="button">Día siguiente</button>
+        <button class="action-btn" id="addDayBtn" type="button">Añadir día</button>
+        <button class="action-btn danger" id="removeDayBtn" type="button">Eliminar día</button>
+      </div>
+    </div>
+  `;
+  dayBox.querySelector("#prevDayBtn").addEventListener("click", () => selectNeighborDay(routine.days, -1));
+  dayBox.querySelector("#nextDayBtn").addEventListener("click", () => selectNeighborDay(routine.days, 1));
+  dayBox.querySelector("#addDayBtn").addEventListener("click", addDay);
+  dayBox.querySelector("#removeDayBtn").addEventListener("click", () => removeDay(day.id));
+
+  const exerciseList = document.createElement("div");
+  exerciseList.className = "editor-stack";
+  day.exercises.forEach((entry) => {
+    const row = document.createElement("div");
+    row.className = "editor-item";
+    row.innerHTML = `
+      <div class="editor-row">
+        <input data-field="name" value="${escapeHtml(entry.exercise.name)}" placeholder="Nombre">
+        <input data-field="series" type="number" min="1" value="${entry.series}">
+        <input data-field="reps" value="${escapeHtml(entry.reps)}" placeholder="Repeticiones">
+        <input data-field="rest" value="${escapeHtml(entry.rest)}" placeholder="Descanso">
+        <input data-field="muscleGroup" value="${escapeHtml(entry.exercise.muscleGroup)}" placeholder="Grupo muscular">
+        <input data-field="image" value="${escapeHtml(entry.exercise.image)}" placeholder="Ruta imagen">
+        <input data-field="pr" type="number" min="0" step="0.5" value="${entry.exercise.pr ?? ""}" placeholder="PR">
+      </div>
+      <div class="editor-actions">
+        <button class="order-btn" data-action="up" type="button">Subir</button>
+        <button class="order-btn" data-action="down" type="button">Bajar</button>
+        <button class="order-btn danger" data-action="remove" type="button">Eliminar</button>
+      </div>
+    `;
+    bindEditorRow(row, day.id, entry.exercise.id);
+    exerciseList.appendChild(row);
   });
+
+  const addBtn = document.createElement("button");
+  addBtn.className = "action-btn";
+  addBtn.type = "button";
+  addBtn.textContent = `Añadir ejercicio a ${day.label}`;
+  addBtn.addEventListener("click", () => addExercise(day.id));
+  dayBox.appendChild(exerciseList);
+  dayBox.appendChild(addBtn);
+  grid.appendChild(dayBox);
 }
 
 function bindEditorRow(row, dayId, exerciseId) {
@@ -263,16 +335,17 @@ function updateExerciseField(dayId, exerciseId, field, value) {
 function moveExercise(dayId, exerciseId, delta) {
   const dayCustom = state.custom.days[dayId] ||= {};
   const orderMap = dayCustom.order ||= {};
-  const visible = getMergedRoutine().days.find((d) => d.id === dayId).exercises
-    .map((entry, index) => ({ id: entry.exerciseId, order: orderMap[entry.exerciseId] ?? index, fallback: index }))
+  const visible = getMergedRoutine().days.find((d) => d.id === dayId)?.exercises || [];
+  const ordered = visible
+    .map((entry, index) => ({ id: entry.exerciseId, order: orderMap[entry.exerciseId] ?? index }))
     .sort((a, b) => a.order - b.order);
-  const index = visible.findIndex((entry) => entry.id === exerciseId);
+  const index = ordered.findIndex((entry) => entry.id === exerciseId);
   const target = index + delta;
-  if (target < 0 || target >= visible.length) return;
-  const temp = visible[index].order;
-  visible[index].order = visible[target].order;
-  visible[target].order = temp;
-  visible.forEach((item, idx) => { orderMap[item.id] = idx; });
+  if (index < 0 || target < 0 || target >= ordered.length) return;
+  const temp = ordered[index].order;
+  ordered[index].order = ordered[target].order;
+  ordered[target].order = temp;
+  ordered.forEach((item, idx) => { orderMap[item.id] = idx; });
   saveLocalData();
   render();
 }
@@ -308,6 +381,36 @@ function addExercise(dayId) {
   render();
 }
 
+function addDay() {
+  const id = `day-${crypto.randomUUID().slice(0, 8)}`;
+  const count = (getMergedRoutine().days || []).length + 1;
+  state.custom.daysAdded.push({
+    id,
+    label: `Día ${count}`,
+    title: "Nuevo día",
+    subtitle: "Editor",
+    exercises: [],
+  });
+  state.activeDay = id;
+  persistActiveDay();
+  saveLocalData();
+  render();
+}
+
+function removeDay(dayId) {
+  const addedIndex = state.custom.daysAdded.findIndex((day) => day.id === dayId);
+  if (addedIndex >= 0) {
+    state.custom.daysAdded.splice(addedIndex, 1);
+  } else if (!(state.custom.daysRemoved || []).includes(dayId)) {
+    state.custom.daysRemoved.push(dayId);
+  }
+  delete state.custom.days[dayId];
+  state.activeDay = pickInitialDayId();
+  persistActiveDay();
+  saveLocalData();
+  render();
+}
+
 function exportData() {
   const blob = new Blob([JSON.stringify(state.custom, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
@@ -327,6 +430,8 @@ function importData() {
     if (!file) return;
     state.custom = JSON.parse(await file.text());
     ensureLocalShape();
+    state.activeDay = pickInitialDayId();
+    persistActiveDay();
     render();
   };
   input.click();
@@ -335,6 +440,8 @@ function importData() {
 function restoreLocalData() {
   state.custom = {};
   ensureLocalShape();
+  state.activeDay = pickInitialDayId();
+  persistActiveDay();
   render();
 }
 
@@ -342,6 +449,8 @@ function restoreBaseRoutine() {
   const preservedPrs = state.custom.exercises || {};
   state.custom = { exercises: preservedPrs, days: {} };
   ensureLocalShape();
+  state.activeDay = pickInitialDayId();
+  persistActiveDay();
   render();
 }
 
