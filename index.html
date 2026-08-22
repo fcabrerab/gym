@@ -17,13 +17,38 @@
         <p class="eyebrow">Rutina personal</p>
         <h1>Gym Routine</h1>
       </div>
-      <div class="mode-switch" role="tablist" aria-label="Modo">
+      <div class="header-actions">
         <button id="workoutModeBtn" class="mode-btn active" type="button" aria-pressed="true">Entreno</button>
         <button id="editorModeBtn" class="mode-btn" type="button" aria-pressed="false">Editar</button>
+        <details class="mini-menu">
+          <summary class="mode-btn">Tema</summary>
+          <div class="mini-menu-panel">
+            <button id="themeLightBtn" class="theme-chip" type="button">Claro</button>
+            <button id="themeDarkBtn" class="theme-chip" type="button">Oscuro</button>
+          </div>
+        </details>
+        <details class="mini-menu">
+          <summary class="mode-btn" aria-label="Abrir menú">☰</summary>
+          <div class="mini-menu-panel">
+            <button id="addDayMenuBtn" class="theme-chip" type="button">Añadir día</button>
+            <small class="menu-help">Crea un día nuevo en la rutina.</small>
+            <button class="theme-chip" id="exportBtnGlobal" type="button">Exportar datos</button>
+            <small class="menu-help">Descarga tus cambios locales en JSON.</small>
+            <button class="theme-chip" id="importBtnGlobal" type="button">Importar datos</button>
+            <small class="menu-help">Carga un JSON guardado previamente.</small>
+            <button class="theme-chip" id="restoreLocalBtnGlobal" type="button">Restaurar datos locales</button>
+            <small class="menu-help">Borra solo las personalizaciones locales.</small>
+            <button class="theme-chip" id="restoreRoutineBtnGlobal" type="button">Restaurar rutina base</button>
+            <small class="menu-help">Vuelve a la rutina base sin borrar PRs.</small>
+          </div>
+        </details>
       </div>
     </header>
 
-    <nav class="day-nav" id="dayNav" aria-label="Navegación de días"></nav>
+    <div class="day-toolbar">
+      <nav class="day-nav" id="dayNav" aria-label="Navegación de días"></nav>
+    </div>
+
     <main id="app" class="app-main" aria-live="polite"></main>
   </div>
 
@@ -34,7 +59,6 @@
         <div class="exercise-title-row">
           <h2 class="exercise-name"></h2>
           <div class="quick-pr">
-            <label class="sr-only"></label>
             <input class="pr-input" type="number" min="0" step="0.5" inputmode="decimal">
             <span>kg</span>
           </div>

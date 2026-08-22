@@ -1,11 +1,14 @@
 const STORAGE_KEY = "gym-routine-data-v1";
 const MODE_KEY = "gym-ui-mode-v1";
+const THEME_KEY = "gym-theme-v1";
+const CACHE_BUSTER = "v2";
 
 const state = {
   base: null,
   custom: loadLocalData(),
   activeDay: localStorage.getItem("gym-active-day-v1") || null,
   mode: localStorage.getItem(MODE_KEY) || "workout",
+  theme: localStorage.getItem(THEME_KEY) || "dark",
 };
 
 const els = {
@@ -13,6 +16,13 @@ const els = {
   dayNav: document.getElementById("dayNav"),
   workoutModeBtn: document.getElementById("workoutModeBtn"),
   editorModeBtn: document.getElementById("editorModeBtn"),
+  themeLightBtn: document.getElementById("themeLightBtn"),
+  themeDarkBtn: document.getElementById("themeDarkBtn"),
+  addDayMenuBtn: document.getElementById("addDayMenuBtn"),
+  exportBtnGlobal: document.getElementById("exportBtnGlobal"),
+  importBtnGlobal: document.getElementById("importBtnGlobal"),
+  restoreLocalBtnGlobal: document.getElementById("restoreLocalBtnGlobal"),
+  restoreRoutineBtnGlobal: document.getElementById("restoreRoutineBtnGlobal"),
 };
 
 const cardTemplate = document.getElementById("exerciseCardTemplate");
@@ -26,6 +36,7 @@ async function init() {
   state.activeDay = pickInitialDayId();
   persistActiveDay();
   bindShellEvents();
+  applyTheme(state.theme);
   render();
   registerServiceWorker();
 }
@@ -33,12 +44,44 @@ async function init() {
 function bindShellEvents() {
   els.workoutModeBtn.addEventListener("click", () => setMode("workout"));
   els.editorModeBtn.addEventListener("click", () => setMode("editor"));
+  els.themeLightBtn.addEventListener("click", () => setTheme("light"));
+  els.themeDarkBtn.addEventListener("click", () => setTheme("dark"));
+  document.addEventListener("click", handleGlobalClick);
+  els.addDayMenuBtn.addEventListener("click", () => { addDay(); closeMenus(); });
+  els.exportBtnGlobal.addEventListener("click", () => { exportData(); closeMenus(); });
+  els.importBtnGlobal.addEventListener("click", () => { importData(); closeMenus(); });
+  els.restoreLocalBtnGlobal.addEventListener("click", () => { restoreLocalData(); closeMenus(); });
+  els.restoreRoutineBtnGlobal.addEventListener("click", () => { restoreBaseRoutine(); closeMenus(); });
 }
 
 function setMode(mode) {
   state.mode = mode;
   localStorage.setItem(MODE_KEY, mode);
   render();
+}
+
+function setTheme(theme) {
+  state.theme = theme;
+  localStorage.setItem(THEME_KEY, theme);
+  applyTheme(theme);
+}
+
+function applyTheme(theme) {
+  document.documentElement.dataset.theme = theme;
+  const themeColor = theme === "light" ? "#f8fafc" : "#0f172a";
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute("content", themeColor);
+}
+
+function handleGlobalClick(event) {
+  const details = document.querySelectorAll(".mini-menu[open]");
+  details.forEach((detail) => {
+    if (!detail.contains(event.target)) detail.removeAttribute("open");
+  });
+}
+
+function closeMenus() {
+  document.querySelectorAll(".mini-menu[open]").forEach((detail) => detail.removeAttribute("open"));
 }
 
 function persistActiveDay() {
@@ -61,6 +104,8 @@ function pickInitialDayId() {
   const preferred = todayMap[weekday];
   if (state.activeDay && ids.includes(state.activeDay)) return state.activeDay;
   if (preferred && ids.includes(preferred)) return preferred;
+  const labelMatch = days.find((day) => day.label.toLowerCase() === weekday);
+  if (labelMatch) return labelMatch.id;
   return ids[0] || null;
 }
 
@@ -140,6 +185,7 @@ function render() {
   els.editorModeBtn.classList.toggle("active", state.mode === "editor");
   els.workoutModeBtn.setAttribute("aria-pressed", String(state.mode === "workout"));
   els.editorModeBtn.setAttribute("aria-pressed", String(state.mode === "editor"));
+  if (els.addDayMenuBtn) els.addDayMenuBtn.hidden = state.mode !== "editor";
 
   const day = routine.days.find((d) => d.id === state.activeDay) || routine.days[0];
   state.activeDay = day.id;
@@ -160,18 +206,20 @@ function renderDayNav(days) {
       persistActiveDay();
       render();
     });
+    if (state.mode === "editor" && day.id === state.activeDay) {
+      const x = document.createElement("span");
+      x.className = "day-close";
+      x.textContent = "×";
+      x.title = "Eliminar día";
+      x.addEventListener("click", (event) => {
+        event.stopPropagation();
+        event.preventDefault();
+        if (confirm(`¿Eliminar ${day.label} - ${day.title}?`)) removeDay(day.id);
+      });
+      btn.appendChild(x);
+    }
     els.dayNav.appendChild(btn);
   });
-}
-
-function selectNeighborDay(days, delta) {
-  const index = days.findIndex((day) => day.id === state.activeDay);
-  if (index < 0) return;
-  const next = days[index + delta];
-  if (!next) return;
-  state.activeDay = next.id;
-  persistActiveDay();
-  render();
 }
 
 function renderWorkout(day) {
@@ -230,15 +278,13 @@ function renderEditor(routine) {
         <p class="day-subtitle">Edita rutina, orden, imágenes y PR sin tocar código.</p>
       </div>
       <div class="editor-actions">
-        <button class="action-btn" id="restoreLocalBtn" type="button">Restaurar datos locales</button>
-        <button class="action-btn danger" id="restoreRoutineBtn" type="button">Restaurar rutina base</button>
+        <button class="action-btn" id="addDayInlineBtn" type="button">Añadir día</button>
       </div>
     </div>
     <div class="editor-grid" id="editorGrid"></div>
   `;
   els.app.appendChild(panel);
-  panel.querySelector("#restoreLocalBtn").addEventListener("click", restoreLocalData);
-  panel.querySelector("#restoreRoutineBtn").addEventListener("click", restoreBaseRoutine);
+  panel.querySelector("#addDayInlineBtn").addEventListener("click", addDay);
   const grid = panel.querySelector("#editorGrid");
   const day = routine.days.find((d) => d.id === state.activeDay) || routine.days[0];
   if (!day) {
@@ -250,21 +296,28 @@ function renderEditor(routine) {
   dayBox.innerHTML = `
     <div class="editor-day-header">
       <div>
-        <strong>${day.label} - ${day.title}</strong>
-        <div class="muted">${day.subtitle}</div>
+        <input class="day-name-input" data-day-field="label" value="${escapeHtml(day.label)}" aria-label="Nombre del día">
+        <div class="muted">
+          <input class="day-name-input day-subtitle-input" data-day-field="title" value="${escapeHtml(day.title)}" aria-label="Título del día">
+        </div>
       </div>
       <div class="editor-actions">
-        <button class="action-btn" id="prevDayBtn" type="button">Día anterior</button>
-        <button class="action-btn" id="nextDayBtn" type="button">Día siguiente</button>
-        <button class="action-btn" id="addDayBtn" type="button">Añadir día</button>
+        <button class="action-btn" id="moveDayUpBtn" type="button">Subir día</button>
+        <button class="action-btn" id="moveDayDownBtn" type="button">Bajar día</button>
         <button class="action-btn danger" id="removeDayBtn" type="button">Eliminar día</button>
       </div>
     </div>
   `;
-  dayBox.querySelector("#prevDayBtn").addEventListener("click", () => selectNeighborDay(routine.days, -1));
-  dayBox.querySelector("#nextDayBtn").addEventListener("click", () => selectNeighborDay(routine.days, 1));
-  dayBox.querySelector("#addDayBtn").addEventListener("click", addDay);
-  dayBox.querySelector("#removeDayBtn").addEventListener("click", () => removeDay(day.id));
+  dayBox.querySelector("#moveDayUpBtn").addEventListener("click", () => moveDay(day.id, -1));
+  dayBox.querySelector("#moveDayDownBtn").addEventListener("click", () => moveDay(day.id, 1));
+  dayBox.querySelector("#removeDayBtn").addEventListener("click", () => {
+    if (confirm(`¿Eliminar ${day.label} - ${day.title}?`)) removeDay(day.id);
+  });
+  dayBox.querySelectorAll("[data-day-field]").forEach((input) => {
+    input.addEventListener("change", () => {
+      updateDayField(day.id, input.dataset.dayField, input.value);
+    });
+  });
 
   const exerciseList = document.createElement("div");
   exerciseList.className = "editor-stack";
@@ -298,6 +351,7 @@ function renderEditor(routine) {
   addBtn.addEventListener("click", () => addExercise(day.id));
   dayBox.appendChild(exerciseList);
   dayBox.appendChild(addBtn);
+
   grid.appendChild(dayBox);
 }
 
@@ -346,6 +400,53 @@ function moveExercise(dayId, exerciseId, delta) {
   ordered[index].order = ordered[target].order;
   ordered[target].order = temp;
   ordered.forEach((item, idx) => { orderMap[item.id] = idx; });
+  saveLocalData();
+  render();
+}
+
+function moveDay(dayId, delta) {
+  const visibleDays = getMergedRoutine().days;
+  const index = visibleDays.findIndex((day) => day.id === dayId);
+  const target = index + delta;
+  if (index < 0 || target < 0 || target >= visibleDays.length) return;
+  [visibleDays[index], visibleDays[target]] = [visibleDays[target], visibleDays[index]];
+  const baseIds = new Set(state.base.days.map((day) => day.id));
+  state.base.days = visibleDays
+    .filter((day) => baseIds.has(day.id))
+    .map((day) => ({
+      id: day.id,
+      label: day.label,
+      title: day.title,
+      subtitle: day.subtitle,
+      exercises: day.exercises.map((entry) => ({
+        exerciseId: entry.exerciseId,
+        series: entry.series,
+        reps: entry.reps,
+        rest: entry.rest,
+      })),
+    }));
+  state.custom.daysAdded = visibleDays
+    .filter((day) => !baseIds.has(day.id))
+    .map((day) => ({
+      id: day.id,
+      label: day.label,
+      title: day.title,
+      subtitle: day.subtitle,
+      exercises: day.exercises.map((entry) => ({
+        exerciseId: entry.exerciseId,
+        series: entry.series,
+        reps: entry.reps,
+        rest: entry.rest,
+      })),
+    }));
+  saveLocalData();
+  render();
+}
+
+function updateDayField(dayId, field, value) {
+  const day = state.base.days.find((d) => d.id === dayId);
+  if (!day) return;
+  day[field] = value;
   saveLocalData();
   render();
 }

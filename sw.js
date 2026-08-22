@@ -1,4 +1,4 @@
-const CACHE = "gym-pwa-v1";
+const CACHE = "gym-pwa-v3";
 const ASSETS = [
   "./",
   "./index.html",

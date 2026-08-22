@@ -1,7 +1,9 @@
 :root {
   color-scheme: dark;
   --bg: #07111f;
+  --bg-grad: radial-gradient(circle at top, rgba(56, 189, 248, 0.18), transparent 28%), radial-gradient(circle at 20% 0%, rgba(34, 197, 94, 0.16), transparent 24%);
   --panel: rgba(15, 23, 42, 0.92);
+  --panel-strong: rgba(15, 23, 42, 0.98);
   --line: rgba(148, 163, 184, 0.18);
   --text: #e2e8f0;
   --muted: #94a3b8;
@@ -9,14 +11,23 @@
   --accent-2: #38bdf8;
   --shadow: 0 16px 50px rgba(0, 0, 0, 0.35);
 }
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f8fafc;
+  --bg-grad: radial-gradient(circle at top, rgba(56, 189, 248, 0.12), transparent 28%), radial-gradient(circle at 20% 0%, rgba(34, 197, 94, 0.1), transparent 24%);
+  --panel: rgba(255, 255, 255, 0.9);
+  --panel-strong: rgba(255, 255, 255, 0.98);
+  --line: rgba(15, 23, 42, 0.1);
+  --text: #0f172a;
+  --muted: #475569;
+  --shadow: 0 16px 50px rgba(15, 23, 42, 0.12);
+}
 * { box-sizing: border-box; }
 html, body {
   margin: 0;
   min-height: 100%;
-  background:
-    radial-gradient(circle at top, rgba(56, 189, 248, 0.18), transparent 28%),
-    radial-gradient(circle at 20% 0%, rgba(34, 197, 94, 0.16), transparent 24%),
-    var(--bg);
+  background: var(--bg-grad), var(--bg);
   color: var(--text);
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
@@ -26,7 +37,42 @@ button, input, textarea { font: inherit; }
 .topbar { display: flex; gap: 16px; justify-content: space-between; align-items: end; margin-bottom: 14px; }
 .eyebrow { margin: 0 0 4px; color: var(--accent-2); text-transform: uppercase; letter-spacing: .14em; font-size: .72rem; }
 h1 { margin: 0; font-size: clamp(1.35rem, 3vw, 2rem); }
-.mode-switch, .day-nav { display: flex; gap: 8px; flex-wrap: wrap; }
+.header-actions, .day-nav { display: flex; gap: 8px; flex-wrap: wrap; }
+.day-nav { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 2px; }
+.day-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 6px; }
+.day-toolbar-actions { display: flex; gap: 8px; align-items: center; }
+.mini-menu { position: relative; }
+.mini-menu summary { list-style: none; }
+.mini-menu summary::-webkit-details-marker { display: none; }
+.mini-menu-panel {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  min-width: 220px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--panel-strong);
+  box-shadow: var(--shadow);
+  z-index: 20;
+}
+.menu-help {
+  display: block;
+  margin: -2px 2px 2px;
+  color: var(--muted);
+  font-size: 0.75rem;
+  line-height: 1.2;
+}
+.theme-chip {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 10px 14px;
+  cursor: pointer;
+}
 .mode-btn, .day-btn, .action-btn, .order-btn {
   border: 1px solid var(--line);
   background: var(--panel);
@@ -43,23 +89,27 @@ h1 { margin: 0; font-size: clamp(1.35rem, 3vw, 2rem); }
 .day-title { margin: 0; font-size: clamp(1.4rem, 4vw, 2.4rem); }
 .day-subtitle { margin: 4px 0 0; color: var(--muted); }
 .cards { display: grid; gap: 14px; }
-.exercise-card { display: grid; grid-template-columns: minmax(132px, 220px) 1fr; gap: 14px; background: linear-gradient(180deg, rgba(15,23,42,.94), rgba(15,23,42,.82)); border: 1px solid var(--line); border-radius: 24px; overflow: hidden; box-shadow: var(--shadow); }
-.exercise-image { width: 100%; height: 100%; min-height: 180px; object-fit: cover; background: #0b1220; }
+.exercise-card { display: grid; grid-template-columns: minmax(132px, 220px) 1fr; gap: 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 24px; overflow: hidden; box-shadow: var(--shadow); }
+.exercise-image { width: 100%; height: 100%; min-height: 180px; object-fit: cover; background: #0b1220; filter: saturate(1.02) contrast(1.08); }
+.day-subtitle, .muted { color: var(--muted); }
 .exercise-body { padding: 16px; display: grid; gap: 12px; align-content: center; }
 .exercise-title-row { display: flex; justify-content: space-between; gap: 12px; align-items: start; }
 .exercise-name { margin: 0; font-size: clamp(1.15rem, 3vw, 1.65rem); line-height: 1.1; }
-.quick-pr { display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,.04); border: 1px solid var(--line); border-radius: 999px; padding: 8px 10px; min-width: 122px; justify-content: end; }
+.quick-pr { display: flex; align-items: center; gap: 8px; background: rgba(148,163,184,.08); border: 1px solid var(--line); border-radius: 999px; padding: 8px 10px; min-width: 122px; justify-content: end; }
 .pr-input { width: 70px; border: 0; outline: 0; color: var(--text); background: transparent; text-align: right; font-weight: 700; font-size: 1.05rem; }
 .pr-input::-webkit-outer-spin-button, .pr-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .exercise-meta { display: flex; flex-wrap: wrap; gap: 8px; }
-.meta-pill { padding: 8px 10px; border-radius: 999px; background: rgba(148,163,184,.08); border: 1px solid var(--line); }
-.editor-panel { background: rgba(15,23,42,.88); border: 1px solid var(--line); border-radius: 24px; padding: 16px; margin-bottom: 16px; box-shadow: var(--shadow); }
+.meta-pill { padding: 8px 10px; border-radius: 999px; background: rgba(148,163,184,.15); border: 1px solid var(--line); }
+.editor-panel { background: var(--panel-strong); border: 1px solid var(--line); border-radius: 24px; padding: 16px; margin-bottom: 16px; box-shadow: var(--shadow); }
 .editor-grid { display: grid; gap: 12px; }
 .editor-item { border: 1px solid var(--line); border-radius: 18px; padding: 12px; background: rgba(255,255,255,.03); display: grid; gap: 10px; }
+.editor-day { gap: 14px; }
+.editor-day-header { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
+.editor-stack { display: grid; gap: 12px; }
 .editor-row { display: grid; grid-template-columns: 1.2fr .6fr .8fr .6fr 1fr 1fr .6fr; gap: 8px; }
-.editor-row input, .editor-row textarea {
+.editor-row input, .editor-row textarea, .day-name-input {
   width: 100%;
-  background: rgba(2,6,23,.65);
+  background: var(--panel);
   color: var(--text);
   border: 1px solid var(--line);
   border-radius: 12px;
@@ -67,12 +117,62 @@ h1 { margin: 0; font-size: clamp(1.35rem, 3vw, 2rem); }
 }
 .editor-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .danger { background: rgba(251,113,133,.14); }
+.day-btn { position: relative; display: inline-flex; align-items: center; gap: 8px; padding-right: 34px; }
+.day-toolbar .day-btn { flex: 1 1 120px; justify-content: center; }
+.day-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: rgba(251,113,133,.2);
+  color: var(--text);
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 14px;
+  line-height: 1;
+}
+.day-close:hover { background: rgba(251,113,133,.32); }
 .muted { color: var(--muted); }
 .sr-only { position: absolute; left: -9999px; }
 .empty-state { padding: 24px; text-align: center; color: var(--muted); border: 1px dashed var(--line); border-radius: 20px; }
 @media (max-width: 780px) {
   .topbar, .day-header, .exercise-title-row { align-items: stretch; flex-direction: column; }
+  .day-toolbar, .editor-day-header { align-items: stretch; flex-direction: column; }
+  .mini-menu-panel { right: auto; left: 0; min-width: 180px; }
   .exercise-card { grid-template-columns: 1fr; }
   .exercise-image { min-height: 220px; max-height: 260px; }
   .editor-row { grid-template-columns: 1fr 1fr; }
+}
+
+:root[data-theme="light"] .exercise-card,
+:root[data-theme="light"] .editor-panel,
+:root[data-theme="light"] .editor-item,
+:root[data-theme="light"] .mini-menu-panel {
+  background: rgba(255, 255, 255, 0.96);
+}
+
+:root[data-theme="light"] .exercise-image {
+  background: #e2e8f0;
+}
+
+:root[data-theme="light"] .editor-row input,
+:root[data-theme="light"] .editor-row textarea,
+:root[data-theme="light"] .day-name-input,
+:root[data-theme="light"] .pr-input {
+  background: #fff;
+  color: #0f172a;
+}
+
+:root[data-theme="light"] .quick-pr,
+:root[data-theme="light"] .meta-pill,
+:root[data-theme="light"] .theme-chip,
+:root[data-theme="light"] .mode-btn,
+:root[data-theme="light"] .action-btn,
+:root[data-theme="light"] .order-btn,
+:root[data-theme="light"] .day-btn {
+  background: rgba(255,255,255,.92);
 }
