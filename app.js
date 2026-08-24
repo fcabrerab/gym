@@ -300,15 +300,13 @@ function renderWorkout(day) {
     <div class="day-header">
       <div>
         <h2 class="day-title">${day.title}</h2>
-        <p class="day-subtitle">
-          <span class="time-line">
-            <span>${totalSeries} series${extra} · ~${formatMinutes(estimate.totalSeconds)}</span>
-            <details class="mini-menu time-info-menu">
-              <summary class="info-btn" aria-label="Cómo se calcula el tiempo estimado">ⓘ</summary>
-              <div class="mini-menu-panel time-info-panel">${buildTimeInfoHtml(estimate)}</div>
-            </details>
-          </span>
-        </p>
+        <div class="day-subtitle time-line">
+          <span>${totalSeries} series${extra} · ~${formatMinutes(estimate.totalSeconds)}</span>
+          <details class="mini-menu time-info-menu">
+            <summary class="info-btn" aria-label="Cómo se calcula el tiempo estimado">ⓘ</summary>
+            <div class="mini-menu-panel time-info-panel">${buildTimeInfoHtml(estimate)}</div>
+          </details>
+        </div>
       </div>
     </div>
     <div class="cards" id="cards"></div>
