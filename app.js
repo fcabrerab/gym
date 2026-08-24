@@ -2,6 +2,12 @@ const STORAGE_KEY = "gym-routine-data-v1";
 const MODE_KEY = "gym-ui-mode-v1";
 const THEME_KEY = "gym-theme-v1";
 
+// Estimación del tiempo de entrenamiento: son supuestos declarados (se explican
+// en el popup de info junto al tiempo total), fáciles de ajustar si no encajan
+// con la realidad.
+const SET_WORK_SECONDS = 40; // tiempo estimado haciendo cada serie (no es descanso)
+const EXERCISE_TRANSITION_SECONDS = 120; // 2 min estimados para cambiar de ejercicio/máquina
+
 const state = {
   base: null,
   custom: loadLocalData(),
@@ -91,7 +97,7 @@ function applyTheme(theme) {
 }
 
 function bindTimerSettings() {
-  state.custom.settings ||= { timerAlert: true, timerSound: true, timerNotification: true };
+  state.custom.settings ||= { timerAlert: true, timerSound: true, timerNotification: true, includeTransitionTime: true };
   const settings = state.custom.settings;
   const controls = [
     [els.timerAlertSetting, "timerAlert"],
@@ -274,11 +280,20 @@ function renderWorkout(day) {
   els.app.innerHTML = "";
   const section = document.createElement("section");
   section.className = "day-section";
+  const totalSeries = (day.exercises || []).reduce((sum, entry) => sum + Number(entry.series || 0), 0);
+  const extra = day.subtitle ? ` · ${escapeHtml(day.subtitle)}` : "";
+  const estimate = estimateDayTime(day);
   section.innerHTML = `
     <div class="day-header">
       <div>
         <h2 class="day-title">${day.title}</h2>
-        <p class="day-subtitle">${day.subtitle} · ~${estimateRestMinutes(day)} minutos</p>
+        <p class="day-subtitle">
+          ${totalSeries} series${extra} · ~${formatMinutes(estimate.totalSeconds)}
+          <details class="mini-menu time-info-menu">
+            <summary class="info-btn" aria-label="Cómo se calcula el tiempo estimado">ⓘ</summary>
+            <div class="mini-menu-panel time-info-panel">${buildTimeInfoHtml(estimate)}</div>
+          </details>
+        </p>
       </div>
     </div>
     <div class="cards" id="cards"></div>
@@ -290,11 +305,55 @@ function renderWorkout(day) {
   });
 }
 
-function estimateRestMinutes(day) {
-  const totalSeconds = (day.exercises || []).reduce((total, entry) => {
-    return total + parseRestSeconds(entry.rest) * Number(entry.series || 0);
-  }, 0);
-  return Math.max(0, Math.round(totalSeconds / 60));
+// Desglose del tiempo estimado del día: tiempo haciendo cada serie (supuesto
+// declarado, ver SET_WORK_SECONDS), descanso entre series (dato real de cada
+// ejercicio), y cambio entre ejercicios/máquinas (activable, ver
+// EXERCISE_TRANSITION_SECONDS). Todo se calcula sobre el día ya fusionado con
+// las personalizaciones locales, así que refleja siempre el estado actual.
+function estimateDayTime(day) {
+  const exercises = day.exercises || [];
+  let workSeconds = 0;
+  let restSeconds = 0;
+  exercises.forEach((entry) => {
+    const series = Number(entry.series || 0);
+    workSeconds += series * SET_WORK_SECONDS;
+    restSeconds += series * parseRestSeconds(entry.rest);
+  });
+  const transitions = Math.max(0, exercises.length - 1);
+  const includeTransitions = state.custom.settings?.includeTransitionTime !== false;
+  const transitionSeconds = includeTransitions ? transitions * EXERCISE_TRANSITION_SECONDS : 0;
+  return {
+    workSeconds,
+    restSeconds,
+    transitions,
+    transitionSeconds,
+    includeTransitions,
+    totalSeconds: workSeconds + restSeconds + transitionSeconds,
+  };
+}
+
+function formatMinutes(totalSeconds) {
+  const minutes = Math.max(0, Math.round(totalSeconds / 60));
+  return minutes < 1 ? "<1 min" : `${minutes} min`;
+}
+
+function buildTimeInfoHtml(estimate) {
+  const rows = [
+    `<div class="time-info-row"><span>Haciendo las series</span><strong>~${formatMinutes(estimate.workSeconds)}</strong></div>`,
+    `<div class="time-info-row"><span>Descanso entre series</span><strong>~${formatMinutes(estimate.restSeconds)}</strong></div>`,
+  ];
+  if (estimate.includeTransitions) {
+    rows.push(
+      `<div class="time-info-row"><span>Cambio de ejercicio (${estimate.transitions} × 2 min)</span><strong>~${formatMinutes(estimate.transitionSeconds)}</strong></div>`
+    );
+  } else {
+    rows.push('<div class="time-info-row muted"><span>Cambio de ejercicio</span><strong>desactivado</strong></div>');
+  }
+  return `
+    <div class="time-info-title">Cómo se calcula</div>
+    ${rows.join("")}
+    <small class="menu-help">Estimado con ${SET_WORK_SECONDS}s por serie y 2 min por cambio de ejercicio. Actívalo o desactívalo desde el modo editor.</small>
+  `;
 }
 
 function buildWorkoutCard(exercise, series, reps, rest) {
@@ -508,10 +567,22 @@ function renderEditor(routine) {
         <h2 class="day-title">Editor</h2>
         <p class="day-subtitle">Edita rutina, orden, imágenes y PR sin tocar código.</p>
       </div>
+      <label class="editor-toggle">
+        <input type="checkbox" id="includeTransitionSetting">
+        +2 min por cambio de ejercicio en el tiempo estimado
+      </label>
     </div>
     <div class="editor-grid" id="editorGrid"></div>
   `;
   els.app.appendChild(panel);
+  const transitionSetting = panel.querySelector("#includeTransitionSetting");
+  transitionSetting.checked = state.custom.settings?.includeTransitionTime !== false;
+  transitionSetting.addEventListener("change", () => {
+    state.custom.settings ||= {};
+    state.custom.settings.includeTransitionTime = transitionSetting.checked;
+    saveLocalData();
+    render();
+  });
   const grid = panel.querySelector("#editorGrid");
   const day = routine.days.find((d) => d.id === state.activeDay) || routine.days[0];
   if (!day) {
@@ -526,7 +597,7 @@ function renderEditor(routine) {
         <input class="day-name-input" data-day-field="label" value="${escapeHtml(day.label)}" aria-label="Nombre del día">
         <div class="muted">
           <input class="day-name-input day-subtitle-input" data-day-field="title" value="${escapeHtml(day.title)}" aria-label="Título del día">
-          <input class="day-name-input day-subtitle-input" data-day-field="subtitle" value="${escapeHtml(day.subtitle ?? "")}" aria-label="Subtítulo del día" placeholder="Ej. 21 series">
+          <input class="day-name-input day-subtitle-input" data-day-field="subtitle" value="${escapeHtml(day.subtitle ?? "")}" aria-label="Nota del día (opcional)" placeholder="Nota opcional, ej. + abs">
         </div>
       </div>
       <div class="editor-actions">

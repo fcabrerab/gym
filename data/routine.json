@@ -4,7 +4,7 @@
       "id": "tuesday-push",
       "label": "Martes",
       "title": "Push",
-      "subtitle": "23 series",
+      "subtitle": "",
       "exercises": [
         { "exerciseId": "machine-chest-press", "series": 3, "reps": "8-12", "rest": "2:00" },
         { "exerciseId": "pec-deck", "series": 3, "reps": "10-15", "rest": "1:30" },
@@ -20,7 +20,7 @@
       "id": "wednesday-lower-a",
       "label": "Miércoles",
       "title": "Lower A",
-      "subtitle": "15 series + abs",
+      "subtitle": "+ abs",
       "exercises": [
         { "exerciseId": "leg-press", "series": 3, "reps": "8-12", "rest": "2:00" },
         { "exerciseId": "leg-extension", "series": 3, "reps": "10-15", "rest": "1:30" },
@@ -46,7 +46,7 @@
       "id": "saturday-lower-b",
       "label": "Sábado",
       "title": "Lower B",
-      "subtitle": "12 series + abs",
+      "subtitle": "+ abs",
       "exercises": [
         { "exerciseId": "leg-press", "series": 3, "reps": "8-12", "rest": "2:00" },
         { "exerciseId": "leg-extension", "series": 3, "reps": "10-15", "rest": "1:30" },
@@ -58,7 +58,7 @@
       "id": "sunday-upper",
       "label": "Domingo",
       "title": "Upper",
-      "subtitle": "29 series",
+      "subtitle": "",
       "exercises": [
         { "exerciseId": "machine-chest-press", "series": 3, "reps": "8-12", "rest": "2:00" },
         { "exerciseId": "pec-deck", "series": 3, "reps": "10-15", "rest": "1:30" },
