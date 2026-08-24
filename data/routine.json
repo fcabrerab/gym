@@ -4,7 +4,7 @@
       "id": "tuesday-push",
       "label": "Martes",
       "title": "Push",
-      "subtitle": "21 series",
+      "subtitle": "23 series",
       "exercises": [
         { "exerciseId": "machine-chest-press", "series": 3, "reps": "8-12", "rest": "2:00" },
         { "exerciseId": "pec-deck", "series": 3, "reps": "10-15", "rest": "1:30" },
@@ -12,7 +12,8 @@
         { "exerciseId": "rope-triceps-pushdown", "series": 3, "reps": "10-15", "rest": "1:15" },
         { "exerciseId": "scaption-dumbbells", "series": 3, "reps": "12-15", "rest": "1:15" },
         { "exerciseId": "overhead-rope-triceps-extension", "series": 3, "reps": "10-15", "rest": "1:15" },
-        { "exerciseId": "reverse-pec-deck", "series": 3, "reps": "12-15", "rest": "1:15" }
+        { "exerciseId": "reverse-pec-deck", "series": 3, "reps": "12-15", "rest": "1:15" },
+        { "exerciseId": "cable-external-rotation", "series": 2, "reps": "8-12", "rest": "2:00" }
       ]
     },
     {
@@ -34,9 +35,9 @@
       "title": "Pull",
       "subtitle": "Bíceps prioritario",
       "exercises": [
-        { "exerciseId": "incline-dumbbell-curl", "series": 3, "reps": "8-12", "rest": "1:30" },
-        { "exerciseId": "hammer-curl-alternate", "series": 3, "reps": "8-12", "rest": "1:30" },
-        { "exerciseId": "preacher-curl-machine", "series": 3, "reps": "8-12", "rest": "1:30" },
+        { "exerciseId": "incline-dumbbell-curl", "series": 3, "reps": "8-12", "rest": "2:30" },
+        { "exerciseId": "preacher-curl-machine", "series": 3, "reps": "8-12", "rest": "2:30" },
+        { "exerciseId": "hammer-curl-alternate", "series": 3, "reps": "8-12", "rest": "2:30" },
         { "exerciseId": "lat-pulldown", "series": 3, "reps": "8-12", "rest": "2:00" },
         { "exerciseId": "seated-row-cable", "series": 3, "reps": "8-12", "rest": "2:00" }
       ]
@@ -57,7 +58,7 @@
       "id": "sunday-upper",
       "label": "Domingo",
       "title": "Upper",
-      "subtitle": "27 series",
+      "subtitle": "29 series",
       "exercises": [
         { "exerciseId": "machine-chest-press", "series": 3, "reps": "8-12", "rest": "2:00" },
         { "exerciseId": "pec-deck", "series": 3, "reps": "10-15", "rest": "1:30" },
@@ -67,7 +68,8 @@
         { "exerciseId": "scaption-dumbbells", "series": 3, "reps": "12-15", "rest": "1:15" },
         { "exerciseId": "reverse-pec-deck", "series": 3, "reps": "12-15", "rest": "1:15" },
         { "exerciseId": "incline-dumbbell-curl", "series": 3, "reps": "8-12", "rest": "1:30" },
-        { "exerciseId": "rope-triceps-pushdown", "series": 3, "reps": "10-15", "rest": "1:15" }
+        { "exerciseId": "rope-triceps-pushdown", "series": 3, "reps": "10-15", "rest": "1:15" },
+        { "exerciseId": "cable-external-rotation", "series": 2, "reps": "12-20", "rest": "1:30" }
       ]
     }
   ]

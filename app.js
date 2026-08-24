@@ -1,7 +1,6 @@
 const STORAGE_KEY = "gym-routine-data-v1";
 const MODE_KEY = "gym-ui-mode-v1";
 const THEME_KEY = "gym-theme-v1";
-const CACHE_BUSTER = "v2";
 
 const state = {
   base: null,
@@ -34,15 +33,22 @@ const cardTemplate = document.getElementById("exerciseCardTemplate");
 init();
 
 async function init() {
-  state.base = await loadJson("./data/routine.json");
-  state.exercises = await loadJson("./data/exercises.json");
-  ensureLocalShape();
-  state.activeDay = pickInitialDayId();
-  persistActiveDay();
-  bindShellEvents();
-  applyTheme(state.theme);
-  render();
-  registerServiceWorker();
+  try {
+    state.base = await loadJson("./data/routine.json");
+    state.exercises = await loadJson("./data/exercises.json");
+    ensureLocalShape();
+    state.activeDay = pickInitialDayId();
+    persistActiveDay();
+    bindShellEvents();
+    applyTheme(state.theme);
+    render();
+    registerServiceWorker();
+  } catch (err) {
+    console.error(err);
+    if (els.app) {
+      els.app.innerHTML = '<div class="empty-state">No se pudo cargar la rutina. Comprueba tu conexión y recarga la página.</div>';
+    }
+  }
 }
 
 function bindShellEvents() {
@@ -97,6 +103,9 @@ function bindTimerSettings() {
     control.checked = settings[key] !== false;
     control.addEventListener("change", () => {
       settings[key] = control.checked;
+      if (key === "timerNotification" && control.checked && "Notification" in window && Notification.permission === "default") {
+        Notification.requestPermission().catch(() => {});
+      }
       saveLocalData();
     });
   });
@@ -122,11 +131,9 @@ function pickInitialDayId() {
   const days = state.base?.days || [];
   const ids = days.map((d) => d.id);
   const todayMap = {
-    monday: "monday-rest",
     tuesday: "tuesday-push",
     wednesday: "wednesday-lower-a",
     thursday: "thursday-pull",
-    friday: "friday-rest",
     saturday: "saturday-lower-b",
     sunday: "sunday-upper",
   };
@@ -194,14 +201,15 @@ function getMergedRoutine() {
         };
       })
       .concat(
-        added.map((entry, index) => ({
-          exerciseId: entry.exerciseId,
-          series: entry.series,
-          reps: entry.reps,
-          rest: entry.rest,
-          order: exerciseRank.has(entry.exerciseId) ? exerciseRank.get(entry.exerciseId) : (orderMap[entry.exerciseId] ?? (1000 + index)),
-          exercise: { ...(state.custom.exercises[entry.exerciseId] || {}), id: entry.exerciseId },
-        }))
+        added.map((entry, index) => {
+          const entryOverride = overrides[entry.exerciseId] || {};
+          return {
+            ...entry,
+            ...entryOverride,
+            order: exerciseRank.has(entry.exerciseId) ? exerciseRank.get(entry.exerciseId) : (orderMap[entry.exerciseId] ?? (1000 + index)),
+            exercise: { ...(state.custom.exercises[entry.exerciseId] || {}), id: entry.exerciseId },
+          };
+        })
       )
       .sort((a, b) => a.order - b.order);
     return { ...day, ...dayCustom, exercises };
@@ -323,56 +331,141 @@ function parseRestSeconds(value) {
   return match ? Number(match[1]) * 60 + Number(match[2]) : Math.max(0, Number(value) || 0);
 }
 
+// --- Temporizador de descanso ---
+// El contador se basa en una marca de tiempo absoluta (endAt), no en restar 1
+// en cada tick: los móviles limitan o pausan los setInterval en segundo plano
+// (pantalla bloqueada, pestaña oculta), así que un contador que solo resta
+// "se para" y nunca llega a disparar el aviso/sonido/notificación final.
+// Con endAt, en cuanto el intervalo vuelve a ejecutarse (o al recuperar el
+// foco) se recalcula el tiempo real transcurrido y se puede "poner al día"
+// el temporizador, incluso disparando el final si ya venció mientras estaba
+// en segundo plano. Además se pide un Wake Lock de pantalla mientras hay un
+// temporizador activo, para evitar que el propio bloqueo automático de
+// pantalla sea la causa de que el intervalo deje de correr.
+
+let wakeLock = null;
+
+async function acquireWakeLock() {
+  if (!("wakeLock" in navigator) || document.visibilityState !== "visible") return;
+  try {
+    wakeLock = await navigator.wakeLock.request("screen");
+    wakeLock.addEventListener("release", () => { wakeLock = null; });
+  } catch {
+    // Denegado o no disponible en este contexto: seguimos sin él.
+  }
+}
+
+function releaseWakeLockIfIdle() {
+  if (timers.size === 0 && wakeLock) {
+    wakeLock.release().catch(() => {});
+    wakeLock = null;
+  }
+}
+
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState !== "visible") return;
+  if (timers.size > 0) acquireWakeLock();
+  timers.forEach((timer, button) => catchUpRestTimer(button, timer));
+});
+
 function toggleRestTimer(button, seconds, exerciseName) {
   const existing = timers.get(button);
   if (existing) {
     if (existing.paused) {
       existing.paused = false;
-      existing.interval = setInterval(() => tickRestTimer(button, existing, exerciseName), 1000);
+      existing.endAt = Date.now() + existing.remaining * 1000;
+      existing.interval = setInterval(() => tickRestTimer(button, existing), 1000);
+      acquireWakeLock();
       button.textContent = `Pausa ${formatTimer(existing.remaining)}`;
     } else {
       existing.paused = true;
+      existing.remaining = Math.max(0, Math.round((existing.endAt - Date.now()) / 1000));
       clearInterval(existing.interval);
+      releaseWakeLockIfIdle();
       button.textContent = `Continuar ${formatTimer(existing.remaining)}`;
     }
     return;
   }
-  const timer = { remaining: seconds, paused: false, interval: null };
+  const timer = { remaining: seconds, paused: false, interval: null, endAt: Date.now() + seconds * 1000, exerciseName };
   timers.set(button, timer);
   button.classList.add("timer-running");
   const stopButton = button.nextElementSibling;
   if (stopButton) stopButton.hidden = false;
   button.textContent = `Pausa ${formatTimer(seconds)}`;
-  timer.interval = setInterval(() => tickRestTimer(button, timer, exerciseName), 1000);
+  timer.interval = setInterval(() => tickRestTimer(button, timer), 1000);
+  acquireWakeLock();
   if (state.custom.settings?.timerNotification && "Notification" in window && Notification.permission === "default") {
     Notification.requestPermission().catch(() => {});
   }
 }
 
-function tickRestTimer(button, timer, exerciseName) {
-  timer.remaining -= 1;
+function tickRestTimer(button, timer) {
+  timer.remaining = Math.max(0, Math.round((timer.endAt - Date.now()) / 1000));
   if (timer.remaining > 0) {
     button.textContent = `${timer.paused ? "Continuar" : "Pausa"} ${formatTimer(timer.remaining)}`;
     return;
   }
+  finishRestTimer(button, timer);
+}
+
+// Se llama al volver a primer plano (visibilitychange): recalcula si algún
+// temporizador ya debería haber terminado mientras la app estaba en segundo
+// plano y, si es así, dispara el aviso ahora en vez de dejarlo congelado.
+function catchUpRestTimer(button, timer) {
+  if (timer.paused) return;
+  const remaining = Math.max(0, Math.round((timer.endAt - Date.now()) / 1000));
+  timer.remaining = remaining;
+  if (remaining <= 0) {
+    finishRestTimer(button, timer);
+  } else {
+    button.textContent = `Pausa ${formatTimer(remaining)}`;
+  }
+}
+
+function finishRestTimer(button, timer) {
   clearInterval(timer.interval);
   timers.delete(button);
+  releaseWakeLockIfIdle();
   if (button.nextElementSibling) button.nextElementSibling.hidden = true;
   button.classList.remove("timer-running");
   button.classList.add("timer-done");
   button.textContent = "Descanso terminado";
+  const exerciseName = timer.exerciseName;
   if (state.custom.settings?.timerAlert !== false) showTimerAlert(button, exerciseName);
   if (state.custom.settings?.timerSound !== false) playTimerSound();
-  if (state.custom.settings?.timerNotification !== false && "Notification" in window && Notification.permission === "granted") {
-    new Notification("Descanso terminado", { body: `${exerciseName}: listo para la siguiente serie.` });
+  if (state.custom.settings?.timerNotification !== false) notifyRestDone(exerciseName);
+  setTimeout(() => { if (button.isConnected) { button.classList.remove("timer-done"); button.textContent = `Descanso ${formatTimer(Number(button.dataset.seconds))}`; } }, 4500);
+}
+
+// iOS Safari (y otros navegadores móviles) no soportan `new Notification()`
+// dentro de una app web instalada; hay que pasar por el service worker
+// (registration.showNotification). Se intenta esa vía primero y se cae al
+// constructor directo solo si no hay service worker disponible.
+async function notifyRestDone(exerciseName) {
+  if (!("Notification" in window) || Notification.permission !== "granted") return;
+  const title = "Descanso terminado";
+  const options = { body: `${exerciseName}: listo para la siguiente serie.`, icon: "./images/icon.svg", tag: "gym-rest-timer", renotify: true };
+  try {
+    if ("serviceWorker" in navigator) {
+      const registration = await navigator.serviceWorker.ready;
+      await registration.showNotification(title, options);
+      return;
+    }
+  } catch {
+    // Sigue al fallback de abajo.
   }
-  setTimeout(() => { if (button.isConnected) { button.classList.remove("timer-done"); button.textContent = `Descanso ${button.dataset.seconds}`; } }, 4500);
+  try {
+    new Notification(title, options);
+  } catch {
+    // Algunos navegadores móviles no soportan este constructor; sin más opciones aquí.
+  }
 }
 
 function stopRestTimer(button, stopButton, originalRest) {
   const timer = timers.get(button);
   if (timer) clearInterval(timer.interval);
   timers.delete(button);
+  releaseWakeLockIfIdle();
   button.classList.remove("timer-running", "timer-alert", "timer-done");
   button.textContent = `Descanso ${originalRest}`;
   stopButton.hidden = true;
@@ -433,6 +526,7 @@ function renderEditor(routine) {
         <input class="day-name-input" data-day-field="label" value="${escapeHtml(day.label)}" aria-label="Nombre del día">
         <div class="muted">
           <input class="day-name-input day-subtitle-input" data-day-field="title" value="${escapeHtml(day.title)}" aria-label="Título del día">
+          <input class="day-name-input day-subtitle-input" data-day-field="subtitle" value="${escapeHtml(day.subtitle ?? "")}" aria-label="Subtítulo del día" placeholder="Ej. 21 series">
         </div>
       </div>
       <div class="editor-actions">
@@ -571,6 +665,7 @@ function removeExercise(dayId, exerciseId) {
   if (addedIndex >= 0) {
     added.splice(addedIndex, 1);
     delete (dayCustom.order || {})[exerciseId];
+    delete (dayCustom.exercises || {})[exerciseId];
   } else if (!removed.includes(exerciseId)) {
     removed.push(exerciseId);
   }
@@ -624,12 +719,123 @@ function removeDay(dayId) {
   render();
 }
 
+// --- Exportación / importación autocontenida ---
+// El export ya no vuelca el diff interno (state.custom): vuelca la rutina ya
+// fusionada, con cada ejercicio resuelto (nombre, imagen, grupo, PR, series,
+// reps, descanso). Así el JSON no depende de que los ids de data/*.json no
+// hayan cambiado: una futura migración de la app puede reordenar, renombrar
+// o quitar ejercicios base sin que un import antiguo se rompa o "olvide" datos.
+
+function buildSnapshot() {
+  const routine = getMergedRoutine();
+  return {
+    gymApp: true,
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    settings: { ...(state.custom.settings || {}) },
+    days: routine.days.map((day) => ({
+      id: day.id,
+      label: day.label,
+      title: day.title,
+      subtitle: day.subtitle,
+      exercises: day.exercises.map((entry) => ({
+        exerciseId: entry.exerciseId,
+        name: entry.exercise?.name ?? "",
+        image: entry.exercise?.image ?? "",
+        muscleGroup: entry.exercise?.muscleGroup ?? "",
+        pr: entry.exercise?.pr ?? null,
+        series: entry.series,
+        reps: entry.reps,
+        rest: entry.rest,
+      })),
+    })),
+  };
+}
+
+function isSnapshotFormat(data) {
+  return !!data && Array.isArray(data.days) && data.days.every((day) => day && Array.isArray(day.exercises));
+}
+
+// Reconstruye un diff (state.custom) equivalente a partir de un snapshot
+// autocontenido, comparándolo contra la rutina base ACTUALMENTE cargada.
+// Cada ejercicio y cada campo de cada día queda fijado explícitamente, así
+// que aunque data/routine.json o data/exercises.json cambien más adelante,
+// lo importado se sigue viendo exactamente igual.
+function applySnapshot(data) {
+  const exercisesOverride = {};
+  const daysCustom = {};
+  const daysAdded = [];
+  const dayOrder = [];
+  const baseDays = state.base?.days || [];
+  const baseDayIds = new Set(baseDays.map((d) => d.id));
+
+  data.days.forEach((day) => {
+    dayOrder.push(day.id);
+    const exerciseIds = day.exercises.map((entry) => entry.exerciseId);
+
+    day.exercises.forEach((entry) => {
+      const override = {
+        id: entry.exerciseId,
+        name: entry.name ?? "",
+        image: entry.image ?? "",
+        muscleGroup: entry.muscleGroup ?? "",
+      };
+      if (entry.pr !== null && entry.pr !== undefined && entry.pr !== "") override.pr = entry.pr;
+      exercisesOverride[entry.exerciseId] = { ...(exercisesOverride[entry.exerciseId] || {}), ...override };
+    });
+
+    if (baseDayIds.has(day.id)) {
+      const baseDay = baseDays.find((d) => d.id === day.id);
+      const baseIds = (baseDay.exercises || []).map((entry) => entry.exerciseId);
+      const removed = baseIds.filter((id) => !exerciseIds.includes(id));
+      const addedExercises = day.exercises
+        .filter((entry) => !baseIds.includes(entry.exerciseId))
+        .map((entry) => ({ exerciseId: entry.exerciseId, series: entry.series, reps: entry.reps, rest: entry.rest }));
+      const exercisesFieldOverrides = {};
+      day.exercises
+        .filter((entry) => baseIds.includes(entry.exerciseId))
+        .forEach((entry) => {
+          exercisesFieldOverrides[entry.exerciseId] = { series: entry.series, reps: entry.reps, rest: entry.rest };
+        });
+      daysCustom[day.id] = {
+        label: day.label,
+        title: day.title,
+        subtitle: day.subtitle,
+        removed,
+        addedExercises,
+        exercises: exercisesFieldOverrides,
+        exerciseOrder: exerciseIds,
+      };
+    } else {
+      daysAdded.push({
+        id: day.id,
+        label: day.label,
+        title: day.title,
+        subtitle: day.subtitle,
+        exercises: day.exercises.map((entry) => ({ exerciseId: entry.exerciseId, series: entry.series, reps: entry.reps, rest: entry.rest })),
+      });
+    }
+  });
+
+  const importedDayIds = new Set(data.days.map((day) => day.id));
+  const daysRemoved = [...baseDayIds].filter((id) => !importedDayIds.has(id));
+
+  state.custom = {
+    exercises: exercisesOverride,
+    days: daysCustom,
+    daysAdded,
+    daysRemoved,
+    dayOrder,
+    settings: data.settings || state.custom.settings || { timerAlert: true, timerSound: true, timerNotification: true },
+  };
+}
+
 function exportData() {
-  const blob = new Blob([JSON.stringify(state.custom, null, 2)], { type: "application/json" });
+  const blob = new Blob([JSON.stringify(buildSnapshot(), null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = "gym-local-data.json";
+  a.download = `gym-backup-${new Date().toISOString().slice(0, 10)}.json`;
   a.click();
   URL.revokeObjectURL(url);
 }
@@ -641,8 +847,29 @@ function importData() {
   input.onchange = async () => {
     const file = input.files?.[0];
     if (!file) return;
-    state.custom = JSON.parse(await file.text());
-    ensureLocalShape();
+    let data;
+    try {
+      data = JSON.parse(await file.text());
+    } catch {
+      alert("El archivo no es un JSON válido.");
+      return;
+    }
+    if (!confirm("Importar sustituirá tus datos locales actuales (PRs, ejercicios y días personalizados). ¿Continuar?")) return;
+    try {
+      if (isSnapshotFormat(data)) {
+        applySnapshot(data);
+      } else if (data && typeof data === "object" && !Array.isArray(data)) {
+        // Formato antiguo: diff crudo (state.custom). Se mantiene por compatibilidad
+        // con backups ya descargados.
+        state.custom = data;
+      } else {
+        throw new Error("Formato no reconocido");
+      }
+      ensureLocalShape();
+    } catch (err) {
+      alert("No se pudo importar el archivo: " + err.message);
+      return;
+    }
     state.activeDay = pickInitialDayId();
     persistActiveDay();
     render();
@@ -651,6 +878,7 @@ function importData() {
 }
 
 function restoreLocalData() {
+  if (!confirm("Esto borrará todas tus personalizaciones locales (PRs, ejercicios y días añadidos o editados). ¿Continuar?")) return;
   state.custom = {};
   ensureLocalShape();
   state.activeDay = pickInitialDayId();
@@ -659,8 +887,10 @@ function restoreLocalData() {
 }
 
 function restoreBaseRoutine() {
+  if (!confirm("Esto restaura la estructura de la rutina base (días y ejercicios), conservando tus PRs y ajustes. ¿Continuar?")) return;
   const preservedPrs = state.custom.exercises || {};
-  state.custom = { exercises: preservedPrs, days: {} };
+  const preservedSettings = state.custom.settings;
+  state.custom = { exercises: preservedPrs, days: {}, settings: preservedSettings };
   ensureLocalShape();
   state.activeDay = pickInitialDayId();
   persistActiveDay();
