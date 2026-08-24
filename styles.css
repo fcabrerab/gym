@@ -117,8 +117,9 @@ h1 { margin: 0; font-size: clamp(1.35rem, 3vw, 2rem); }
 .time-info-title { font-weight: 700; margin-bottom: 2px; }
 .time-info-row { display: flex; justify-content: space-between; gap: 12px; padding: 2px 0; }
 .time-info-row.muted { color: var(--muted); }
+.time-line { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 4px; }
 .editor-toggle {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 8px;
   border: 1px solid var(--line);
@@ -130,6 +131,16 @@ h1 { margin: 0; font-size: clamp(1.35rem, 3vw, 2rem); }
   cursor: pointer;
   box-shadow: var(--shadow);
   flex: 0 0 auto;
+  white-space: nowrap;
+}
+.editor-toggle input[type="number"] {
+  width: 56px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 4px 6px;
+  background: var(--panel-strong);
+  color: var(--text);
+  text-align: center;
 }
 .app-main { margin-top: 16px; }
 .day-section { display: grid; gap: 14px; }

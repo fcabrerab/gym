@@ -6,7 +6,7 @@ const THEME_KEY = "gym-theme-v1";
 // en el popup de info junto al tiempo total), fáciles de ajustar si no encajan
 // con la realidad.
 const SET_WORK_SECONDS = 40; // tiempo estimado haciendo cada serie (no es descanso)
-const EXERCISE_TRANSITION_SECONDS = 120; // 2 min estimados para cambiar de ejercicio/máquina
+const DEFAULT_TRANSITION_MINUTES = 2; // valor por defecto del ajuste "cambio de ejercicio"
 
 const state = {
   base: null,
@@ -97,7 +97,7 @@ function applyTheme(theme) {
 }
 
 function bindTimerSettings() {
-  state.custom.settings ||= { timerAlert: true, timerSound: true, timerNotification: true, includeTransitionTime: true };
+  state.custom.settings ||= { timerAlert: true, timerSound: true, timerNotification: true, transitionMinutes: DEFAULT_TRANSITION_MINUTES };
   const settings = state.custom.settings;
   const controls = [
     [els.timerAlertSetting, "timerAlert"],
@@ -175,7 +175,20 @@ function ensureLocalShape() {
   for (const exercise of state.exercises) {
     state.custom.exercises[exercise.id] ||= {};
   }
+  migrateSettingsShape();
   saveLocalData();
+}
+
+// El ajuste de "cambio de ejercicio" era antes un sí/no (includeTransitionTime);
+// ahora es un número de minutos (transitionMinutes). Migra datos guardados con
+// la forma antigua para que no se pierda la preferencia del usuario.
+function migrateSettingsShape() {
+  const settings = state.custom.settings;
+  if (!settings || settings.transitionMinutes !== undefined) return;
+  if (settings.includeTransitionTime !== undefined) {
+    settings.transitionMinutes = settings.includeTransitionTime ? DEFAULT_TRANSITION_MINUTES : 0;
+    delete settings.includeTransitionTime;
+  }
 }
 
 function getMergedRoutine() {
@@ -288,11 +301,13 @@ function renderWorkout(day) {
       <div>
         <h2 class="day-title">${day.title}</h2>
         <p class="day-subtitle">
-          ${totalSeries} series${extra} · ~${formatMinutes(estimate.totalSeconds)}
-          <details class="mini-menu time-info-menu">
-            <summary class="info-btn" aria-label="Cómo se calcula el tiempo estimado">ⓘ</summary>
-            <div class="mini-menu-panel time-info-panel">${buildTimeInfoHtml(estimate)}</div>
-          </details>
+          <span class="time-line">
+            <span>${totalSeries} series${extra} · ~${formatMinutes(estimate.totalSeconds)}</span>
+            <details class="mini-menu time-info-menu">
+              <summary class="info-btn" aria-label="Cómo se calcula el tiempo estimado">ⓘ</summary>
+              <div class="mini-menu-panel time-info-panel">${buildTimeInfoHtml(estimate)}</div>
+            </details>
+          </span>
         </p>
       </div>
     </div>
@@ -307,9 +322,15 @@ function renderWorkout(day) {
 
 // Desglose del tiempo estimado del día: tiempo haciendo cada serie (supuesto
 // declarado, ver SET_WORK_SECONDS), descanso entre series (dato real de cada
-// ejercicio), y cambio entre ejercicios/máquinas (activable, ver
-// EXERCISE_TRANSITION_SECONDS). Todo se calcula sobre el día ya fusionado con
-// las personalizaciones locales, así que refleja siempre el estado actual.
+// ejercicio), y cambio entre ejercicios/máquinas (minutos configurables desde
+// el modo editor, ver getTransitionMinutes). Todo se calcula sobre el día ya
+// fusionado con las personalizaciones locales, así que refleja siempre el
+// estado actual.
+function getTransitionMinutes() {
+  const value = state.custom.settings?.transitionMinutes;
+  return value === undefined || value === null || value === "" ? DEFAULT_TRANSITION_MINUTES : Math.max(0, Number(value) || 0);
+}
+
 function estimateDayTime(day) {
   const exercises = day.exercises || [];
   let workSeconds = 0;
@@ -320,14 +341,14 @@ function estimateDayTime(day) {
     restSeconds += series * parseRestSeconds(entry.rest);
   });
   const transitions = Math.max(0, exercises.length - 1);
-  const includeTransitions = state.custom.settings?.includeTransitionTime !== false;
-  const transitionSeconds = includeTransitions ? transitions * EXERCISE_TRANSITION_SECONDS : 0;
+  const transitionMinutes = getTransitionMinutes();
+  const transitionSeconds = transitions * transitionMinutes * 60;
   return {
     workSeconds,
     restSeconds,
     transitions,
+    transitionMinutes,
     transitionSeconds,
-    includeTransitions,
     totalSeconds: workSeconds + restSeconds + transitionSeconds,
   };
 }
@@ -337,22 +358,26 @@ function formatMinutes(totalSeconds) {
   return minutes < 1 ? "<1 min" : `${minutes} min`;
 }
 
+function formatMinuteValue(minutes) {
+  return Number.isInteger(minutes) ? String(minutes) : String(Math.round(minutes * 10) / 10);
+}
+
 function buildTimeInfoHtml(estimate) {
   const rows = [
     `<div class="time-info-row"><span>Haciendo las series</span><strong>~${formatMinutes(estimate.workSeconds)}</strong></div>`,
     `<div class="time-info-row"><span>Descanso entre series</span><strong>~${formatMinutes(estimate.restSeconds)}</strong></div>`,
   ];
-  if (estimate.includeTransitions) {
+  if (estimate.transitionMinutes > 0 && estimate.transitions > 0) {
     rows.push(
-      `<div class="time-info-row"><span>Cambio de ejercicio (${estimate.transitions} × 2 min)</span><strong>~${formatMinutes(estimate.transitionSeconds)}</strong></div>`
+      `<div class="time-info-row"><span>Cambio de ejercicio (${estimate.transitions} × ${formatMinuteValue(estimate.transitionMinutes)} min)</span><strong>~${formatMinutes(estimate.transitionSeconds)}</strong></div>`
     );
   } else {
-    rows.push('<div class="time-info-row muted"><span>Cambio de ejercicio</span><strong>desactivado</strong></div>');
+    rows.push('<div class="time-info-row muted"><span>Cambio de ejercicio</span><strong>0 min (desactivado)</strong></div>');
   }
   return `
     <div class="time-info-title">Cómo se calcula</div>
     ${rows.join("")}
-    <small class="menu-help">Estimado con ${SET_WORK_SECONDS}s por serie y 2 min por cambio de ejercicio. Actívalo o desactívalo desde el modo editor.</small>
+    <small class="menu-help">Estimado con ${SET_WORK_SECONDS}s por serie. Ajusta los minutos por cambio de ejercicio desde el modo editor.</small>
   `;
 }
 
@@ -568,21 +593,22 @@ function renderEditor(routine) {
         <p class="day-subtitle">Edita rutina, orden, imágenes y PR sin tocar código.</p>
       </div>
       <label class="editor-toggle">
-        <input type="checkbox" id="includeTransitionSetting">
-        +2 min por cambio de ejercicio en el tiempo estimado
+        Min. por cambio de ejercicio
+        <input type="number" id="transitionMinutesSetting" min="0" step="0.5" inputmode="decimal">
       </label>
     </div>
     <div class="editor-grid" id="editorGrid"></div>
   `;
   els.app.appendChild(panel);
-  const transitionSetting = panel.querySelector("#includeTransitionSetting");
-  transitionSetting.checked = state.custom.settings?.includeTransitionTime !== false;
-  transitionSetting.addEventListener("change", () => {
+  const transitionSetting = panel.querySelector("#transitionMinutesSetting");
+  transitionSetting.value = formatMinuteValue(getTransitionMinutes());
+  const saveTransitionMinutes = () => {
     state.custom.settings ||= {};
-    state.custom.settings.includeTransitionTime = transitionSetting.checked;
+    state.custom.settings.transitionMinutes = Math.max(0, Number(transitionSetting.value) || 0);
     saveLocalData();
-    render();
-  });
+  };
+  transitionSetting.addEventListener("input", saveTransitionMinutes);
+  transitionSetting.addEventListener("change", () => { saveTransitionMinutes(); render(); });
   const grid = panel.querySelector("#editorGrid");
   const day = routine.days.find((d) => d.id === state.activeDay) || routine.days[0];
   if (!day) {
@@ -897,7 +923,7 @@ function applySnapshot(data) {
     daysAdded,
     daysRemoved,
     dayOrder,
-    settings: data.settings || state.custom.settings || { timerAlert: true, timerSound: true, timerNotification: true },
+    settings: data.settings || state.custom.settings || { timerAlert: true, timerSound: true, timerNotification: true, transitionMinutes: DEFAULT_TRANSITION_MINUTES },
   };
 }
 
