@@ -459,16 +459,18 @@ function toggleRestTimer(button, seconds, exerciseName) {
       existing.interval = setInterval(() => tickRestTimer(button, existing), 1000);
       acquireWakeLock();
       button.textContent = `Pausa ${formatTimer(existing.remaining)}`;
+      notifyRestProgress(existing, true);
     } else {
       existing.paused = true;
       existing.remaining = Math.max(0, Math.round((existing.endAt - Date.now()) / 1000));
       clearInterval(existing.interval);
       releaseWakeLockIfIdle();
       button.textContent = `Continuar ${formatTimer(existing.remaining)}`;
+      closeRestProgressNotification();
     }
     return;
   }
-  const timer = { remaining: seconds, paused: false, interval: null, endAt: Date.now() + seconds * 1000, exerciseName };
+  const timer = { remaining: seconds, paused: false, interval: null, endAt: Date.now() + seconds * 1000, exerciseName, lastNotifyAt: 0 };
   timers.set(button, timer);
   button.classList.add("timer-running");
   const stopButton = button.nextElementSibling;
@@ -479,12 +481,14 @@ function toggleRestTimer(button, seconds, exerciseName) {
   if (state.custom.settings?.timerNotification && "Notification" in window && Notification.permission === "default") {
     Notification.requestPermission().catch(() => {});
   }
+  notifyRestProgress(timer, true);
 }
 
 function tickRestTimer(button, timer) {
   timer.remaining = Math.max(0, Math.round((timer.endAt - Date.now()) / 1000));
   if (timer.remaining > 0) {
     button.textContent = `${timer.paused ? "Continuar" : "Pausa"} ${formatTimer(timer.remaining)}`;
+    notifyRestProgress(timer);
     return;
   }
   finishRestTimer(button, timer);
@@ -501,6 +505,7 @@ function catchUpRestTimer(button, timer) {
     finishRestTimer(button, timer);
   } else {
     button.textContent = `Pausa ${formatTimer(remaining)}`;
+    notifyRestProgress(timer, true);
   }
 }
 
@@ -515,6 +520,7 @@ function finishRestTimer(button, timer) {
   const exerciseName = timer.exerciseName;
   if (state.custom.settings?.timerAlert !== false) showTimerAlert(button, exerciseName);
   if (state.custom.settings?.timerSound !== false) playTimerSound();
+  closeRestProgressNotification();
   if (state.custom.settings?.timerNotification !== false) notifyRestDone(exerciseName);
   setTimeout(() => { if (button.isConnected) { button.classList.remove("timer-done"); button.textContent = `Descanso ${formatTimer(Number(button.dataset.seconds))}`; } }, 4500);
 }
@@ -543,11 +549,54 @@ async function notifyRestDone(exerciseName) {
   }
 }
 
+// Notificación "en curso" con el tiempo restante: además de informar,
+// mantiene al sistema viendo actividad del service worker mientras la app
+// está en segundo plano, lo que ayuda a que el navegador no suspenda del
+// todo la pestaña/temporizador (algo que en móvil pasa a los pocos segundos
+// de perder el foco si no hay ninguna señal de trabajo en curso).
+const REST_PROGRESS_TAG = "gym-rest-timer-progress";
+const REST_PROGRESS_MIN_INTERVAL_MS = 5000;
+
+async function notifyRestProgress(timer, force = false) {
+  if (state.custom.settings?.timerNotification === false) return;
+  if (!("Notification" in window) || Notification.permission !== "granted") return;
+  if (!("serviceWorker" in navigator)) return;
+  const now = Date.now();
+  if (!force && now - timer.lastNotifyAt < REST_PROGRESS_MIN_INTERVAL_MS) return;
+  timer.lastNotifyAt = now;
+  const title = `Descansando · ${formatTimer(timer.remaining)}`;
+  const options = {
+    body: `${timer.exerciseName}: quedan ${formatTimer(timer.remaining)}.`,
+    icon: "./images/icon.svg",
+    tag: REST_PROGRESS_TAG,
+    renotify: false,
+    silent: true,
+  };
+  try {
+    const registration = await navigator.serviceWorker.ready;
+    await registration.showNotification(title, options);
+  } catch {
+    // Sin service worker disponible: seguimos sin notificación de progreso.
+  }
+}
+
+async function closeRestProgressNotification() {
+  if (!("serviceWorker" in navigator)) return;
+  try {
+    const registration = await navigator.serviceWorker.ready;
+    const notifications = await registration.getNotifications({ tag: REST_PROGRESS_TAG });
+    notifications.forEach((notification) => notification.close());
+  } catch {
+    // Nada que cerrar si el service worker no está disponible.
+  }
+}
+
 function stopRestTimer(button, stopButton, originalRest) {
   const timer = timers.get(button);
   if (timer) clearInterval(timer.interval);
   timers.delete(button);
   releaseWakeLockIfIdle();
+  closeRestProgressNotification();
   button.classList.remove("timer-running", "timer-alert", "timer-done");
   button.textContent = `Descanso ${originalRest}`;
   stopButton.hidden = true;
@@ -565,19 +614,30 @@ function showTimerAlert(button, exerciseName) {
   setTimeout(() => button.classList.remove("timer-alert"), 4500);
 }
 
+// Alarma de fin de descanso: en vez de un único beep corto, se lanzan varios
+// pulsos seguidos (más largo y más perceptible, especialmente con el móvil
+// en el bolsillo o la pantalla apagada).
 function playTimerSound() {
   const AudioContextClass = window.AudioContext || window.webkitAudioContext;
   if (!AudioContextClass) return;
   const context = new AudioContextClass();
-  const oscillator = context.createOscillator();
-  const gain = context.createGain();
-  oscillator.frequency.value = 880;
-  gain.gain.setValueAtTime(0.001, context.currentTime);
-  gain.gain.exponentialRampToValueAtTime(0.18, context.currentTime + 0.02);
-  gain.gain.exponentialRampToValueAtTime(0.001, context.currentTime + 0.45);
-  oscillator.connect(gain).connect(context.destination);
-  oscillator.start();
-  oscillator.stop(context.currentTime + 0.45);
+  const pulseCount = 4;
+  const pulseDuration = 0.35;
+  const gap = 0.18;
+  for (let i = 0; i < pulseCount; i += 1) {
+    const start = context.currentTime + i * (pulseDuration + gap);
+    const oscillator = context.createOscillator();
+    const gain = context.createGain();
+    oscillator.frequency.value = i % 2 === 0 ? 880 : 1046.5;
+    gain.gain.setValueAtTime(0.001, start);
+    gain.gain.exponentialRampToValueAtTime(0.28, start + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.001, start + pulseDuration);
+    oscillator.connect(gain).connect(context.destination);
+    oscillator.start(start);
+    oscillator.stop(start + pulseDuration);
+  }
+  const totalDuration = pulseCount * (pulseDuration + gap);
+  setTimeout(() => context.close().catch(() => {}), (totalDuration + 0.2) * 1000);
 }
 
 function renderEditor(routine) {
