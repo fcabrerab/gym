@@ -23,6 +23,16 @@ PWA estática para consultar y editar una rutina de gimnasio desde móvil.
 
 Pensada para GitHub Pages sin backend.
 
+## Actualizar la rutina publicada desde un backup
+
+Cuando quieras que un backup exportado desde la app (botón "Exportar datos") pase a ser la rutina por defecto publicada:
+
+```bash
+node scripts/apply-backup.mjs ruta/al/backup.json
+```
+
+Esto regenera `data/routine.json` y `data/exercises.json` a partir del backup. Revisa el diff, sube la versión de caché (`?v=N` en `index.html` y `CACHE` en `sw.js`) y publica normalmente.
+
 ## Revisión local
 
 Para revisar antes de publicar:
