@@ -7,7 +7,29 @@
   <link rel="manifest" href="./manifest.json">
   <link rel="icon" href="./images/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="./images/icon.svg">
-  <link rel="stylesheet" href="./styles.css?v=15">
+  <script>
+    // Abre la última versión que se eligió: si la última vez se pasó a la beta con el botón «Beta», se va directo a
+    // ella. El enlace «Versión normal» de la beta llega con «?normal»: se queda aquí y se recuerda.
+    (() => {
+      const CLAVE = "gym-beta-preferida";
+      try {
+        if (new URLSearchParams(location.search).has("normal")) {
+          localStorage.setItem(CLAVE, "normal");
+          history.replaceState(null, "", location.pathname + location.hash);
+        } else if (localStorage.getItem(CLAVE) === "beta") {
+          location.replace("./beta/");
+          return;
+        }
+      } catch {
+        // Sin localStorage: se queda en la normal.
+      }
+      document.addEventListener("click", (evento) => {
+        if (!evento.target.closest?.(".beta-link")) return;
+        try { localStorage.setItem(CLAVE, "beta"); } catch { /* sin localStorage: el botón lleva igual */ }
+      });
+    })();
+  </script>
+  <link rel="stylesheet" href="./styles.css?v=16">
   <title>Gym Routine</title>
 </head>
 <body>
@@ -73,6 +95,6 @@
     </article>
   </template>
 
-  <script src="./app.js?v=15" type="module"></script>
+  <script src="./app.js?v=16" type="module"></script>
 </body>
 </html>

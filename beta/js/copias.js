@@ -56,6 +56,7 @@ export function construirExportacion(datos, ahoraMs) {
         vibracion: a.vibracion,
         pantallaEncendida: a.pantallaEncendida,
         descansoAlMarcar: a.descansoAlMarcar,
+        descansoConSonido: a.descansoConSonido === true,
         segundosPorSerie: a.segundosPorSerie,
         recordatorioCopiaDias: a.recordatorioCopiaDias,
       },

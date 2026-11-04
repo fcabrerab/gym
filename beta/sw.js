@@ -2,7 +2,7 @@
 // Cada cambio en un archivo de beta/ obliga a subir VERSION aquí, en js/version.js y en la meta «gym-beta-version» de
 // index.html (la prueba lo comprueba). Entre versiones no se quitan ni se renombran ids de index.html: así una
 // versión vieja que arranque un momento con el HTML nuevo no se rompe (y app.js, al ver otra versión, recarga).
-const VERSION = "0.2.0";
+const VERSION = "0.2.1";
 const CACHE = `gym-beta-${VERSION}`;
 const CACHE_IMAGENES = "gym-beta-imagenes"; // sobrevive a las versiones
 const MAX_IMAGENES = 80;
@@ -14,6 +14,8 @@ const ARCHIVOS = [
   "./styles.css",
   "./manifest.json",
   "./icon.svg",
+  "./icono-512.png",
+  "./insignia-512.png",
   "./js/app.js",
   "./js/vigia.js",
   "./js/version.js",
@@ -23,6 +25,7 @@ const ARCHIVOS = [
   "./js/normal.js",
   "./js/copias.js",
   "./js/sesion.js",
+  "./js/sonido.js",
   "./js/descanso.js",
   "./js/ui/dom.js",
   "./js/ui/avisos.js",
@@ -70,7 +73,7 @@ function paginaSinConexion() {
   const html = '<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
     + "<title>Gym Beta</title><style>body{font:16px/1.4 system-ui,sans-serif;max-width:32rem;margin:2rem auto;padding:0 1rem}</style></head><body>"
     + "<h1>Sin conexión</h1><p>Esta beta todavía no está guardada en el móvil y no hay conexión.</p>"
-    + '<p><a href="../">Abrir la versión normal</a></p><p><a href="./">Volver a intentarlo</a></p></body></html>';
+    + '<p><a href="../?normal">Abrir la versión normal</a></p><p><a href="./">Volver a intentarlo</a></p></body></html>';
   return new Response(html, { status: 503, headers: { "Content-Type": "text/html; charset=utf-8" } });
 }
 

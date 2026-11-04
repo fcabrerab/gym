@@ -677,3 +677,16 @@ body.con-hoja .avisos { top: calc(env(safe-area-inset-top) + 12px); bottom: auto
 .tarjeta-aviso { background: var(--aviso-fondo); color: var(--aviso-texto); border-color: transparent; }
 .tarjeta-aviso .boton-secundario { background: transparent; color: var(--aviso-texto); border-color: currentColor; }
 .pantalla-arranque .tarjeta { display: flex; flex-direction: column; gap: 10px; }
+
+/* --- Lo de la 0.2.1: consejos si el aviso no llega con el móvil bloqueado (Ajustes → Descanso) --- */
+
+.consejos-aviso { margin-top: 4px; border-top: 1px solid var(--borde); }
+.consejos-aviso summary { gap: 8px; list-style: none; }
+.consejos-aviso summary::-webkit-details-marker { display: none; }
+/* La flecha apunta abajo con los consejos plegados y arriba con ellos a la vista. */
+.consejos-flecha { display: inline-flex; margin-left: auto; transform: rotate(90deg); }
+.consejos-aviso[open] .consejos-flecha { transform: rotate(-90deg); }
+@media (prefers-reduced-motion: no-preference) {
+  .consejos-flecha { transition: transform .15s; }
+}
+.lista-consejos { margin: 0 0 4px; padding-left: 20px; display: flex; flex-direction: column; gap: 8px; font-size: 14px; color: var(--texto-2); }

@@ -11,6 +11,9 @@ export const CLAVE_SESION = "gym-beta-sesion";
 export const CLAVE_DESCANSO = "gym-beta-descanso";
 export const CLAVE_UI = "gym-beta-ui";
 export const PREFIJO_RESCATE = "gym-beta-rescate-";
+// La última versión elegida («beta» o «normal»): la escribe la normal (su botón «Beta» y su «?normal») y la lee al
+// abrirse para ir directa a la beta. «Borrar todos los datos de la beta» no la toca.
+export const CLAVE_PREFERIDA = "gym-beta-preferida";
 
 const esObjeto = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
 
@@ -319,7 +322,7 @@ export function guardarRescate(texto, ahoraMs) {
 
 // Borra solo las claves de la beta (nunca las de la normal). Las copias automáticas (IndexedDB) se conservan.
 export function borrarTodoBeta() {
-  for (const k of clavesBeta()) borrar(k);
+  for (const k of clavesBeta()) if (k !== CLAVE_PREFERIDA) borrar(k);
   estado.datos = null;
   estado.texto = null;
   estado.rev = 0;

@@ -12,13 +12,13 @@ import { abandonada } from "./sesion.js";
 import { ahora, parametroLocal, esLocal, fechaLocal, diaMes, hora } from "./util.js";
 import { h, vaciar } from "./ui/dom.js";
 import {
-  montarAvisos, avisar, cerrarAvisoDeshacer, confirmar, anunciar, alVolverAtras, alPulsarTecla, hojaAbierta, alCerrarseLasHojas,
+  montarAvisos, avisar, cerrarAvisoDeshacer, confirmar, anunciar, alVolverAtras, alPulsarTecla, hojaAbierta, alCerrarseLasHojas, hayAvisoDeshacer,
 } from "./ui/avisos.js";
 import { ctx } from "./ui/contexto.js";
 import { ayuda } from "./ui/piezas.js";
 import {
   pintarEntreno, salirEntreno, alAccionEntreno, alCampoEntreno, alSoltarCampoEntreno, montarBarra, mostrarCapa, reiniciarEntreno,
-  actualizarEntreno, contextoApunte,
+  actualizarEntreno, contextoApunte, accionBarra,
 } from "./ui/entreno.js";
 import { pintarHistorial, alAccionHistorial, vistaHistorialGuardada } from "./ui/historial.js";
 import { pintarRutina, alAccionRutina, alCampoRutina } from "./ui/rutina.js";
@@ -246,10 +246,12 @@ function conectarEventos() {
   pantalla.addEventListener("change", alCampo);
   pantalla.addEventListener("submit", (ev) => ev.preventDefault());
   // Los −/+ no se quedan el foco: si se estaba escribiendo en un campo, el teclado sigue abierto.
-  // Y con una sesión o un descanso en marcha, el primer toque prepara el sonido (por si se recargó a mitad).
+  // Y con una sesión o un descanso en marcha, el primer toque prepara el sonido (por si se recargó a mitad) y, con
+  // «Descanso con sonido», pone el sonido de fondo si al abrir la app el navegador no lo dejó.
   document.addEventListener("pointerdown", (ev) => {
     if (ev.target.closest?.(".boton-paso")) ev.preventDefault();
     if (!descanso.audioPreparado() && (descanso.idActual() || almacen.leerSesion())) descanso.prepararAudio();
+    descanso.alTocarPantalla();
   });
   filaDias.addEventListener("click", (ev) => {
     const el = ev.target.closest("[data-accion]");
@@ -346,6 +348,13 @@ function montar() {
     },
     anunciar,
     mostrarCapa,
+    // Un aviso que puede esperar (el del sonido de fondo) no tapa el «Deshacer» de la serie recién apuntada: sale
+    // cuando ese se va.
+    avisar: (texto) => {
+      const intentar = () => (hayAvisoDeshacer() ? setTimeout(intentar, 1000) : avisar({ texto }));
+      intentar();
+    },
+    accion: accionBarra,
   });
   montarBarra(document.getElementById("barra-descanso"), document.getElementById("capa-fin"));
   almacen.escucharOtrasVentanas();

@@ -1,9 +1,11 @@
 // El temporizador de descanso: uno solo para toda la app, guardado en gym-beta-descanso para que sobreviva a
 // cambiar de pantalla, recargar o cerrar. La cuenta sale siempre de «finEn» (una hora absoluta), así que se
 // pone al día al volver aunque el móvil haya frenado los temporizadores. Al acabar: capa a pantalla completa,
-// sonido, vibración y, si la app no está a la vista, una notificación. También lleva el Wake Lock.
+// sonido, vibración y, si la app no está a la vista, una notificación. También lleva el Wake Lock y, con
+// «Descanso con sonido», el audio de fondo con su Media Session (sonido.js) al empezar, pausar, seguir, ±15 s y saltar.
 
 import * as almacen from "./almacen.js";
+import * as sonido from "./sonido.js";
 import { ahora, formatoDescanso, hora, idCorto } from "./util.js";
 
 export const ETIQUETA = "gym-beta-descanso";
@@ -19,6 +21,10 @@ let deps = {
   haySesion: () => false,
   anunciar: () => {},
   mostrarCapa: () => {},
+  avisar: () => {},
+  // Lo que hace cada botón de la barra («descanso-pausa», «descanso-saltar», «descanso-mas15», «descanso-menos15»).
+  // app.js pone el de entreno.js (con su «Deshacer»); lo usan también los botones de la pantalla de bloqueo.
+  accion: (nombre) => accionSinBarra(nombre),
 };
 let actual = null; // copia en memoria de gym-beta-descanso
 let intervalo = null;
@@ -114,6 +120,7 @@ export function empezarDescanso({ exerciseId, diaId, nombre, texto, capa, duraci
   deps.anunciar(`Descanso de ${formatoDescanso(segundos)}`);
   emitir("empezar");
   actualizarPantalla();
+  ponerFondo({ gesto: true });
   return g.id;
 }
 
@@ -123,6 +130,7 @@ export function pausar() {
   cerrarNotificaciones();
   emitir();
   actualizarPantalla();
+  ponerFondo({ gesto: true });
 }
 
 export function seguir() {
@@ -132,6 +140,7 @@ export function seguir() {
   arrancarTic();
   emitir();
   actualizarPantalla();
+  ponerFondo({ gesto: true });
 }
 
 export function alternarPausa() {
@@ -140,14 +149,18 @@ export function alternarPausa() {
   else pausar();
 }
 
-// ±15 s: nunca baja de 0:05 ni pasa de 10:00.
+// ±15 s: nunca baja de 0:05 ni pasa de 10:00. «total» (lo que dura el descanso con lo sumado o quitado) solo sirve
+// para la barra de progreso de la pantalla de bloqueo.
 export function sumar(segundos) {
   if (!actual || final) return;
-  const nuevo = Math.min(MAX_SEGUNDOS, Math.max(MIN_SEGUNDOS, segundosQuedan(actual) + segundos));
-  if (actual.finEn == null) guardar({ ...actual, quedan: nuevo });
-  else guardar({ ...actual, finEn: ahora() + nuevo * 1000 });
+  const antes = segundosQuedan(actual);
+  const nuevo = Math.min(MAX_SEGUNDOS, Math.max(MIN_SEGUNDOS, antes + segundos));
+  const total = Math.max(nuevo, totalDe(actual) + nuevo - antes);
+  if (actual.finEn == null) guardar({ ...actual, quedan: nuevo, total });
+  else guardar({ ...actual, finEn: ahora() + nuevo * 1000, total });
   ultimoSegundo = null;
   emitir();
+  ponerFondo({ gesto: true });
 }
 
 // Acaba el descanso sin aviso (Saltar, deshacer la serie o terminar la sesión). Devuelve el descanso que había
@@ -159,6 +172,7 @@ export function saltar() {
   if (actual || almacen.leerDescansoGuardado()) almacen.borrarDescansoGuardado();
   actual = null;
   cerrarNotificaciones();
+  sonido.pararFondo();
   emitir("saltar");
   actualizarPantalla();
   return previo;
@@ -173,7 +187,21 @@ export function reponer(g) {
   if (g.finEn != null) arrancarTic();
   emitir("empezar");
   actualizarPantalla();
+  ponerFondo({ gesto: true });
   return true;
+}
+
+// Lo que dura el descanso entero (con lo sumado o quitado con ±15 s).
+function totalDe(g) {
+  return Number.isFinite(g?.total) ? g.total : Number(g?.duracion) || 0;
+}
+
+// Sin la barra (por ejemplo, en las pruebas que solo cargan este módulo): los mismos efectos, sin «Deshacer».
+function accionSinBarra(nombre) {
+  if (nombre === "descanso-pausa") alternarPausa();
+  else if (nombre === "descanso-saltar") saltar();
+  else if (nombre === "descanso-mas15") sumar(15);
+  else if (nombre === "descanso-menos15") sumar(-15);
 }
 
 function tic() {
@@ -209,6 +237,8 @@ function mostrarFinal(tipo, texto) {
     const g = almacen.leerDescansoGuardado();
     if (g && g.id === id) almacen.borrarDescansoGuardado();
     if (actual?.id === id) actual = null;
+    // El sonido de fondo se quita solo al acabar su aviso; por si acaso, aquí ya no queda nada.
+    sonido.pararFondo();
     emitir("fin");
     actualizarPantalla();
   }, MS_FINAL);
@@ -220,12 +250,13 @@ function acabar() {
   if (!fresco || fresco.id !== actual.id) {
     // Otra ventana lo cambió o lo quitó: se toma lo guardado.
     actual = fresco;
+    sonido.pararFondo();
     if (actual) arrancarTic();
     emitir();
     return;
   }
   if (fresco.avisado) {
-    // Ya lo avisó otra ventana: aquí solo se enseña.
+    // Ya lo avisó otra ventana: aquí solo se enseña (si aquí sonaba el fondo, su aviso acaba solo).
     actual = fresco;
     mostrarFinal("te-toca", "¡Te toca!");
     return;
@@ -237,10 +268,12 @@ function acabar() {
     // hace rato: sin alarma tardía, como al volver a abrir la app. Si la app no está a la vista, el aviso (y su
     // notificación) siguen saliendo aunque lleguen tarde.
     guardar({ ...fresco, avisado: true, terminadoEn: t });
+    sonido.pararFondo();
     mostrarFinal("acabo", `El descanso acabó hace ${textoHace(Math.round(tarde / 1000))}`);
     return;
   }
   guardar({ ...fresco, avisado: true, terminadoEn: t });
+  // Con el sonido de fondo, el audio sigue: lleva el aviso dentro y se quita solo al acabar.
   efectosFin(actual);
   mostrarFinal("te-toca", "¡Te toca!");
 }
@@ -267,6 +300,8 @@ export function restaurarDescanso() {
   if (g.finEn > t && !g.avisado) {
     arrancarTic();
     emitir();
+    // Sin un toque, el navegador puede no dejar sonar: entonces lo pone el primer toque (alTocarPantalla).
+    ponerFondo({ gesto: false });
     return;
   }
   if (!g.avisado) {
@@ -294,9 +329,11 @@ function textoHace(segundos) {
   return min === 1 ? "1 min" : `${min} min`;
 }
 
-// Cambios de otra ventana en gym-beta-descanso.
+// Cambios de otra ventana en gym-beta-descanso. El sonido de fondo pasa a la ventana que lo ha cambiado (aquí se
+// quita); si solo ha marcado el final de este mismo descanso, se deja acabar su aviso.
 export function recargarDesdeFuera() {
   const g = almacen.leerDescansoGuardado();
+  if (!(g && g.id === actual?.id && g.avisado)) sonido.pararFondo();
   if (!g) {
     if (actual && !final) {
       actual = null;
@@ -319,10 +356,11 @@ export function recargarDesdeFuera() {
 function efectosFin(g, { prueba = false } = {}) {
   const a = deps.ajustes() || {};
   if (a.timerAlert !== false) deps.mostrarCapa({ titulo: "¡Te toca!", texto: g.capa || g.texto });
-  if (a.timerSound !== false) sonar();
+  // Con el sonido de fondo, el aviso ya va dentro del audio: aquí no se repite (sin doble pitido).
+  if (a.timerSound !== false && (prueba || !sonido.avisoEnElFondo(g.id))) sonar();
   if (a.vibracion !== false) vibrar(VIBRACION_FIN);
   if (a.timerNotification !== false && (prueba || document.visibilityState === "hidden")) {
-    notificar(g.texto, { body: g.nombre, renotify: true, vibrate: VIBRACION_FIN });
+    notificar(g.texto, { body: g.nombre, renotify: true, vibrate: VIBRACION_FIN, timestamp: ahora() });
   }
   deps.anunciar(`Descanso terminado. ${g.texto}${g.nombre ? ` de ${g.nombre}` : ""}.`);
 }
@@ -362,25 +400,27 @@ export function prepararAudio() {
   }
 }
 
-// El sonido de la normal: 4 pulsos de 0,35 s con 0,18 s entre ellos, 880 y 1046,5 Hz alternos.
+// El sonido de la normal: 4 pulsos de 0,35 s con 0,18 s entre ellos, 880 y 1046,5 Hz alternos (sonido.AVISO: el
+// mismo que va al final del sonido de fondo).
 function sonar() {
   if (!audio) prepararAudio();
   if (!audio) return;
+  const { pulsos, duracion, hueco, frecuencias, pico, suelo, subida } = sonido.AVISO;
   try {
     const r = audio.resume?.();
     if (r && typeof r.catch === "function") r.catch(() => {});
     const t0 = audio.currentTime;
-    for (let i = 0; i < 4; i += 1) {
-      const inicio = t0 + i * (0.35 + 0.18);
+    for (let i = 0; i < pulsos; i += 1) {
+      const inicio = t0 + i * (duracion + hueco);
       const oscilador = audio.createOscillator();
       const ganancia = audio.createGain();
-      oscilador.frequency.value = i % 2 === 0 ? 880 : 1046.5;
-      ganancia.gain.setValueAtTime(0.001, inicio);
-      ganancia.gain.exponentialRampToValueAtTime(0.28, inicio + 0.02);
-      ganancia.gain.exponentialRampToValueAtTime(0.001, inicio + 0.35);
+      oscilador.frequency.value = frecuencias[i % 2];
+      ganancia.gain.setValueAtTime(suelo, inicio);
+      ganancia.gain.exponentialRampToValueAtTime(pico, inicio + subida);
+      ganancia.gain.exponentialRampToValueAtTime(suelo, inicio + duracion);
       oscilador.connect(ganancia).connect(audio.destination);
       oscilador.start(inicio);
-      oscilador.stop(inicio + 0.35);
+      oscilador.stop(inicio + duracion);
     }
   } catch {
     // Sin sonido: quedan la capa, la vibración y la notificación.
@@ -399,7 +439,7 @@ async function notificar(titulo, opciones = {}) {
     if (permisoNotificaciones() !== "granted") return false;
     const registro = await navigator.serviceWorker?.getRegistration("./");
     if (!registro) return false;
-    await registro.showNotification(titulo, { tag: ETIQUETA, icon: "./icon.svg", badge: "./icon.svg", ...opciones });
+    await registro.showNotification(titulo, { tag: ETIQUETA, icon: "./icono-512.png", badge: "./insignia-512.png", ...opciones });
     return true;
   } catch {
     return false;
@@ -416,20 +456,95 @@ async function cerrarNotificaciones() {
   }
 }
 
-// Al ocultarse con un descanso en marcha: notificación silenciosa con la hora de fin (no se queda vieja).
-// Al volver: se cierra, se pone al día la cuenta y se vuelve a pedir la pantalla encendida.
+// Al ocultarse con un descanso en marcha: notificación silenciosa con la hora de fin (no se queda vieja), también
+// como su hora («timestamp»). Al volver: se cierra, se pone al día la cuenta y se vuelve a pedir la pantalla encendida.
 export function alCambiarVisibilidad() {
   if (document.visibilityState === "hidden") {
     const a = deps.ajustes() || {};
     if (actual && actual.finEn != null && !actual.avisado && !final && a.timerNotification !== false) {
       const texto = actual.texto ? actual.texto.charAt(0).toLowerCase() + actual.texto.slice(1) : "";
-      notificar(`Descanso hasta las ${hora(actual.finEn)}`, { body: [actual.nombre, texto].filter(Boolean).join(" · "), silent: true, renotify: false });
+      notificar(`Descanso hasta las ${hora(actual.finEn)}`, {
+        body: [actual.nombre, texto].filter(Boolean).join(" · "), silent: true, renotify: false, timestamp: actual.finEn,
+      });
     }
   } else {
     cerrarNotificaciones();
     tic();
     actualizarPantalla();
   }
+}
+
+// --- Descanso con sonido (sonido.js) ---
+
+let falloAvisado = false; // «No se pudo poner el sonido de fondo» sale una sola vez
+let fondoPendiente = false; // al abrir la app no dejó sonar sin un toque: lo pone el primer toque
+
+// Los botones de la pantalla de bloqueo: lo mismo que los de la barra. «play» también vuelve a poner el sonido si
+// Android lo había cortado (una llamada, otra app con música) y el descanso sigue corriendo.
+const BOTONES_BLOQUEO = {
+  pause: () => {
+    if (actual && !final && actual.finEn != null) deps.accion("descanso-pausa");
+  },
+  play: () => {
+    if (!actual || final) return;
+    if (actual.finEn == null) deps.accion("descanso-pausa");
+    else ponerFondo({ gesto: true });
+  },
+  nexttrack: () => {
+    if (actual && !final) deps.accion("descanso-saltar");
+  },
+  seekforward: () => {
+    if (actual && !final) deps.accion("descanso-mas15");
+  },
+  seekbackward: () => {
+    if (actual && !final) deps.accion("descanso-menos15");
+  },
+};
+
+// Lo que enseña la pantalla de bloqueo: «Descanso · Press de pecho», «Te toca la serie 2 de 3» y la barra de progreso
+// (el descanso entero y lo que ya ha pasado). «segundos»: lo que queda.
+function datosFondo(g) {
+  const quedan = g.finEn != null ? Math.max(0, g.finEn - ahora()) / 1000 : Math.max(0, Number(g.quedan) || 0);
+  const total = Math.max(quedan, totalDe(g));
+  return {
+    id: g.id, segundos: quedan, titulo: g.nombre ? `Descanso · ${g.nombre}` : "Descanso", artista: g.texto || "", total, posicion: total - quedan,
+  };
+}
+
+// Pone el sonido de fondo como toca: sonando con lo que queda (un WAV nuevo cada vez), en pausa o quitado. Con
+// «gesto» viene de un toque: si el navegador no deja sonar, se avisa (una vez) y el aviso va como siempre.
+function ponerFondo({ gesto = false } = {}) {
+  fondoPendiente = false;
+  const a = deps.ajustes() || {};
+  if (!actual || final || a.descansoConSonido !== true) {
+    sonido.pararFondo();
+    return;
+  }
+  const datos = datosFondo(actual);
+  if (actual.finEn == null) {
+    sonido.pausarFondo(datos);
+    return;
+  }
+  sonido.sonarFondo({ ...datos, conAviso: a.timerSound !== false, acciones: BOTONES_BLOQUEO }).then((suena) => {
+    if (suena) return;
+    if (!gesto) {
+      fondoPendiente = true;
+    } else if (!falloAvisado) {
+      falloAvisado = true;
+      deps.avisar("No se pudo poner el sonido de fondo: el aviso va como siempre");
+    }
+  });
+}
+
+// El primer toque en la pantalla (app.js): si al abrir la app no dejó poner el sonido de fondo, ahora sí.
+export function alTocarPantalla() {
+  if (fondoPendiente) ponerFondo({ gesto: true });
+}
+
+// Al cambiar «Descanso con sonido» o «Sonido» en Ajustes (con un toque): el sonido de fondo se pone, se quita o se
+// rehace (con o sin el aviso al final).
+export function alCambiarAjusteSonido() {
+  ponerFondo({ gesto: true });
 }
 
 // --- Pantalla encendida (Wake Lock) ---

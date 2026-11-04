@@ -54,6 +54,11 @@ export function cerrarAvisoDeshacer() {
   if (avisoActual?.deshacer) cerrarAviso();
 }
 
+// ¿Hay a la vista un aviso con «Deshacer»? (Un aviso que puede esperar no lo tapa: ver app.js.)
+export function hayAvisoDeshacer() {
+  return Boolean(avisoActual?.deshacer);
+}
+
 export const TEXTO_NO_DESHACER = "No se puede deshacer: ha habido cambios después.";
 
 // Aviso con «Deshacer» para un cambio de datos. deshacer() devuelve false si ya no se puede (hubo otros cambios

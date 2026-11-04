@@ -77,6 +77,7 @@ export async function ejecutar(c) {
     const datos = await datosBeta();
     for (const x of Object.values(datos.ejercicios)) x.image = "/images/icon.svg";
     datos.ejercicios["pec-deck"].pr = 52.5;
+    datos.ejercicios["leg-press"].pr = null; // marca quitada en la beta (en la rutina publicada tiene una)
     datos.dias.find((d) => d.id === "tuesday-push").ejercicios[0].rest = "3:00";
     datos.dias.find((d) => d.id === "tuesday-push").title = "Empuje";
     datos.sesiones.push({ id: "s-1", diaId: "tuesday-push", diaNombre: "Martes · Empuje", inicio: 1, fin: 2, seriesPlan: 23, ejercicios: [] });
@@ -98,8 +99,13 @@ export async function ejecutar(c) {
     caso(!error && e.alertas.length === 0, `N9 la normal importa la copia de la beta sin alert ni error (${e.alertas.join(" | ") || "ninguno"})`);
     caso(!("beta" in guardado), "N9 la normal no guarda la clave beta");
     const exportada = await exportarNormal(f, e);
-    const campos = (dias) => dias.map((d) => ({ id: d.id, label: d.label, title: d.title, exercises: d.exercises.map((x) => [x.exerciseId, x.name, x.pr, x.series, x.reps, x.rest]) }));
+    // «Sin marca»: la normal la guarda y la exporta como texto vacío; la beta, como null. Es lo mismo.
+    const sinMarca = (pr) => (pr === "" ? null : pr);
+    const campos = (dias) => dias.map((d) => ({ id: d.id, label: d.label, title: d.title, exercises: d.exercises.map((x) => [x.exerciseId, x.name, sinMarca(x.pr), x.series, x.reps, x.rest]) }));
     caso(JSON.stringify(campos(exportada.days)) === JSON.stringify(campos(copia.days)), "N9 la exportación de la normal da los mismos días, con los mismos pr, name, series, reps y rest");
+    const prensa = exportada.days.flatMap((d) => d.exercises).filter((x) => x.exerciseId === "leg-press");
+    caso(prensa.length > 0 && prensa.every((x) => sinMarca(x.pr) === null),
+      `N9 una marca quitada en la beta sigue sin marca en la normal (no vuelve la publicada: ${prensa.map((x) => JSON.stringify(x.pr)).join(", ")})`);
     caso(JSON.stringify(exportada.settings) === JSON.stringify(copia.settings), `N9 y los mismos ajustes (${JSON.stringify(exportada.settings)})`);
     quitar({ f });
   }
@@ -147,6 +153,47 @@ export async function ejecutar(c) {
     caso(JSON.stringify(leerNormal()) === JSON.stringify(antes), "N10 …y la normal sigue igual");
     sinErrores(b, "N10");
     quitar(b);
+  }
+
+  // N11 La app abre la última versión elegida (gym-beta-preferida, la escribe la normal)
+  {
+    const CLAVE = "gym-beta-preferida";
+    const antes = localStorage.getItem(CLAVE);
+    localStorage.removeItem(CLAVE);
+    for (const k of CLAVES_NORMAL) localStorage.removeItem(k);
+    const abrir = async (ruta) => {
+      const f = document.createElement("iframe");
+      f.style.width = "412px";
+      f.style.height = "915px";
+      document.body.append(f);
+      f.src = ruta;
+      return f;
+    };
+    // a) Sin nada elegido, la normal se queda en la normal; pulsar «Beta» lo recuerda.
+    let f = await cargarNormal();
+    const boton = f.contentDocument.querySelector(".beta-link");
+    caso(boton?.getAttribute("href") === "./beta/" && f.contentWindow.location.pathname === "/index.html",
+      `N11 sin nada elegido, la normal se queda y tiene el botón «Beta» a ./beta/ (${boton?.getAttribute("href")})`);
+    boton?.addEventListener("click", (ev) => ev.preventDefault(), { once: true });
+    boton?.click();
+    caso(localStorage.getItem(CLAVE) === "beta", `N11 pulsar «Beta» en la normal recuerda la beta (${localStorage.getItem(CLAVE)})`);
+    quitar({ f });
+    // b) Con la beta elegida, abrir la normal (como al abrir la app instalada) lleva directo a la beta.
+    f = await abrir("/index.html");
+    const fue = await hastaQue(() => f.contentWindow?.location?.pathname === "/beta/", 300);
+    caso(fue, `N11 con la beta elegida, abrir la normal lleva directo a la beta (${f.contentWindow?.location?.pathname})`);
+    quitar({ f });
+    // c) El enlace «Versión normal» de la beta (../?normal) se queda en la normal, lo recuerda y limpia la dirección.
+    f = await abrir("/index.html?normal");
+    await hastaQue(() => f.contentDocument?.querySelector(".exercise-card, .empty-state"), 300);
+    caso(f.contentWindow.location.pathname === "/index.html" && f.contentWindow.location.search === "" && localStorage.getItem(CLAVE) === "normal",
+      `N11 «?normal» se queda en la normal, lo recuerda y limpia la dirección (${f.contentWindow.location.pathname}${f.contentWindow.location.search}, ${localStorage.getItem(CLAVE)})`);
+    quitar({ f });
+    // d) Los enlaces de la beta a la normal llevan «?normal».
+    const html = await real(fetch("/beta/index.html", { cache: "no-store" }).then((r) => r.text()));
+    caso((html.match(/href="\.\.\/\?normal"/g) || []).length === 2 && !/href="\.\.\/"/.test(html),
+      "N11 los dos enlaces de beta/index.html a la normal llevan «?normal»");
+    if (antes === null) localStorage.removeItem(CLAVE); else localStorage.setItem(CLAVE, antes);
   }
 
   // Al acabar, se da de baja el service worker de la normal (alcance /): así no se queda controlando tests/ ni

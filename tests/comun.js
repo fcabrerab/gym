@@ -356,7 +356,32 @@ export function espiar(f) {
     },
   });
   const crearUrl = w.URL.createObjectURL.bind(w.URL);
-  w.URL.createObjectURL = (b) => { e.blobs.push(b); return crearUrl(b); };
+  e.blobDe = new Map(); // URL de Blob → su Blob (la CSP de la beta no deja hacer fetch de una URL blob:)
+  w.URL.createObjectURL = (b) => {
+    e.blobs.push(b);
+    const url = crearUrl(b);
+    e.blobDe.set(url, b);
+    return url;
+  };
+  e.revocadas = [];
+  const revocarUrl = w.URL.revokeObjectURL.bind(w.URL);
+  w.URL.revokeObjectURL = (u) => { e.revocadas.push(u); return revocarUrl(u); };
+  // El <audio> del «Descanso con sonido»: play() no suena de verdad; se apunta cada llamada con su src y, con
+  // e.playFalla = "NotAllowedError", falla como cuando el navegador no deja sonar.
+  e.audios = [];
+  e.pausasAudio = 0;
+  e.playFalla = null;
+  w.HTMLMediaElement.prototype.play = function play() {
+    e.audios.push({ el: this, src: this.src });
+    return e.playFalla ? Promise.reject(new w.DOMException("No se deja", e.playFalla)) : Promise.resolve();
+  };
+  w.HTMLMediaElement.prototype.pause = function pause() { e.pausasAudio += 1; };
+  // Media Session de mentira: la metadata, los botones de la pantalla de bloqueo, el estado y cada barra de progreso.
+  const medios = { metadata: null, playbackState: "none", botones: {}, posiciones: [] };
+  medios.setActionHandler = (accion, fn) => { if (fn) medios.botones[accion] = fn; else delete medios.botones[accion]; };
+  medios.setPositionState = (p) => { medios.posiciones.push(p ?? null); };
+  Object.defineProperty(w.navigator, "mediaSession", { configurable: true, value: medios });
+  e.medios = medios;
   const clicOriginal = w.HTMLAnchorElement.prototype.click;
   w.HTMLAnchorElement.prototype.click = function clic() {
     if (this.download) {

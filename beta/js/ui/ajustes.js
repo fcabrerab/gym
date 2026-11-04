@@ -1,5 +1,5 @@
-// Pantalla Ajustes: aspecto, descanso (avisos, permiso de notificaciones, pantalla encendida, probar aviso),
-// tiempo estimado, copia de seguridad (guardar, cargar con vista previa, copias automáticas), datos de la versión
+// Pantalla Ajustes: aspecto, descanso (avisos, permiso de notificaciones, descanso con sonido, pantalla encendida,
+// probar aviso y qué hacer si el aviso no llega con el móvil bloqueado), tiempo estimado, copia de seguridad (guardar, cargar con vista previa, copias automáticas), datos de la versión
 // normal (qué ha cambiado, volver a copiar), la beta (versión, sin conexión, novedades, apuntes) y la zona peligrosa.
 // Los cambios valen al momento.
 
@@ -179,6 +179,20 @@ function pintarPermiso() {
   fila?.classList.toggle("sin-permiso", descanso.permisoNotificaciones() !== "granted");
 }
 
+// «Si el aviso no llega con el móvil bloqueado»: plegado de serie, al final de la sección Descanso.
+function consejosAviso() {
+  const consejos = [
+    "Android para la app cuando lleva más de un minuto sin estar a la vista (con el móvil bloqueado u otra app delante), y entonces el aviso puede no llegar, sobre todo en descansos de 2 o 3 minutos. No pasa si dejas puesto «Mantener la pantalla encendida durante la sesión» y no bloqueas el móvil.",
+    "La notificación del descanso dice a qué hora acaba: aunque el aviso no suene, puedes mirarla en la pantalla de bloqueo.",
+    "Si la notificación llega sin sonido o no se ve, mantén pulsada una notificación de la app (o búscala en los ajustes de Android) y revisa el sonido, el mensaje emergente y la pantalla de bloqueo. Mira también que No molestar esté apagado. La vibración la decide Android: la app no puede cambiarla.",
+    "Para que el aviso llegue siempre a su hora, enciende «Descanso con sonido» (aquí arriba).",
+  ];
+  return h("details", { class: "detalles consejos-aviso" },
+    h("summary", null, icono("info", { tamano: 20 }), h("span", null, "Si el aviso no llega con el móvil bloqueado"),
+      h("span", { class: "consejos-flecha" }, icono("siguiente", { tamano: 20 }))),
+    h("ul", { class: "lista-consejos" }, consejos.map((t) => h("li", null, t))));
+}
+
 export function pintarAjustes(contenedor) {
   const datos = almacen.datos();
   const a = datos.ajustes;
@@ -205,12 +219,15 @@ export function pintarAjustes(contenedor) {
       interruptor({ ajuste: "vibracion", rotulo: "Vibración", marcado: a.vibracion }),
       interruptor({ ajuste: "timerNotification", rotulo: "Notificación", ayuda: "Solo si la app no está a la vista.", marcado: a.timerNotification }),
       h("div", { class: "estado-permiso", id: "estado-permiso" }),
+      interruptor({ ajuste: "descansoConSonido", rotulo: "Descanso con sonido (aviso más fiable)", marcado: a.descansoConSonido,
+        ayuda: "Durante el descanso suena un tic-tac muy suave y el aviso va dentro del propio sonido: así llega a su hora aunque bloquees el móvil. En la pantalla de bloqueo se ve el descanso con su barra de progreso. Ojo: mientras suena, Android pausa la música de otras apps." }),
       interruptor({ ajuste: "descansoAlMarcar", rotulo: "Empezar el descanso al marcar una serie", marcado: a.descansoAlMarcar,
         ayuda: "Si lo apagas, el descanso se empieza con el botón «Descanso» de cada ejercicio." }),
       interruptor({ ajuste: "pantallaEncendida", rotulo: "Mantener la pantalla encendida durante la sesión", marcado: a.pantallaEncendida,
         ayuda: descanso.pantallaEncendidaExiste() ? "" : "Este navegador no deja mantener la pantalla encendida" }),
       boton("Probar aviso", "probar-aviso", { clase: "boton-secundario boton-ancho", ico: "reloj" }),
-      ayuda("Lanza el aviso de fin de descanso: la capa, el sonido, la vibración y una notificación de prueba.")),
+      ayuda("Lanza el aviso de fin de descanso: la capa, el sonido, la vibración y una notificación de prueba."),
+      consejosAviso()),
     seccion("Tiempo estimado",
       control({ campo: "segundosPorSerie", rotulo: "Segundos por serie", valor: String(a.segundosPorSerie), unidad: "s", inputmode: "numeric", accionMenos: "sps-menos", accionMas: "sps-mas", etiquetaMenos: "5 segundos menos por serie", etiquetaMas: "5 segundos más por serie" }),
       control({ campo: "transitionMinutes", rotulo: "Minutos por cambio de ejercicio", valor: formatoNumero(a.transitionMinutes), unidad: "min", inputmode: "decimal", accionMenos: "cambio-menos", accionMas: "cambio-mas", etiquetaMenos: "Medio minuto menos por cambio", etiquetaMas: "Medio minuto más por cambio" }),
@@ -250,7 +267,8 @@ export function pintarAjustes(contenedor) {
       boton("Novedades", "novedades", { clase: "boton-secundario boton-ancho" }),
       boton("Apuntar un fallo o una idea", "apuntes", { clase: "boton-secundario boton-ancho", ico: "lapiz" }),
       ayuda("También desde cualquier pantalla: toca «BETA» arriba."),
-      h("a", { class: "enlace-boton", href: "../" }, icono("volver", { tamano: 20 }), "Ir a la versión normal")),
+      h("a", { class: "enlace-boton", href: "../?normal" }, icono("volver", { tamano: 20 }), "Ir a la versión normal"),
+      ayuda("La app se abre en la última versión que elegiste: si vuelves a la normal con este enlace o con el de arriba, la próxima vez se abrirá la normal.")),
     h("section", { class: "seccion zona-peligrosa" },
       h("h2", { class: "seccion-titulo" }, "Zona peligrosa"),
       h("button", { class: "boton boton-peligro-suave boton-ancho", type: "button", "data-accion": "borrar-todo" }, icono("papelera", { tamano: 20 }), h("span", null, "Borrar todos los datos de la beta")),
@@ -292,6 +310,8 @@ export function alCampoAjustes(ev) {
     cambiarAjuste(el.dataset.ajuste, el.checked);
     if (el.dataset.ajuste === "pantallaEncendida") descanso.actualizarPantalla();
     if (el.dataset.ajuste === "timerNotification") pintarPermiso();
+    // Con un descanso en marcha, el sonido de fondo se pone o se quita al momento (y «Sonido» decide si lleva el aviso).
+    if (el.dataset.ajuste === "descansoConSonido" || el.dataset.ajuste === "timerSound") descanso.alCambiarAjusteSonido();
     return;
   }
   if (el?.dataset?.campo === "archivo" && ev.type === "change") {

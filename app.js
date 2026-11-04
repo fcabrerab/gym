@@ -935,7 +935,9 @@ function applySnapshot(data) {
         image: entry.image ?? "",
         muscleGroup: entry.muscleGroup ?? "",
       };
-      if (entry.pr !== null && entry.pr !== undefined && entry.pr !== "") override.pr = entry.pr;
+      // «Sin marca» (null o vacío) también se guarda, como hace updatePr con el campo vacío: si no, volvería a
+      // salir la marca de la rutina publicada.
+      if (entry.pr !== undefined) override.pr = entry.pr === null || entry.pr === "" ? "" : entry.pr;
       exercisesOverride[entry.exerciseId] = { ...(exercisesOverride[entry.exerciseId] || {}), ...override };
     });
 

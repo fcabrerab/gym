@@ -95,9 +95,15 @@
 
         // W6 manifiesto
         const manifiesto = await real(fetch("/beta/manifest.json", { cache: "no-store" }).then((r) => r.json()));
-        const icono = await real(fetch(new URL(manifiesto.icons[0].src, new URL("/beta/", location.href)), { cache: "no-store" }));
-        caso(manifiesto.name === "Gym Beta" && manifiesto.start_url === "./" && manifiesto.scope === "./" && icono.ok && icono.headers.get("content-type").includes("svg"),
-          `W6 manifiesto «${manifiesto.name}», start_url y scope «./», y el icono existe`);
+        // Los iconos: un PNG de 512 (Android lo prefiere para instalar y para las notificaciones) y el SVG.
+        const iconos = await real(Promise.all(manifiesto.icons.map((i) => fetch(new URL(i.src, new URL("/beta/", location.href)), { cache: "no-store" })
+          .then((r) => ({ ...i, ok: r.ok, tipo: r.headers.get("content-type") || "" })))));
+        const png = iconos.find((i) => i.type === "image/png" && i.sizes === "512x512");
+        caso(manifiesto.name === "Gym Beta" && manifiesto.start_url === "./" && manifiesto.scope === "./" && png?.ok && png.tipo.includes("png")
+          && iconos.every((i) => i.ok) && iconos.some((i) => i.tipo.includes("svg")),
+          `W6 manifiesto «${manifiesto.name}», start_url y scope «./», y sus iconos existen (${iconos.map((i) => `${i.src} ${i.ok ? "bien" : "falta"}`).join(", ")})`);
+        const insignia = await real(fetch("/beta/insignia-512.png", { cache: "no-store" }));
+        caso(insignia.ok && (insignia.headers.get("content-type") || "").includes("png"), "W6 la insignia de las notificaciones (mancuerna blanca) existe");
 
         // W7 la caché se rehace sola
         const cache = await real(caches.open(nombre));
@@ -210,7 +216,7 @@
         red.sinRed = true;
         const r5 = await navegar("/beta/");
         const t5 = r5 ? await r5.text() : "";
-        caso(r5?.status === 503 && (r5.headers.get("content-type") || "").includes("text/html") && t5.includes('href="../"') && t5.includes("Abrir la versión normal"),
+        caso(r5?.status === 503 && (r5.headers.get("content-type") || "").includes("text/html") && t5.includes('href="../?normal"') && t5.includes("Abrir la versión normal"),
           "W8 sin red y sin copia: una página con el enlace a la versión normal (que sí funciona sin red)");
       } catch (err) {
         caso(false, `excepción en la caja de arena de la beta: ${err?.message || err}`);

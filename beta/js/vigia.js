@@ -32,7 +32,7 @@
     reintentar.addEventListener("click", function recargar() { location.reload(); });
     var normal = document.createElement("a");
     normal.className = "enlace-boton";
-    normal.href = "../";
+    normal.href = "../?normal";
     normal.textContent = "Usar la versión normal";
     caja.append(titulo, texto, reintentar, normal);
     pantalla.replaceChildren(caja);

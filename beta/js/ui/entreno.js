@@ -1185,18 +1185,7 @@ export function montarBarra(nodo, capa) {
   nodo.addEventListener("click", (ev) => {
     const boton = ev.target.closest("button[data-accion]");
     if (!boton || boton.disabled) return;
-    switch (boton.dataset.accion) {
-      case "descanso-menos15": return descanso.sumar(-15);
-      case "descanso-mas15": return descanso.sumar(15);
-      case "descanso-pausa": return descanso.alternarPausa();
-      case "descanso-saltar": {
-        // Saltar se puede deshacer: un toque sin querer no se lleva el descanso.
-        const previo = descanso.saltar();
-        if (previo) avisar({ texto: "Descanso saltado", accion: "Deshacer", alPulsar: () => descanso.reponer(previo) });
-        return undefined;
-      }
-      default: return undefined;
-    }
+    accionBarra(boton.dataset.accion);
   });
   // Cerrarla con un toque: los ✓ no recogen toques un momento (un doble toque para cerrarla no apunta una serie).
   capa.addEventListener("click", () => {
@@ -1205,6 +1194,23 @@ export function montarBarra(nodo, capa) {
   });
   descanso.alCambiarDescanso((e) => pintarBarra(e));
   pintarBarra(descanso.estadoDescanso());
+}
+
+// Lo que hace cada botón de la barra. Los botones del descanso en la pantalla de bloqueo (descanso.js, con
+// «Descanso con sonido») también pasan por aquí: así hacen lo mismo, «Deshacer» incluido.
+export function accionBarra(accion) {
+  switch (accion) {
+    case "descanso-menos15": return descanso.sumar(-15);
+    case "descanso-mas15": return descanso.sumar(15);
+    case "descanso-pausa": return descanso.alternarPausa();
+    case "descanso-saltar": {
+      // Saltar se puede deshacer: un toque sin querer no se lleva el descanso.
+      const previo = descanso.saltar();
+      if (previo) avisar({ texto: "Descanso saltado", accion: "Deshacer", alPulsar: () => descanso.reponer(previo) });
+      return undefined;
+    }
+    default: return undefined;
+  }
 }
 
 function pintarBarra(e) {

@@ -18,6 +18,9 @@ export const AJUSTES_POR_DEFECTO = Object.freeze({
   vibracion: true,
   pantallaEncendida: true,
   descansoAlMarcar: true,
+  // «Descanso con sonido (aviso más fiable)»: tic-tac de fondo con el aviso dentro (sonido.js). Apagado de serie:
+  // mientras suena, Android pausa la música de otras apps.
+  descansoConSonido: false,
   segundosPorSerie: 40,
   recordatorioCopiaDias: 7,
 });
@@ -89,7 +92,7 @@ export function validarDatos(d) {
 export function normalizarAjustes(a = {}) {
   const r = { ...AJUSTES_POR_DEFECTO };
   if (!esObjeto(a)) return r;
-  for (const clave of ["timerAlert", "timerSound", "timerNotification", "vibracion", "pantallaEncendida", "descansoAlMarcar"]) {
+  for (const clave of ["timerAlert", "timerSound", "timerNotification", "vibracion", "pantallaEncendida", "descansoAlMarcar", "descansoConSonido"]) {
     if (typeof a[clave] === "boolean") r[clave] = a[clave];
   }
   r.transitionMinutes = leerMinutosCambio(a.transitionMinutes, a.includeTransitionTime);

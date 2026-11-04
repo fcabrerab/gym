@@ -20,7 +20,8 @@ const PROHIBIDAS = [
   ["manejador en atributo", /<[a-z][^>]*\son[a-z]+\s*=/i],
 ];
 
-const CSP = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' https: data: blob:; connect-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'";
+// media-src con blob: es para el «Descanso con sonido» (un WAV hecho en la página, desde una URL de Blob).
+const CSP = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' https: data: blob:; media-src 'self' blob:; connect-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'";
 
 export async function ejecutar(c) {
   const { caso, nota, esperar, limpiarBeta, guardar, cargarBeta, quitar, textoDe, sinErrores, leerNormal } = c;
@@ -95,9 +96,13 @@ export async function ejecutar(c) {
     `almacen.js se niega a escribir y a borrar claves sin gym-beta- (${negadas} de 6)`);
   localStorage.setItem("otra-app-de-pages", "no tocar");
   localStorage.setItem("gym-beta-prueba", "x");
+  const preferidaAntes = localStorage.getItem("gym-beta-preferida");
+  localStorage.setItem("gym-beta-preferida", "beta");
   almacen.borrarTodoBeta();
   caso(localStorage.getItem("otra-app-de-pages") === "no tocar" && localStorage.getItem("gym-beta-prueba") === null && JSON.stringify(leerNormal()) === JSON.stringify(antesNormal),
     "borrarTodoBeta borra solo las claves gym-beta-");
+  caso(localStorage.getItem("gym-beta-preferida") === "beta", "borrarTodoBeta no borra la versión elegida (gym-beta-preferida)");
+  if (preferidaAntes === null) localStorage.removeItem("gym-beta-preferida"); else localStorage.setItem("gym-beta-preferida", preferidaAntes);
   localStorage.removeItem("otra-app-de-pages");
 
   // S3 XSS: un título de día con HTML sale como texto

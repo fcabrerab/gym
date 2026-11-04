@@ -61,6 +61,8 @@ export async function ejecutar(c) {
     const vibracionFin = b.espia.vibraciones.find((v) => Array.isArray(v));
     caso(JSON.stringify(vibracionFin) === "[400,150,400,150,800]", `D2 vibra con [400, 150, 400, 150, 800] (${JSON.stringify(b.espia.vibraciones)})`);
     caso(b.espia.osciladores === 4 && b.espia.notificaciones.length === 0, `D2 el sonido suena 1 vez y no hay notificación (${b.espia.osciladores / 4} sonidos, ${b.espia.notificaciones.length} notificaciones)`);
+    caso(b.espia.audios.length === 0 && b.espia.medios.metadata === null && b.espia.medios.posiciones.length === 0,
+      "D2 sin «Descanso con sonido» (apagado de serie), ni <audio> ni Media Session");
     caso(textoDe(b.d, ".barra-cuenta") === "¡Te toca!" && textoDe(b.d, "#capa-fin .capa-pie") === "Toca para cerrar", "D2 la barra dice «¡Te toca!» y la capa, «Toca para cerrar» (arriba)");
     await esperar(4200);
     caso(capaVisible(b.d) && b.d.getElementById("capa-fin").classList.contains("saliendo"), "D2 a los 4 s la capa se desvanece, pero un momento más sigue recogiendo los toques (no caen en el ✓)");
@@ -125,13 +127,17 @@ export async function ejecutar(c) {
     b.espia.ocultar();
     await esperar(100);
     const primera = b.espia.notificaciones[0];
+    const finEn = descansoGuardado()?.finEn;
     caso(primera?.titulo === "Descanso hasta las 18:00" && primera.opciones.silent === true && primera.opciones.tag === "gym-beta-descanso"
-      && primera.opciones.body === "Press de pecho tumbado en máquina · te toca la serie 2 de 3",
+      && primera.opciones.body === "Press de pecho tumbado en máquina · te toca la serie 2 de 3" && primera.opciones.renotify === false,
     `D5 al ocultarse: «${primera?.titulo}» / «${primera?.opciones.body}», silenciosa y con su etiqueta`);
+    caso(Number.isFinite(finEn) && primera?.opciones.timestamp === finEn, "D5 …y su hora («timestamp») es la del final del descanso");
     await esperar(9000);
     const segunda = b.espia.notificaciones[1];
     caso(segunda?.titulo === "Te toca la serie 2 de 3" && segunda.opciones.renotify === true && segunda.opciones.tag === "gym-beta-descanso"
       && JSON.stringify(segunda.opciones.vibrate) === "[400,150,400,150,800]", `D5 al acabar: «${segunda?.titulo}»`);
+    const tarde = (segunda?.opciones.timestamp ?? NaN) - finEn;
+    caso(tarde >= 0 && tarde < 1500, `D5 la del final lleva la hora a la que ha acabado (${Number.isFinite(tarde) ? `${tarde} ms tras el final` : "sin hora"})`);
     b.espia.mostrar();
     await esperar(100);
     caso(primera?.cerrada === true, "D5 al volver, se cierra la notificación de «Descanso hasta las…»");
