@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Pruebas de Gym Beta</title>
+</head>
+<body>
+  <pre id="resultado">Cargando las pruebas…</pre>
+  <script type="module">
+    // Primero, la dirección: estas pruebas solo corren en 127.0.0.1 o localhost (tests/ se publica y comparte
+    // dirección con los datos reales). Las suites se cargan después con import() dinámico.
+    const local = ["127.0.0.1", "localhost"].includes(location.hostname);
+    if (!local) {
+      document.getElementById("resultado").textContent = "Estas pruebas solo se ejecutan en 127.0.0.1 o localhost.";
+    } else {
+      const comun = await import("./comun.js");
+      document.getElementById("resultado").textContent = "";
+      const pedidas = new URLSearchParams(location.search).get("solo");
+      // normal.js va la última: la normal registra su service worker (alcance /) y desde entonces controla también /beta/.
+      const todas = ["logica", "datos-rotos", "seguridad", "interfaz", "descanso", "extras", "correcciones", "normal"];
+      const suites = pedidas ? pedidas.split(",").filter((s) => todas.includes(s)) : todas;
+      comun.guardarNormal();
+      for (const nombre of suites) {
+        comun.suite(nombre);
+        try {
+          const modulo = await import(`./${nombre}.js`);
+          await modulo.ejecutar(comun);
+        } catch (err) {
+          comun.caso(false, `excepción en ${nombre}: ${err?.message || err}`);
+        }
+        comun.restaurarNormal();
+        for (const f of document.querySelectorAll("iframe")) f.remove();
+        comun.nota(`peticiones de espera hasta aquí: ${comun.contarSondeos()}`);
+      }
+      comun.suite("");
+      await comun.limpiarBeta();
+      comun.restaurarNormal();
+      // El presupuesto de probar.py es de 120 s de tiempo virtual: si esto se acerca, hay que lanzar las suites aparte.
+      comun.nota(`tiempo virtual usado: ${Math.round(performance.now() / 1000)} s`);
+      comun.fin();
+    }
+  </script>
+</body>
+</html>

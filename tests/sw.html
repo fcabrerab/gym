@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="robots" content="noindex">
+  <title>Pruebas del service worker de Gym Beta</title>
+</head>
+<body>
+  <pre id="resultado">Cargando las pruebas…</pre>
+  <script type="module">
+    // Service worker de la beta (casos W1-W7). Va aparte de tests/index.html y todo se espera con real() o hastaQue().
+    const local = ["127.0.0.1", "localhost"].includes(location.hostname);
+    if (!local) {
+      document.getElementById("resultado").textContent = "Estas pruebas solo se ejecutan en 127.0.0.1 o localhost.";
+    } else {
+      const c = await import("./comun.js");
+      const { datosBeta } = await import("./datos.js");
+      const { caso, nota, fin, real, hastaQue, limpiarBeta, guardar, esperarListo, quitar, esperar } = c;
+      document.getElementById("resultado").textContent = "";
+      c.suite("sw");
+      try {
+        const sw = await fetch("/beta/sw.js", { cache: "no-store" }).then((r) => r.text());
+        const version = sw.match(/const VERSION = "([^"]+)"/)[1];
+        const nombre = `gym-beta-${version}`;
+        const archivos = [...sw.match(/const ARCHIVOS = \[([\s\S]*?)\];/)[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+        const rutasArchivos = archivos.map((a) => (a === "./" ? "/beta/" : `/beta/${a.replace(/^\.\//, "")}`));
+        const rutasDe = async (cache) => {
+          const ca = await caches.open(cache);
+          return (await ca.keys()).map((r) => new URL(r.url).pathname);
+        };
+
+        await limpiarBeta();
+        for (const n of await real(caches.keys())) if (n.startsWith("gym-beta-")) await real(caches.delete(n));
+        const c1 = await real(caches.open("gym-beta-viejo"));
+        await real(c1.put("/beta/viejo.txt", new Response("viejo")));
+        const c2 = await real(caches.open("gym-pwa-v14"));
+        await real(c2.put("/index.html", new Response("normal")));
+        const c3 = await real(caches.open("otra-app"));
+        await real(c3.put("/otra/index.html", new Response("otra")));
+        guardar("gym-beta-datos", await datosBeta());
+
+        // W1 instalar y activar
+        const f = document.createElement("iframe");
+        f.style.width = "412px";
+        f.style.height = "915px";
+        document.body.append(f);
+        await new Promise((r) => { f.onload = r; f.src = "/beta/?ahora=2026-11-03T18:00:00"; });
+        await esperarListo(f);
+        const activo = await hastaQue(async () => {
+          const reg = await navigator.serviceWorker.getRegistration("/beta/");
+          return Boolean(reg?.active) && reg.active.state === "activated";
+        });
+        const reg = await real(navigator.serviceWorker.getRegistration("/beta/"));
+        nota(`tiempo virtual al activarse: ${Math.round(performance.now() / 1000)} s`);
+        caso(activo && new URL(reg.scope).pathname === "/beta/", `W1 el service worker se activa con alcance ${reg ? new URL(reg.scope).pathname : "—"}`);
+        await hastaQue(async () => !(await caches.keys()).includes("gym-beta-viejo"), 100);
+        const nombres = await real(caches.keys());
+        const guardados = await real(rutasDe(nombre));
+        const faltan = rutasArchivos.filter((r) => !guardados.includes(r));
+        caso(nombres.includes(nombre) && faltan.length === 0, `W1 existe ${nombre} con todos los ARCHIVOS (${guardados.length})${faltan.length ? `; faltan ${faltan.join(", ")}` : ""}`);
+        caso(!nombres.includes("gym-beta-viejo") && nombres.includes("gym-pwa-v14") && nombres.includes("otra-app"),
+          `W1 borra solo la caché vieja de la beta (quedan: ${nombres.join(", ")})`);
+
+        // W2 tras recargar, controlada y pinta
+        await new Promise((r) => { f.onload = r; f.contentWindow.location.reload(); });
+        const listo = await esperarListo(f);
+        const controlador = f.contentWindow.navigator.serviceWorker.controller;
+        caso(listo === "1" && controlador?.scriptURL.endsWith("/beta/sw.js"), `W2 tras recargar, la beta está controlada por su service worker y pinta (listo ${listo})`);
+        const ajustes = f.contentDocument.querySelector('#nav [data-accion="ir-ajustes"]');
+        ajustes.click();
+        await c.esperar(50);
+        caso(c.textoDe(f.contentDocument, "#sin-conexion") === "Funciona sin conexión: sí", `W2 Ajustes dice «${c.textoDe(f.contentDocument, "#sin-conexion")}»`);
+
+        // W3 nada de fuera de beta/ en sus cachés
+        const conDatos = [];
+        for (const n of (await real(caches.keys())).filter((x) => x.startsWith("gym-beta-"))) {
+          const rutas = await real(rutasDe(n));
+          if (rutas.some((r) => r.startsWith("/data/") || !r.startsWith("/beta/"))) conDatos.push(n);
+        }
+        caso(conDatos.length === 0, `W3 ninguna caché gym-beta-* tiene /data/routine.json ni nada de fuera de beta/${conDatos.length ? ` (${conDatos.join(", ")})` : ""}`);
+
+        // W4 versión por mensaje
+        const respuesta = new Promise((resolver) => {
+          navigator.serviceWorker.addEventListener("message", (ev) => { if (ev.data?.tipo === "version") resolver(ev.data.version); });
+        });
+        navigator.serviceWorker.startMessages?.();
+        reg.active.postMessage({ tipo: "version" });
+        const v = await real(Promise.race([respuesta, new Promise((r) => setTimeout(() => r(null), 3000))]));
+        caso(v === version, `W4 {tipo: "version"} responde ${v}`);
+
+        // W5 todo lo que carga la beta está en ARCHIVOS
+        const recursos = f.contentWindow.performance.getEntriesByType("resource").map((e) => new URL(e.name)).filter((u) => u.origin === location.origin && u.pathname.startsWith("/beta/")).map((u) => u.pathname);
+        const fuera = [...new Set(recursos)].filter((r) => !rutasArchivos.includes(r));
+        caso(recursos.length >= 15 && fuera.length === 0, `W5 los ${new Set(recursos).size} recursos de /beta/ que cargó la app están en ARCHIVOS${fuera.length ? `; fuera: ${fuera.join(", ")}` : ""}`);
+
+        // W6 manifiesto
+        const manifiesto = await real(fetch("/beta/manifest.json", { cache: "no-store" }).then((r) => r.json()));
+        const icono = await real(fetch(new URL(manifiesto.icons[0].src, new URL("/beta/", location.href)), { cache: "no-store" }));
+        caso(manifiesto.name === "Gym Beta" && manifiesto.start_url === "./" && manifiesto.scope === "./" && icono.ok && icono.headers.get("content-type").includes("svg"),
+          `W6 manifiesto «${manifiesto.name}», start_url y scope «./», y el icono existe`);
+
+        // W7 la caché se rehace sola
+        const cache = await real(caches.open(nombre));
+        const borrada = new URL("/beta/js/util.js", location.href).href;
+        await real(cache.delete(borrada));
+        const quitada = !(await real(cache.match(borrada)));
+        reg.active.postMessage({ tipo: "comprobar" });
+        const vuelve = await hastaQue(async () => Boolean(await (await caches.open(nombre)).match(borrada)), 200);
+        caso(quitada && vuelve, "W7 tras borrar una entrada y mandar {tipo: \"comprobar\"}, vuelve a estar");
+
+        // Respuestas de error: no se guardan
+        const r404 = await real(f.contentWindow.fetch("/beta/no-existe-404.js").catch(() => null));
+        const aparece = await hastaQue(async () => Boolean(await (await caches.open(nombre)).match("/beta/no-existe-404.js")), 30);
+        caso(r404?.status === 404 && !aparece, `Una respuesta ${r404?.status} no se guarda en la caché de la beta`);
+
+        quitar({ f });
+        await real(reg.unregister());
+        for (const n of await real(caches.keys())) if (n.startsWith("gym-beta-") || n === "gym-pwa-v14" || n === "otra-app") await real(caches.delete(n));
+        await limpiarBeta();
+        nota(`service worker quitado y cachés de prueba borradas (tiempo virtual: ${Math.round(performance.now() / 1000)} s; peticiones de espera: ${c.contarSondeos()})`);
+      } catch (err) {
+        caso(false, `excepción: ${err?.message || err}`);
+      }
+
+      // W8 Caja de arena: el texto de /beta/sw.js con un «self» de mentira, una red de mentira y una Cache Storage de
+      // mentira (en memoria: lo que se prueba es la lógica de la navegación; la Cache Storage de verdad ya la usan W1-W7,
+      // y aquí, sin service worker de por medio, a veces se quedaba colgada). Así se prueba qué hace la navegación cuando
+      // llega el index.html de otra versión, cuando se abre otro archivo de beta/, con una versión esperando y sin red.
+      try {
+        const codigo = (await real(fetch("/beta/sw.js", { cache: "no-store" }).then((r) => r.text())))
+          .replace(/const VERSION = "[^"]+";/, 'const VERSION = "prueba-sw";');
+        const CACHE_P = "gym-beta-prueba-sw";
+        const almacenes = new Map();
+        const clave = (r) => new URL(typeof r === "string" ? r : r.url, location.href).href;
+        const sinBusqueda = (u) => u.split("?")[0];
+        const cacheFalsa = (mapa) => ({
+          match: async (r, opciones = {}) => {
+            for (const [url, res] of mapa) {
+              if (url === clave(r) || (opciones.ignoreSearch && sinBusqueda(url) === sinBusqueda(clave(r)))) return res.clone();
+            }
+            return undefined;
+          },
+          put: async (r, res) => { mapa.set(clave(r), res); },
+          delete: async (r) => mapa.delete(clave(r)),
+          keys: async () => [...mapa.keys()].map((u) => new Request(u)),
+        });
+        const cachesFalsas = {
+          open: async (n) => {
+            if (!almacenes.has(n)) almacenes.set(n, new Map());
+            return cacheFalsa(almacenes.get(n));
+          },
+          keys: async () => [...almacenes.keys()],
+          delete: async (n) => almacenes.delete(n),
+        };
+        const red = { sinRed: false, respuestas: new Map(), pedidas: [] };
+        const manejadores = {};
+        const registro = { waiting: null, actualizaciones: 0, update: async () => { registro.actualizaciones += 1; } };
+        const selfFalso = {
+          location: new URL("/beta/sw.js", location.href), registration: registro, addEventListener: (t, fn) => { manejadores[t] = fn; },
+          clients: { claim: async () => {}, matchAll: async () => [], openWindow: async () => null }, skipWaiting: () => {},
+        };
+        const fetchFalso = async (peticion) => {
+          const url = typeof peticion === "string" ? peticion : peticion.url;
+          red.pedidas.push(new URL(url, location.href).pathname);
+          if (red.sinRed) throw new TypeError("Failed to fetch");
+          const r = red.respuestas.get(new URL(url, location.href).pathname);
+          return r ? r() : new Response("no", { status: 404 });
+        };
+        // setTimeout inerte: el límite de 4 s de la navegación no hace falta con esta red (responde al momento) y así el
+        // reloj virtual no salta a esos temporizadores.
+        // eslint-disable-next-line no-new-func -- solo en esta página de pruebas, que solo corre en 127.0.0.1
+        new Function("self", "fetch", "caches", "setTimeout", codigo)(selfFalso, fetchFalso, cachesFalsas, () => 0);
+        const navegar = async (ruta) => {
+          let respuesta = null;
+          manejadores.fetch({
+            request: { url: new URL(ruta, location.href).href, method: "GET", mode: "navigate", destination: "document" },
+            respondWith: (p) => { respuesta = p; }, waitUntil: () => {},
+          });
+          const r = respuesta ? await respuesta : null;
+          await esperar(0); // lo que el service worker guarda «sin esperar» (cache.put) ya ha terminado
+          return r;
+        };
+        const guardado = async () => {
+          const r = await (await cachesFalsas.open(CACHE_P)).match(new URL("/beta/index.html", location.href).href);
+          return r ? r.text() : null;
+        };
+        const html = (v) => () => new Response(`<!doctype html><meta name="gym-beta-version" content="${v}"><title>Gym Beta ${v}</title>`, { headers: { "Content-Type": "text/html; charset=utf-8" } });
+
+        red.respuestas.set("/beta/", html("prueba-sw"));
+        const r1 = await navegar("/beta/?desde=icono");
+        caso(r1?.status === 200 && (await guardado())?.includes("prueba-sw"), "W8 con red, el index.html de esta versión se guarda");
+
+        red.respuestas.set("/beta/", html("9.9.9"));
+        const r2 = await navegar("/beta/");
+        const t2 = r2 ? await r2.text() : "";
+        caso(t2.includes("prueba-sw") && (await guardado())?.includes("prueba-sw") && registro.actualizaciones === 1,
+          "W8 si llega el index.html de otra versión, se sigue con el de esta (no se mezcla con sus módulos) y se busca la nueva");
+
+        red.respuestas.set("/beta/manifest.json", () => new Response('{"name":"x"}', { headers: { "Content-Type": "application/json" } }));
+        const r3 = await navegar("/beta/manifest.json");
+        caso(r3 && (await r3.text()).includes('"name"') && (await guardado())?.includes("prueba-sw"), "W8 abrir otro archivo de beta/ en una pestaña no pisa el index.html guardado");
+
+        registro.waiting = {};
+        red.pedidas.length = 0;
+        const r4 = await navegar("/beta/");
+        caso(Boolean(r4) && (await r4.text()).includes("prueba-sw") && !red.pedidas.includes("/beta/"), "W8 con una versión esperando, la navegación sale de la caché de esta (hasta «Recargar»)");
+        registro.waiting = null;
+
+        await cachesFalsas.delete(CACHE_P);
+        red.sinRed = true;
+        const r5 = await navegar("/beta/");
+        const t5 = r5 ? await r5.text() : "";
+        caso(r5?.status === 503 && (r5.headers.get("content-type") || "").includes("text/html") && t5.includes('href="../"') && t5.includes("Abrir la versión normal"),
+          "W8 sin red y sin copia: una página con el enlace a la versión normal (que sí funciona sin red)");
+      } catch (err) {
+        caso(false, `excepción en la caja de arena de la beta: ${err?.message || err}`);
+      }
+
+      // W9 El sw.js de la normal no puede borrar las cachés de la beta ni responder a /beta/. Lo arregla el chat
+      // principal junto con el botón «Beta»; mientras siga en gym-pwa-v14 (la de hoy, sin tocar) solo se apunta.
+      try {
+        const swNormal = await real(fetch("/sw.js", { cache: "no-store" }).then((r) => r.text()));
+        const cacheNormal = swNormal.match(/const CACHE = "([^"]+)"/)?.[1];
+        if (cacheNormal === "gym-pwa-v14") {
+          nota("PENDIENTE (chat principal): el sw.js de la normal (gym-pwa-v14) todavía borra todas las cachés ajenas al activarse y responde a /beta/. Cuando suba su versión, esta prueba lo comprobará.");
+        } else {
+          const manejadores = {};
+          const selfFalso = {
+            location: new URL("/sw.js", location.href), addEventListener: (t, fn) => { manejadores[t] = fn; },
+            clients: { claim: async () => {}, matchAll: async () => [] }, skipWaiting: () => {},
+          };
+          // eslint-disable-next-line no-new-func -- solo en esta página de pruebas
+          new Function("self", "caches", swNormal)(selfFalso, caches);
+          await real((await real(caches.open("gym-beta-prueba-normal"))).put("/beta/x", new Response("x")));
+          const promesas = [];
+          manejadores.activate({ waitUntil: (p) => promesas.push(p) });
+          await real(Promise.allSettled(promesas));
+          const sigue = (await real(caches.keys())).includes("gym-beta-prueba-normal");
+          let responde = false;
+          manejadores.fetch({ request: new Request("/beta/js/app.js"), respondWith: () => { responde = true; }, waitUntil: () => {} });
+          caso(sigue && !responde, `W9 el sw.js de la normal (${cacheNormal}) no borra las cachés de la beta (${sigue ? "siguen" : "las borra"}) ni responde a /beta/ (${responde ? "responde" : "no"})`);
+          await real(caches.delete("gym-beta-prueba-normal"));
+        }
+      } catch (err) {
+        caso(false, `excepción al revisar el sw.js de la normal: ${err?.message || err}`);
+      }
+      c.suite("");
+      nota(`tiempo virtual usado: ${Math.round(performance.now() / 1000)} s; peticiones de espera: ${c.contarSondeos()}`);
+      fin();
+    }
+  </script>
+</body>
+</html>

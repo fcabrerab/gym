@@ -42,3 +42,13 @@ Para revisar antes de publicar:
 ```
 
 Luego abre `http://localhost:4173/`.
+
+## Beta (`beta/`)
+
+Versión nueva en pruebas, publicada en `https://fcabrerab.github.io/gym/beta/` junto a la normal (botón «Beta» arriba). Convive con ella en la misma dirección:
+
+- Sus datos van aparte, en claves `gym-beta-…`. La primera vez copia los de la normal y nunca escribe en ellos.
+- Tiene su propio service worker y sus cachés `gym-beta-…`; el `sw.js` de la normal no responde a `beta/` ni a `tests/` y solo borra sus cachés `gym-pwa-…`.
+- Lo que exporta la beta lo puede importar la normal.
+
+Sus pruebas están en `tests/` y solo se ejecutan en `localhost` o `127.0.0.1`: con `.\preview.ps1`, abre `http://localhost:4173/tests/`.
