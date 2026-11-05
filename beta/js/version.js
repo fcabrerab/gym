@@ -1,11 +1,20 @@
 // Versión de la beta. La misma VERSION está en ../sw.js y en la meta «gym-beta-version» de ../index.html: cada
 // cambio en un archivo de beta/ obliga a subirla en los tres sitios (una prueba de tests/ comprueba que coinciden).
-export const VERSION = "0.2.1";
-export const FECHA_VERSION = "2026-11-04";
+export const VERSION = "0.2.2";
+export const FECHA_VERSION = "2026-11-05";
 
 // Novedades por versión, de la más nueva a la más vieja. Se enseñan en Ajustes → Beta → Novedades y, la primera
 // vez, en «Qué tiene de nuevo».
 export const NOVEDADES = [
+  {
+    version: "0.2.2",
+    fecha: "2026-11-05",
+    cambios: [
+      "Nuevo en Ajustes → Descanso: «Avisos desde el PC». Tu PC de casa lleva la cuenta del descanso y te manda el aviso a su hora, aunque bloquees el móvil y sin pausar tu música. Hace falta Tailscale activo en el móvil y el PC encendido.",
+      "Se activa una vez con la dirección de tu PC (o con el enlace de su página de avisos) y «Probar desde el PC» manda uno de prueba a los 10 s.",
+      "Si el PC no responde, el aviso va como siempre.",
+    ],
+  },
   {
     version: "0.2.1",
     fecha: "2026-11-04",

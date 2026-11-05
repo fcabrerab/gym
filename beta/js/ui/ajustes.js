@@ -1,5 +1,5 @@
-// Pantalla Ajustes: aspecto, descanso (avisos, permiso de notificaciones, descanso con sonido, pantalla encendida,
-// probar aviso y qué hacer si el aviso no llega con el móvil bloqueado), tiempo estimado, copia de seguridad (guardar, cargar con vista previa, copias automáticas), datos de la versión
+// Pantalla Ajustes: aspecto, descanso (avisos, permiso de notificaciones, descanso con sonido, avisos desde el PC,
+// pantalla encendida, probar aviso y qué hacer si el aviso no llega con el móvil bloqueado), tiempo estimado, copia de seguridad (guardar, cargar con vista previa, copias automáticas), datos de la versión
 // normal (qué ha cambiado, volver a copiar), la beta (versión, sin conexión, novedades, apuntes) y la zona peligrosa.
 // Los cambios valen al momento.
 
@@ -10,6 +10,7 @@ import { boton, control, ponerErrorControl, interruptor, seccion, ayuda } from "
 import { terminarYGuardar } from "./entreno.js";
 import * as almacen from "../almacen.js";
 import * as descanso from "../descanso.js";
+import * as avisosPc from "../avisos-pc.js";
 import * as S from "../sesion.js";
 import { VERSION, FECHA_VERSION, NOVEDADES } from "../version.js";
 import { ESQUEMA, LIMITES, validarDatos, reparar, migrar, diaPorId } from "../modelo.js";
@@ -185,12 +186,66 @@ function consejosAviso() {
     "Android para la app cuando lleva más de un minuto sin estar a la vista (con el móvil bloqueado u otra app delante), y entonces el aviso puede no llegar, sobre todo en descansos de 2 o 3 minutos. No pasa si dejas puesto «Mantener la pantalla encendida durante la sesión» y no bloqueas el móvil.",
     "La notificación del descanso dice a qué hora acaba: aunque el aviso no suene, puedes mirarla en la pantalla de bloqueo.",
     "Si la notificación llega sin sonido o no se ve, mantén pulsada una notificación de la app (o búscala en los ajustes de Android) y revisa el sonido, el mensaje emergente y la pantalla de bloqueo. Mira también que No molestar esté apagado. La vibración la decide Android: la app no puede cambiarla.",
-    "Para que el aviso llegue siempre a su hora, enciende «Descanso con sonido» (aquí arriba).",
+    "Para que el aviso llegue siempre a su hora, enciende «Descanso con sonido» o «Avisos desde el PC» (aquí arriba).",
   ];
   return h("details", { class: "detalles consejos-aviso" },
     h("summary", null, icono("info", { tamano: 20 }), h("span", null, "Si el aviso no llega con el móvil bloqueado"),
       h("span", { class: "consejos-flecha" }, icono("siguiente", { tamano: 20 }))),
     h("ul", { class: "lista-consejos" }, consejos.map((t) => h("li", null, t))));
+}
+
+// «Avisos desde el PC» (avisos-pc.js): sin activar, la dirección y «Activar»; activos, su estado, «Probar desde el PC» y
+// «Desactivar». Se repinta solo al cambiar su estado (app.js), salvo mientras uno de sus botones está trabajando.
+let ocupadoPc = false;
+
+export function repintarAvisosPc() {
+  if (!ocupadoPc) pintarAvisosPc();
+}
+
+// Lo que hace un botón de «Avisos desde el PC», sin repintar a medias; al acabar, se repinta y se dice cómo ha ido.
+function botonPc(el, trabajo, alAcabar) {
+  if (ocupadoPc) return undefined;
+  ocupadoPc = true;
+  el.disabled = true;
+  return trabajo().catch(() => ({ ok: false, texto: "Algo ha fallado: vuelve a intentarlo." })).then((r) => {
+    ocupadoPc = false;
+    pintarAvisosPc();
+    alAcabar(r || { ok: true });
+  });
+}
+
+function pintarAvisosPc() {
+  const zona = document.getElementById("avisos-pc");
+  if (!zona) return;
+  const e = avisosPc.estado();
+  const partes = [
+    h("p", { class: "interruptor-rotulo" }, "Avisos desde el PC (sin sonido de fondo)"),
+    ayuda("Tu PC de casa lleva la cuenta del descanso y, a su hora, te manda el aviso: llega aunque bloquees el móvil y sin pausar tu música. Hace falta Tailscale activo en el móvil y el PC encendido. Si el PC no responde, el aviso va como siempre."),
+  ];
+  const cuando = Number.isFinite(e.cuando) ? ` (${hora(e.cuando)})` : "";
+  if (!e.soportado) {
+    partes.push(ayuda("Este navegador no admite avisos desde el PC."));
+  } else if (e.activo) {
+    const pc = e.direccion.replace(/^https:\/\//, "");
+    partes.push(e.estado === "sin-respuesta" || e.estado === "error"
+      ? h("p", { class: "ayuda aviso-permiso", id: "estado-pc" }, `Activos con ${pc}, pero la última vez falló${cuando}: ${e.texto}`)
+      : h("p", { class: "ayuda estado-bien", id: "estado-pc" }, icono("check", { tamano: 18 }), h("span", null, `Activos con ${pc}${cuando ? `: el PC contestó bien${cuando}` : ""}`)),
+    h("div", { class: "botones-pc" },
+      boton("Probar desde el PC", "probar-avisos-pc", { clase: "boton-secundario", ico: "campana" }),
+      boton("Desactivar", "desactivar-avisos-pc", { clase: "boton-secundario" })),
+    ayuda("«Probar desde el PC» manda uno de prueba a los 10 s: bloquea el móvil y espera."));
+  } else {
+    partes.push(
+      h("label", { class: "campo-rotulo", for: "direccion-pc" }, "Dirección de tu PC en Tailscale"),
+      h("input", {
+        class: "campo-texto", id: "direccion-pc", type: "url", inputmode: "url", autocomplete: "off", autocapitalize: "off", spellcheck: "false",
+        enterkeyhint: "done", placeholder: "https://tu-pc.tu-red.ts.net", value: e.direccion || "", "data-campo": "direccion-pc", "aria-describedby": "error-pc ayuda-pc",
+      }),
+      h("p", { class: "campo-error", id: "error-pc" }, e.estado === "sin-respuesta" || e.estado === "error" ? e.texto : ""),
+      h("p", { class: "ayuda", id: "ayuda-pc" }, "Es la de la página de tu PC. Si abres la beta con el enlace de su página «Avisos del gimnasio», se pone sola."),
+      boton("Activar", "activar-avisos-pc", { clase: "boton-principal boton-ancho", ico: "campana" }));
+  }
+  vaciar(zona).append(...partes);
 }
 
 export function pintarAjustes(contenedor) {
@@ -221,6 +276,7 @@ export function pintarAjustes(contenedor) {
       h("div", { class: "estado-permiso", id: "estado-permiso" }),
       interruptor({ ajuste: "descansoConSonido", rotulo: "Descanso con sonido (aviso más fiable)", marcado: a.descansoConSonido,
         ayuda: "Durante el descanso suena un tic-tac muy suave y el aviso va dentro del propio sonido: así llega a su hora aunque bloquees el móvil. En la pantalla de bloqueo se ve el descanso con su barra de progreso. Ojo: mientras suena, Android pausa la música de otras apps." }),
+      h("div", { class: "avisos-pc", id: "avisos-pc" }),
       interruptor({ ajuste: "descansoAlMarcar", rotulo: "Empezar el descanso al marcar una serie", marcado: a.descansoAlMarcar,
         ayuda: "Si lo apagas, el descanso se empieza con el botón «Descanso» de cada ejercicio." }),
       interruptor({ ajuste: "pantallaEncendida", rotulo: "Mantener la pantalla encendida durante la sesión", marcado: a.pantallaEncendida,
@@ -275,6 +331,7 @@ export function pintarAjustes(contenedor) {
       ayuda("Borra la rutina, el historial y los ajustes de la beta en este móvil. La versión normal no se toca. Las copias automáticas se conservan."))));
 
   pintarPermiso();
+  pintarAvisosPc();
   pintarEfectoNormal();
   // Lo que tarda (no bloquea el pintado).
   if (navigator.storage?.persisted) {
@@ -377,6 +434,29 @@ export function alAccionAjustes(accion, el) {
       descanso.probarAviso();
       return undefined;
     }
+    case "activar-avisos-pc": {
+      const valor = pantalla.querySelector('[data-campo="direccion-pc"]')?.value ?? "";
+      return botonPc(el, () => avisosPc.activar(valor), (r) => {
+        pintarPermiso();
+        if (r.ok) {
+          avisar({ texto: r.listo ? "Avisos desde el PC activados. Prueba uno con «Probar desde el PC»." : "Activados, pero el PC aún no puede mandarlos: le falta su entorno de Python." });
+          return;
+        }
+        const error = document.getElementById("error-pc");
+        if (error) {
+          error.textContent = r.texto;
+          error.setAttribute("role", "alert");
+        }
+      });
+    }
+    case "probar-avisos-pc":
+      return botonPc(el, () => avisosPc.probar(), (r) => {
+        avisar({ texto: r.ok ? "Aviso de prueba pedido: llega en 10 s. Bloquea el móvil y espera." : r.texto, tipo: r.ok ? "normal" : "error" });
+      });
+    case "desactivar-avisos-pc":
+      return botonPc(el, () => avisosPc.desactivar(), () => {
+        avisar({ texto: "Avisos desde el PC desactivados: el aviso va como siempre." });
+      });
     case "sps-menos": case "sps-mas": {
       const c = pantalla.querySelector('[data-campo="segundosPorSerie"]');
       const n = limitar((leerNumero(c.value) ?? 40) + (accion === "sps-mas" ? 5 : -5), LIMITES.segundosPorSerieMin, LIMITES.segundosPorSerieMax);

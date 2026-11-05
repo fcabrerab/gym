@@ -19,7 +19,7 @@
       document.getElementById("resultado").textContent = "";
       const pedidas = new URLSearchParams(location.search).get("solo");
       // normal.js va la última: la normal registra su service worker (alcance /) y desde entonces controla también /beta/.
-      const todas = ["logica", "datos-rotos", "seguridad", "interfaz", "descanso", "sonido", "extras", "correcciones", "normal"];
+      const todas = ["logica", "datos-rotos", "seguridad", "interfaz", "descanso", "avisos-pc", "sonido", "extras", "correcciones", "normal"];
       const suites = pedidas ? pedidas.split(",").filter((s) => todas.includes(s)) : todas;
       comun.guardarNormal();
       for (const nombre of suites) {

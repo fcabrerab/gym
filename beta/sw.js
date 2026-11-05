@@ -1,8 +1,9 @@
-// Service worker de la beta: alcance la carpeta beta/. Solo toca cachés que empiezan por «gym-beta-».
+// Service worker de la beta: alcance la carpeta beta/. Solo toca cachés que empiezan por «gym-beta-». Y enseña los
+// avisos del descanso que manda el PC por Web Push (abajo: «push»).
 // Cada cambio en un archivo de beta/ obliga a subir VERSION aquí, en js/version.js y en la meta «gym-beta-version» de
 // index.html (la prueba lo comprueba). Entre versiones no se quitan ni se renombran ids de index.html: así una
 // versión vieja que arranque un momento con el HTML nuevo no se rompe (y app.js, al ver otra versión, recarga).
-const VERSION = "0.2.1";
+const VERSION = "0.2.2";
 const CACHE = `gym-beta-${VERSION}`;
 const CACHE_IMAGENES = "gym-beta-imagenes"; // sobrevive a las versiones
 const MAX_IMAGENES = 80;
@@ -27,6 +28,7 @@ const ARCHIVOS = [
   "./js/sesion.js",
   "./js/sonido.js",
   "./js/descanso.js",
+  "./js/avisos-pc.js",
   "./js/ui/dom.js",
   "./js/ui/avisos.js",
   "./js/ui/contexto.js",
@@ -216,6 +218,53 @@ self.addEventListener("message", (event) => {
   } else if (datos.tipo === "precargar-imagenes") {
     event.waitUntil(precargar(datos.urls));
   }
+});
+
+// --- Avisos desde el PC (js/avisos-pc.js): llegan por Web Push aunque la app esté congelada ---
+
+const ETIQUETA = "gym-beta-descanso"; // la de js/descanso.js: el aviso del PC sustituye al «Descanso hasta las…»
+const ETIQUETA_PRUEBA = "gym-beta-prueba-pc";
+const VIBRACION_FIN = [400, 150, 400, 150, 800];
+const corto = (valor, max) => (typeof valor === "string" ? valor.trim().slice(0, max) : "");
+
+async function avisoDelPc(datos) {
+  const prueba = datos.tipo === "prueba";
+  const id = typeof datos.id === "string" ? datos.id : null;
+  const ventanas = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+  const propias = ventanas.filter((c) => c.url.startsWith(BASE));
+  if (!prueba && propias.some((c) => c.visibilityState === "visible")) {
+    // La app está a la vista: avisa ella (capa, sonido y vibración); aquí no se repite.
+    for (const c of propias) c.postMessage({ tipo: "aviso-pc", id });
+    return;
+  }
+  if (!prueba && id) {
+    const ya = await self.registration.getNotifications({ tag: ETIQUETA });
+    if (ya.some((n) => n.data?.fin && n.data?.id === id)) return; // la app ya avisó de este descanso
+  }
+  await self.registration.showNotification(corto(datos.titulo, 80) || "¡Te toca!", {
+    tag: prueba ? ETIQUETA_PRUEBA : ETIQUETA,
+    body: corto(datos.texto, 160),
+    icon: "./icono-512.png",
+    badge: "./insignia-512.png",
+    renotify: true,
+    vibrate: VIBRACION_FIN,
+    timestamp: Number.isFinite(datos.fin) ? datos.fin : Date.now(),
+    data: { fin: !prueba, id, origen: "pc" },
+  });
+}
+
+self.addEventListener("push", (event) => {
+  let datos = {};
+  try {
+    datos = event.data ? event.data.json() : {};
+  } catch {
+    datos = {};
+  }
+  if (!datos || typeof datos !== "object" || Array.isArray(datos)) datos = {};
+  // Chrome exige enseñar algo por cada aviso que llega: si algo falla, sale uno sencillo.
+  event.waitUntil(avisoDelPc(datos).catch(() => self.registration.showNotification("¡Te toca!", {
+    tag: ETIQUETA, icon: "./icono-512.png", badge: "./insignia-512.png", data: { fin: true, id: null, origen: "pc" },
+  })));
 });
 
 self.addEventListener("notificationclick", (event) => {

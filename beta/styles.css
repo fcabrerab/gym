@@ -690,3 +690,11 @@ body.con-hoja .avisos { top: calc(env(safe-area-inset-top) + 12px); bottom: auto
   .consejos-flecha { transition: transform .15s; }
 }
 .lista-consejos { margin: 0 0 4px; padding-left: 20px; display: flex; flex-direction: column; gap: 8px; font-size: 14px; color: var(--texto-2); }
+
+/* --- Lo de la 0.2.2: avisos desde el PC (Ajustes → Descanso) --- */
+
+.avisos-pc { display: flex; flex-direction: column; gap: 8px; padding: 10px 0 12px; border-bottom: 1px solid var(--borde); }
+.avisos-pc:empty { display: none; }
+.avisos-pc > p { margin: 0; }
+.botones-pc { display: flex; flex-wrap: wrap; gap: 8px; }
+.botones-pc .boton { flex: 1 1 140px; }

@@ -5,6 +5,7 @@
 import { VERSION } from "./version.js";
 import * as almacen from "./almacen.js";
 import * as descanso from "./descanso.js";
+import * as avisosPc from "./avisos-pc.js";
 import { copiarDesdeNormal, leerTemaNormal, huellaNormal } from "./normal.js";
 import { guardarCopiaAuto, listarCopiasAuto } from "./copias.js";
 import { diaPorId } from "./modelo.js";
@@ -24,6 +25,7 @@ import { pintarHistorial, alAccionHistorial, vistaHistorialGuardada } from "./ui
 import { pintarRutina, alAccionRutina, alCampoRutina } from "./ui/rutina.js";
 import {
   pintarAjustes, alAccionAjustes, alCampoAjustes, hojaNovedades, hojaApuntes, datosDeCopiaAuto, pedirPermisoNotificaciones, apuntarCopiaNormal,
+  repintarAvisosPc,
 } from "./ui/ajustes.js";
 import * as arranque from "./ui/arranque.js";
 
@@ -42,6 +44,7 @@ let repintarPendiente = false;
 let swRegistrado = false;
 let textoDanado = null;
 let destinoPendiente = null; // pestaña a la que ir cuando acabe el history.go() de volver desde un detalle
+let enlaceAvisosPc = null; // se abrió con «#avisos-pc=…» (el enlace de la página de avisos del PC): «puesta» o «activa»
 
 // --- Errores (para las pruebas y para entender fallos) ---
 
@@ -350,16 +353,25 @@ function montar() {
     mostrarCapa,
     // Un aviso que puede esperar (el del sonido de fondo) no tapa el «Deshacer» de la serie recién apuntada: sale
     // cuando ese se va.
-    avisar: (texto) => {
-      const intentar = () => (hayAvisoDeshacer() ? setTimeout(intentar, 1000) : avisar({ texto }));
-      intentar();
-    },
+    avisar: avisarLuego,
     accion: accionBarra,
+  });
+  avisosPc.configurarAvisosPc({
+    avisar: avisarLuego,
+    alCambiar: () => {
+      if (modo === "app" && rutaActual?.tab === "ajustes") repintarAvisosPc();
+    },
   });
   montarBarra(document.getElementById("barra-descanso"), document.getElementById("capa-fin"));
   almacen.escucharOtrasVentanas();
   almacen.alCambiar(alCambioAlmacen);
   conectarEventos();
+}
+
+// Un aviso que puede esperar no tapa el «Deshacer» de la serie recién apuntada: sale cuando ese se va.
+function avisarLuego(texto) {
+  const intentar = () => (hayAvisoDeshacer() ? setTimeout(intentar, 1000) : avisar({ texto }));
+  intentar();
 }
 
 function listo(valor = "1") {
@@ -385,6 +397,14 @@ function iniciarApp(avisos = []) {
   if (avisos.length) avisar({ texto: avisos.join(" ") });
   avisoVersion();
   registrarSW();
+  if (enlaceAvisosPc) {
+    // Con el enlace de la página de avisos del PC: a Ajustes, con la dirección ya puesta (falta tocar «Activar»).
+    const yaActivos = enlaceAvisosPc === "activa";
+    enlaceAvisosPc = null;
+    irAPestana("ajustes");
+    document.getElementById("avisos-pc")?.scrollIntoView?.({ block: "center" });
+    avisar({ texto: yaActivos ? "Los avisos desde el PC ya están activos con ese PC." : "Dirección del PC puesta: toca «Activar» en «Avisos desde el PC»." });
+  }
 }
 
 function avisoVersion() {
@@ -523,6 +543,11 @@ function registrarSW() {
   if (swRegistrado) return;
   swRegistrado = true;
   if (!("serviceWorker" in navigator) || parametroLocal("sinsw") !== null) return;
+  // El aviso del PC llegó con la app a la vista (sw.js no saca notificación): la cuenta se pone al día por si iba tarde.
+  navigator.serviceWorker.addEventListener("message", (ev) => {
+    if (ev.data?.tipo === "aviso-pc") descanso.ponerAlDia();
+  });
+  navigator.serviceWorker.startMessages?.();
   let pedidoRecargar = false;
   let recargando = false;
   navigator.serviceWorker.addEventListener("controllerchange", () => {
@@ -608,6 +633,7 @@ function arrancarDesfase() {
 // --- Empezar ---
 
 function empezar() {
+  enlaceAvisosPc = avisosPc.leerEnlace(location.hash);
   montar();
   const cargado = almacen.cargarDatos();
   switch (cargado.tipo) {

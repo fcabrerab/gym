@@ -20,8 +20,9 @@ const PROHIBIDAS = [
   ["manejador en atributo", /<[a-z][^>]*\son[a-z]+\s*=/i],
 ];
 
-// media-src con blob: es para el «Descanso con sonido» (un WAV hecho en la página, desde una URL de Blob).
-const CSP = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' https: data: blob:; media-src 'self' blob:; connect-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'";
+// media-src con blob: es para el «Descanso con sonido» (un WAV hecho en la página, desde una URL de Blob); y
+// connect-src con https://*.ts.net, para los «Avisos desde el PC» (solo direcciones de Tailscale).
+const CSP = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' https: data: blob:; media-src 'self' blob:; connect-src 'self' https://*.ts.net; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'";
 
 export async function ejecutar(c) {
   const { caso, nota, esperar, limpiarBeta, guardar, cargarBeta, quitar, textoDe, sinErrores, leerNormal } = c;

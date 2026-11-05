@@ -335,9 +335,34 @@ export function espiar(f) {
   });
   const registro = {
     showNotification: async (titulo, opciones = {}) => {
-      e.notificaciones.push({ titulo, opciones, cerrada: false, close() { if (!this.cerrada) { this.cerrada = true; e.cerradas += 1; } } });
+      e.notificaciones.push({ titulo, opciones, data: opciones.data ?? null, cerrada: false, close() { if (!this.cerrada) { this.cerrada = true; e.cerradas += 1; } } });
     },
     getNotifications: async ({ tag } = {}) => e.notificaciones.filter((n) => !n.cerrada && (!tag || n.opciones.tag === tag)),
+    // Web Push de mentira («Avisos desde el PC»): e.suscripcion es la de ahora; cada subscribe() se apunta en
+    // e.suscribir y, con e.pushFalla = "NotAllowedError", falla como sin permiso.
+    active: {},
+    pushManager: {
+      getSubscription: async () => e.suscripcion,
+      subscribe: async (opciones) => {
+        e.suscribir.push(opciones);
+        if (e.pushFalla) throw new w.DOMException("No se deja", e.pushFalla);
+        e.suscripcion = e.nuevaSuscripcion(opciones.applicationServerKey);
+        return e.suscripcion;
+      },
+    },
+  };
+  e.suscribir = [];
+  e.bajas = 0;
+  e.pushFalla = null;
+  e.suscripcion = null;
+  e.nuevaSuscripcion = (clave) => {
+    const s = {
+      endpoint: `https://fcm.googleapis.com/fcm/send/prueba-${e.suscribir.length}`,
+      options: { userVisibleOnly: true, applicationServerKey: clave ? new Uint8Array(clave).buffer : null },
+      toJSON() { return { endpoint: this.endpoint, expirationTime: null, keys: { p256dh: "BClaveDeMentira", auth: "AuthDeMentira" } }; },
+      unsubscribe: async () => { e.bajas += 1; if (e.suscripcion === s) e.suscripcion = null; return true; },
+    };
+    return s;
   };
   if (w.navigator.serviceWorker) {
     Object.defineProperty(w.navigator.serviceWorker, "getRegistration", { configurable: true, value: async () => registro });

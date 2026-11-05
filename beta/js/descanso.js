@@ -1,8 +1,9 @@
 // El temporizador de descanso: uno solo para toda la app, guardado en gym-beta-descanso para que sobreviva a
 // cambiar de pantalla, recargar o cerrar. La cuenta sale siempre de «finEn» (una hora absoluta), así que se
 // pone al día al volver aunque el móvil haya frenado los temporizadores. Al acabar: capa a pantalla completa,
-// sonido, vibración y, si la app no está a la vista, una notificación. También lleva el Wake Lock y, con
-// «Descanso con sonido», el audio de fondo con su Media Session (sonido.js) al empezar, pausar, seguir, ±15 s y saltar.
+// sonido, vibración y, si la app no está a la vista, una notificación (salvo si ya llegó la del PC: avisos-pc.js).
+// También lleva el Wake Lock y, con «Descanso con sonido», el audio de fondo con su Media Session (sonido.js) al
+// empezar, pausar, seguir, ±15 s y saltar.
 
 import * as almacen from "./almacen.js";
 import * as sonido from "./sonido.js";
@@ -360,7 +361,9 @@ function efectosFin(g, { prueba = false } = {}) {
   if (a.timerSound !== false && (prueba || !sonido.avisoEnElFondo(g.id))) sonar();
   if (a.vibracion !== false) vibrar(VIBRACION_FIN);
   if (a.timerNotification !== false && (prueba || document.visibilityState === "hidden")) {
-    notificar(g.texto, { body: g.nombre, renotify: true, vibrate: VIBRACION_FIN, timestamp: ahora() });
+    // «data.fin» y el id del descanso: así el aviso del PC (avisos-pc.js y sw.js) y este no salen los dos.
+    notificar(g.texto, { body: g.nombre, renotify: true, vibrate: VIBRACION_FIN, timestamp: ahora(), data: { fin: true, id: g.id ?? null, origen: "app" } },
+      { siNoEsta: prueba ? null : g.id });
   }
   deps.anunciar(`Descanso terminado. ${g.texto}${g.nombre ? ` de ${g.nombre}` : ""}.`);
 }
@@ -433,12 +436,17 @@ export function permisoNotificaciones() {
 }
 
 // Notificación por el service worker de la beta (en Android, «new Notification()» no funciona en la página).
-// Nunca se espera a navigator.serviceWorker.ready: sin service worker no se resolvería nunca.
-async function notificar(titulo, opciones = {}) {
+// Nunca se espera a navigator.serviceWorker.ready: sin service worker no se resolvería nunca. Con «siNoEsta» (el id
+// de un descanso), no sale si ya está la del final de ese descanso (la del PC, que llegó antes).
+async function notificar(titulo, opciones = {}, { siNoEsta = null } = {}) {
   try {
     if (permisoNotificaciones() !== "granted") return false;
     const registro = await navigator.serviceWorker?.getRegistration("./");
     if (!registro) return false;
+    if (siNoEsta) {
+      const ya = (await registro.getNotifications?.({ tag: ETIQUETA })) || [];
+      if (ya.some((n) => n.data?.fin && n.data?.id === siNoEsta)) return false;
+    }
     await registro.showNotification(titulo, { tag: ETIQUETA, icon: "./icono-512.png", badge: "./insignia-512.png", ...opciones });
     return true;
   } catch {

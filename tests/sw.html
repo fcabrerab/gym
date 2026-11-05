@@ -8,7 +8,7 @@
 <body>
   <pre id="resultado">Cargando las pruebas…</pre>
   <script type="module">
-    // Service worker de la beta (casos W1-W7). Va aparte de tests/index.html y todo se espera con real() o hastaQue().
+    // Service worker de la beta (casos W1-W10). Va aparte de tests/index.html y todo se espera con real() o hastaQue().
     const local = ["127.0.0.1", "localhost"].includes(location.hostname);
     if (!local) {
       document.getElementById("resultado").textContent = "Estas pruebas solo se ejecutan en 127.0.0.1 o localhost.";
@@ -220,6 +220,66 @@
           "W8 sin red y sin copia: una página con el enlace a la versión normal (que sí funciona sin red)");
       } catch (err) {
         caso(false, `excepción en la caja de arena de la beta: ${err?.message || err}`);
+      }
+
+      // W10 Avisos desde el PC: el manejador «push» de /beta/sw.js en su caja de arena (sin Web Push de verdad): con la
+      // app oculta sale la notificación; con la app a la vista, no (avisa ella); sin repetir la del final de ese descanso.
+      try {
+        const codigo = await real(fetch("/beta/sw.js", { cache: "no-store" }).then((r) => r.text()));
+        const manejadores = {};
+        const mostradas = [];
+        const mensajes = [];
+        let ventanas = [];
+        const registro = {
+          waiting: null, update: async () => {},
+          showNotification: async (titulo, opciones = {}) => { mostradas.push({ titulo, opciones, data: opciones.data ?? null }); },
+          getNotifications: async ({ tag } = {}) => mostradas.filter((n) => !tag || n.opciones.tag === tag),
+        };
+        const selfFalso = {
+          location: new URL("/beta/sw.js", location.href), registration: registro, addEventListener: (t, fn) => { manejadores[t] = fn; },
+          clients: { claim: async () => {}, matchAll: async () => ventanas, openWindow: async () => null }, skipWaiting: () => {},
+        };
+        const cachesFalsas = { open: async () => ({ match: async () => undefined, put: async () => {}, keys: async () => [] }), keys: async () => [], delete: async () => true };
+        // eslint-disable-next-line no-new-func -- solo en esta página de pruebas, que solo corre en 127.0.0.1
+        new Function("self", "fetch", "caches", "setTimeout", codigo)(selfFalso, async () => new Response("no", { status: 404 }), cachesFalsas, () => 0);
+        const empujar = async (datos, { roto = false } = {}) => {
+          const promesas = [];
+          manejadores.push({ data: { json: () => { if (roto) throw new SyntaxError("no es JSON"); return datos; } }, waitUntil: (p) => promesas.push(p) });
+          await Promise.all(promesas);
+        };
+        const ventana = (ruta, visibilityState) => ({ url: new URL(ruta, location.href).href, visibilityState, postMessage: (m) => mensajes.push(m) });
+        const aviso = { tipo: "descanso", id: "abc123", titulo: "Te toca la serie 2 de 3", texto: "Press de pecho", fin: 1793900000000 };
+
+        await empujar(aviso);
+        const n1 = mostradas[0];
+        caso(mostradas.length === 1 && n1.titulo === "Te toca la serie 2 de 3" && n1.opciones.body === "Press de pecho" && n1.opciones.tag === "gym-beta-descanso"
+          && n1.opciones.renotify === true && n1.opciones.timestamp === aviso.fin && n1.data?.fin === true && n1.data.id === "abc123" && n1.data.origen === "pc"
+          && n1.opciones.icon === "./icono-512.png" && n1.opciones.badge === "./insignia-512.png",
+          `W10 sin la app a la vista, el aviso del PC sale («${n1?.titulo}», etiqueta ${n1?.opciones.tag}, con su hora y su data)`);
+        await empujar(aviso);
+        caso(mostradas.length === 1, "W10 si ya está la del final de ese descanso, no sale otra");
+        mostradas.length = 0;
+        ventanas = [ventana("/beta/", "visible")];
+        await empujar({ ...aviso, id: "def456" });
+        caso(mostradas.length === 0 && mensajes.length === 1 && mensajes[0].tipo === "aviso-pc" && mensajes[0].id === "def456",
+          "W10 con la app a la vista, no sale notificación (avisa ella) y se le dice");
+        ventanas = [ventana("/beta/", "hidden"), ventana("/", "visible")];
+        await empujar({ ...aviso, id: "ghi789" });
+        caso(mostradas.length === 1, "W10 con la beta oculta (aunque se vea la normal), sí sale");
+        mostradas.length = 0;
+        ventanas = [ventana("/beta/", "visible")];
+        await empujar({ tipo: "prueba", titulo: "Aviso de prueba desde el PC", texto: "Si lo ves…", fin: 1 });
+        caso(mostradas.length === 1 && mostradas[0].opciones.tag === "gym-beta-prueba-pc" && mostradas[0].data?.fin === false,
+          "W10 el de prueba sale siempre, con su etiqueta, aunque la app esté a la vista");
+        mostradas.length = 0;
+        ventanas = [];
+        await empujar(null, { roto: true });
+        caso(mostradas.length === 1 && mostradas[0].titulo === "¡Te toca!" && mostradas[0].opciones.tag === "gym-beta-descanso", "W10 un aviso que no se entiende sale como «¡Te toca!»");
+        mostradas.length = 0;
+        await empujar({ tipo: "descanso", titulo: "x".repeat(200), texto: 5 });
+        caso(mostradas[0]?.titulo.length === 80 && mostradas[0].opciones.body === "", "W10 un título larguísimo se recorta y un texto raro no sale");
+      } catch (err) {
+        caso(false, `excepción en los avisos del PC del service worker: ${err?.message || err}`);
       }
 
       // W9 El sw.js de la normal no puede borrar las cachés de la beta ni responder a /beta/. Lo arregla el chat
