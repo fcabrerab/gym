@@ -354,10 +354,12 @@ export function aplicarCopia(actuales, leida, ahoraMs) {
 // --- Recordatorio de copia ---
 
 // Texto del aviso si toca guardar una copia (o null): sin copia, solo cuando ya hay alguna sesión; con copia,
-// si tiene más de «recordatorioCopiaDias» días y hay cambios desde entonces. «Más tarde» lo pospone.
-export function necesitaCopia(datos, ahoraMs, posponerHasta = null) {
+// si tiene más de «recordatorioCopiaDias» días y hay cambios desde entonces. «Más tarde» lo pospone. Con
+// «ultimaPc» (la hora de los datos de la última copia en el PC, copia-pc.js): si ya trae lo último, no hace falta.
+export function necesitaCopia(datos, ahoraMs, posponerHasta = null, ultimaPc = null) {
   if (!datos) return null;
   if (posponerHasta && ahoraMs < posponerHasta) return null;
+  if (Number.isFinite(ultimaPc) && !(datos.actualizado > ultimaPc)) return null;
   const dias = datos.ajustes?.recordatorioCopiaDias ?? 7;
   const ultima = datos.copia?.ultima ?? null;
   if (ultima == null) return datos.sesiones.length > 0 ? "Aún no has guardado ninguna copia de la beta." : null;

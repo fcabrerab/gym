@@ -15,6 +15,7 @@ import { accionGuardarCopia, hojaCambiosNormal, normalHaCambiado, ocultarAvisoNo
 import * as almacen from "../almacen.js";
 import * as S from "../sesion.js";
 import * as descanso from "../descanso.js";
+import * as copiaPc from "../copia-pc.js";
 import { estimarTiempo, tiempoRestante, diaPorId, LIMITES } from "../modelo.js";
 import { necesitaCopia, guardarCopiaAuto } from "../copias.js";
 import {
@@ -197,7 +198,7 @@ function pintarBanners() {
   }
   // Durante una sesión no se enseña nada que empuje la lista hacia abajo (la copia y la normal pueden esperar).
   if (!sesionActiva(datos, sesion, t)) {
-    const textoCopia = necesitaCopia(datos, t, ui.posponerCopiaHasta);
+    const textoCopia = necesitaCopia(datos, t, ui.posponerCopiaHasta, copiaPc.ultimaEnPc());
     if (textoCopia) {
       lista.push(banner({
         texto: textoCopia,
@@ -968,6 +969,7 @@ export function terminarYGuardar(sesion, { fin } = {}) {
     return null;
   }
   almacen.borrarSesion();
+  copiaPc.alGuardarSesion(); // la copia en el PC, en segundo plano
   if (descanso.idActual()) descanso.saltar();
   descanso.actualizarPantalla();
   est.abierto = null;
@@ -1030,7 +1032,7 @@ function mostrarResumen({ guardada }) {
     cuerpo.push(h("p", null, texto));
   }
   if (r.comparacion?.masPeso) cuerpo.push(h("p", null, `${plural(r.comparacion.masPeso, "ejercicio", "ejercicios")} con más peso que la vez anterior.`));
-  const textoCopia = necesitaCopia(datos, ahora(), almacen.leerUi().posponerCopiaHasta);
+  const textoCopia = necesitaCopia(datos, ahora(), almacen.leerUi().posponerCopiaHasta, copiaPc.ultimaEnPc());
   if (textoCopia) {
     // «Guardar copia» como secundario: el único botón verde de la hoja es «Hecho».
     cuerpo.push(banner({ texto: textoCopia.replace(" de la beta", ""), botones: [boton("Guardar copia", "guardar-copia", { clase: "boton-secundario" })], clase: "banner-aviso", icono: "copia" }));

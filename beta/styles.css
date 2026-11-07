@@ -698,3 +698,9 @@ body.con-hoja .avisos { top: calc(env(safe-area-inset-top) + 12px); bottom: auto
 .avisos-pc > p { margin: 0; }
 .botones-pc { display: flex; flex-wrap: wrap; gap: 8px; }
 .botones-pc .boton { flex: 1 1 140px; }
+
+/* --- Lo de la 0.2.3: copia en el PC (Ajustes → Copia de seguridad) --- */
+
+.copia-pc { display: flex; flex-direction: column; gap: 8px; padding: 10px 0 12px; margin: 8px 0; border-top: 1px solid var(--borde); border-bottom: 1px solid var(--borde); }
+.copia-pc:empty { display: none; }
+.copia-pc > p { margin: 0; }

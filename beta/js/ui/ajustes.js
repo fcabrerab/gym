@@ -1,5 +1,5 @@
 // Pantalla Ajustes: aspecto, descanso (avisos, permiso de notificaciones, descanso con sonido, avisos desde el PC,
-// pantalla encendida, probar aviso y qué hacer si el aviso no llega con el móvil bloqueado), tiempo estimado, copia de seguridad (guardar, cargar con vista previa, copias automáticas), datos de la versión
+// pantalla encendida, probar aviso y qué hacer si el aviso no llega con el móvil bloqueado), tiempo estimado, copia de seguridad (guardar, copia en el PC, cargar con vista previa, copias automáticas), datos de la versión
 // normal (qué ha cambiado, volver a copiar), la beta (versión, sin conexión, novedades, apuntes) y la zona peligrosa.
 // Los cambios valen al momento.
 
@@ -11,6 +11,7 @@ import { terminarYGuardar } from "./entreno.js";
 import * as almacen from "../almacen.js";
 import * as descanso from "../descanso.js";
 import * as avisosPc from "../avisos-pc.js";
+import * as copiaPc from "../copia-pc.js";
 import * as S from "../sesion.js";
 import { VERSION, FECHA_VERSION, NOVEDADES } from "../version.js";
 import { ESQUEMA, LIMITES, validarDatos, reparar, migrar, diaPorId } from "../modelo.js";
@@ -248,6 +249,55 @@ function pintarAvisosPc() {
   vaciar(zona).append(...partes);
 }
 
+// «Copia en el PC» (copia-pc.js): el interruptor, cómo fue la última y «Mandar una copia ahora». Se repinta al cambiar
+// su estado (app.js); mientras su botón trabaja, el botón sigue apagado.
+let ocupadoCopiaPc = false;
+
+export function repintarCopiaPc() {
+  pintarCopiaPc();
+}
+
+function lineaCopiaPc(e, t) {
+  if (!e.direccion) return { texto: "Para usarla, pon antes la dirección de tu PC en «Avisos desde el PC» (arriba, en Descanso)." };
+  if (!e.activo) return { texto: "Apagada: el PC no recibe copias." };
+  if (e.enviando) return { texto: "Mandando una copia al PC…" };
+  const ultima = Number.isFinite(e.ultima)
+    ? `La última llegó ${haceDias(e.ultima, t)} (${diaMes(e.ultima)}, ${hora(e.ultima)})${Number.isFinite(e.sesiones) ? `, con ${plural(e.sesiones, "sesión", "sesiones")}` : ""}.`
+    : "";
+  if (e.estado === "sin-respuesta" || e.estado === "error") {
+    return { texto: `La última vez falló${Number.isFinite(e.cuando) ? ` (${hora(e.cuando)})` : ""}: ${e.texto}${ultima ? ` ${ultima}` : ""}`, clase: "aviso-permiso" };
+  }
+  if (ultima) return { texto: ultima, clase: "estado-bien", bien: true };
+  return { texto: "Aún no ha llegado ninguna al PC: llegará al acabar tu próximo entreno." };
+}
+
+function pintarCopiaPc() {
+  const zona = document.getElementById("copia-pc");
+  if (!zona) return;
+  const e = copiaPc.estado();
+  const linea = lineaCopiaPc(e, ahora());
+  vaciar(zona).append(
+    interruptor({
+      ajuste: "copia-pc", rotulo: "Copia en el PC", marcado: e.activo && Boolean(e.direccion), desactivado: !e.direccion,
+      ayuda: "Al acabar cada entreno, la beta manda una copia de tus datos a tu PC de casa. Hace falta Tailscale activo en el móvil y el PC encendido; si no puede, lo intenta otra vez al abrir la beta.",
+    }),
+    h("p", { class: ["ayuda", linea.clase], id: "estado-copia-pc" }, linea.bien ? icono("check", { tamano: 18 }) : null, h("span", null, linea.texto)),
+    boton("Mandar una copia ahora", "mandar-copia-pc", {
+      clase: "boton-secundario boton-ancho", ico: "copia", extra: { disabled: !e.activo || !e.direccion || e.enviando || ocupadoCopiaPc },
+    }));
+}
+
+function accionMandarCopiaPc(el) {
+  if (ocupadoCopiaPc) return undefined;
+  ocupadoCopiaPc = true;
+  el.disabled = true;
+  return copiaPc.mandar("mano").catch(() => ({ ok: false, texto: "Algo ha fallado: vuelve a intentarlo." })).then((r) => {
+    ocupadoCopiaPc = false;
+    pintarCopiaPc();
+    avisar({ texto: r.ok ? (r.guardada ? "Copia guardada en el PC" : "El PC ya tenía esta copia") : r.texto, tipo: r.ok ? "normal" : "error" });
+  });
+}
+
 export function pintarAjustes(contenedor) {
   const datos = almacen.datos();
   const a = datos.ajustes;
@@ -298,7 +348,7 @@ export function pintarAjustes(contenedor) {
         : `Se guarda en la carpeta Descargas del móvil; desde allí puedes mandarla a Drive, Telegram o tu correo. ${enLaNormal}`),
       comparte ? h("button", { class: "enlace-boton", type: "button", "data-accion": "descargar-copia" }, icono("descargar", { tamano: 20 }), "Descargar el archivo") : null,
       h("div", { id: "efecto-normal", class: "efecto-normal" }),
-      h("div", { class: "separador" }),
+      h("div", { class: "copia-pc", id: "copia-pc" }),
       boton("Cargar una copia", "cargar-copia", { clase: "boton-secundario boton-ancho", ico: "copia" }),
       h("input", { type: "file", accept: ".json,application/json", class: "oculto", "data-campo": "archivo", tabindex: "-1", "aria-hidden": "true" }),
       ayuda("Acepta copias de la beta y de la versión normal. Antes de cambiar nada verás qué trae."),
@@ -332,6 +382,7 @@ export function pintarAjustes(contenedor) {
 
   pintarPermiso();
   pintarAvisosPc();
+  pintarCopiaPc();
   pintarEfectoNormal();
   // Lo que tarda (no bloquea el pintado).
   if (navigator.storage?.persisted) {
@@ -363,6 +414,14 @@ function cambiarAjuste(clave, valor) {
 
 export function alCampoAjustes(ev) {
   const el = ev.target;
+  // «Copia en el PC» se guarda solo en este móvil (copia-pc.js), no en los ajustes de los datos.
+  if (el?.dataset?.ajuste === "copia-pc") {
+    if (ev.type === "change") {
+      copiaPc.alternar(el.checked);
+      if (el.checked) copiaPc.alAbrir(); // al encenderla, si el PC no tiene lo último, se le manda ya
+    }
+    return;
+  }
   if (el?.dataset?.ajuste && ev.type === "change") {
     cambiarAjuste(el.dataset.ajuste, el.checked);
     if (el.dataset.ajuste === "pantallaEncendida") descanso.actualizarPantalla();
@@ -475,6 +534,7 @@ export function alAccionAjustes(accion, el) {
     }
     case "guardar-copia": return accionGuardarCopia();
     case "descargar-copia": return accionGuardarCopia({ forzarDescarga: true });
+    case "mandar-copia-pc": return accionMandarCopiaPc(el);
     case "cargar-copia": {
       const error = document.getElementById("error-carga");
       if (error) error.textContent = "";

@@ -3,7 +3,7 @@
 // Cada cambio en un archivo de beta/ obliga a subir VERSION aquí, en js/version.js y en la meta «gym-beta-version» de
 // index.html (la prueba lo comprueba). Entre versiones no se quitan ni se renombran ids de index.html: así una
 // versión vieja que arranque un momento con el HTML nuevo no se rompe (y app.js, al ver otra versión, recarga).
-const VERSION = "0.2.2";
+const VERSION = "0.2.3";
 const CACHE = `gym-beta-${VERSION}`;
 const CACHE_IMAGENES = "gym-beta-imagenes"; // sobrevive a las versiones
 const MAX_IMAGENES = 80;
@@ -29,6 +29,7 @@ const ARCHIVOS = [
   "./js/sonido.js",
   "./js/descanso.js",
   "./js/avisos-pc.js",
+  "./js/copia-pc.js",
   "./js/ui/dom.js",
   "./js/ui/avisos.js",
   "./js/ui/contexto.js",

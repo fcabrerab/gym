@@ -6,6 +6,7 @@ import { VERSION } from "./version.js";
 import * as almacen from "./almacen.js";
 import * as descanso from "./descanso.js";
 import * as avisosPc from "./avisos-pc.js";
+import * as copiaPc from "./copia-pc.js";
 import { copiarDesdeNormal, leerTemaNormal, huellaNormal } from "./normal.js";
 import { guardarCopiaAuto, listarCopiasAuto } from "./copias.js";
 import { diaPorId } from "./modelo.js";
@@ -25,7 +26,7 @@ import { pintarHistorial, alAccionHistorial, vistaHistorialGuardada } from "./ui
 import { pintarRutina, alAccionRutina, alCampoRutina } from "./ui/rutina.js";
 import {
   pintarAjustes, alAccionAjustes, alCampoAjustes, hojaNovedades, hojaApuntes, datosDeCopiaAuto, pedirPermisoNotificaciones, apuntarCopiaNormal,
-  repintarAvisosPc,
+  repintarAvisosPc, repintarCopiaPc,
 } from "./ui/ajustes.js";
 import * as arranque from "./ui/arranque.js";
 
@@ -285,6 +286,8 @@ function conectarEventos() {
   document.addEventListener("visibilitychange", () => {
     descanso.alCambiarVisibilidad();
     if (document.visibilityState === "visible" && modo === "app" && rutaActual?.tab === "entreno") actualizarEntreno();
+    // Al volver a la beta: si el PC no tiene lo último (p. ej., no respondía al acabar el entreno), se le manda.
+    if (document.visibilityState === "visible" && modo === "app") copiaPc.alAbrir();
   });
   mqOscuro.addEventListener?.("change", () => aplicarTema(raiz.dataset.temaElegido || "auto"));
   // El alto real de la cabecera (cambia al esconder la fila de días): lo usan los avisos de arriba y los desplazamientos.
@@ -359,7 +362,16 @@ function montar() {
   avisosPc.configurarAvisosPc({
     avisar: avisarLuego,
     alCambiar: () => {
-      if (modo === "app" && rutaActual?.tab === "ajustes") repintarAvisosPc();
+      if (modo === "app" && rutaActual?.tab === "ajustes") {
+        repintarAvisosPc();
+        repintarCopiaPc(); // usa la misma dirección del PC
+      }
+    },
+  });
+  copiaPc.configurarCopiaPc({
+    avisar: avisarLuego,
+    alCambiar: () => {
+      if (modo === "app" && rutaActual?.tab === "ajustes") repintarCopiaPc();
     },
   });
   montarBarra(document.getElementById("barra-descanso"), document.getElementById("capa-fin"));
@@ -397,6 +409,10 @@ function iniciarApp(avisos = []) {
   if (avisos.length) avisar({ texto: avisos.join(" ") });
   avisoVersion();
   registrarSW();
+  // La copia en el PC: si no tiene lo último, se le manda a los pocos segundos (sin estorbar al arranque).
+  setTimeout(() => {
+    if (modo === "app") copiaPc.alAbrir();
+  }, copiaPc.AL_ABRIR_MS);
   if (enlaceAvisosPc) {
     // Con el enlace de la página de avisos del PC: a Ajustes, con la dirección ya puesta (falta tocar «Activar»).
     const yaActivos = enlaceAvisosPc === "activa";
