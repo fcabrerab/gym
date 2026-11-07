@@ -29,6 +29,7 @@ import {
   repintarAvisosPc, repintarCopiaPc,
 } from "./ui/ajustes.js";
 import * as arranque from "./ui/arranque.js";
+import { montarBrillo } from "./ui/brillo.js";
 
 const raiz = document.documentElement;
 // Para js/vigia.js: los módulos han llegado (si no llegan, el vigía lo dice en vez de dejar «Cargando la beta…»).
@@ -378,6 +379,8 @@ function montar() {
   almacen.escucharOtrasVentanas();
   almacen.alCambiar(alCambioAlmacen);
   conectarEventos();
+  // Después de conectarEventos: la vuelta de luz se pone cuando la app ya ha hecho lo suyo con el toque.
+  montarBrillo();
 }
 
 // Un aviso que puede esperar no tapa el «Deshacer» de la serie recién apuntada: sale cuando ese se va.

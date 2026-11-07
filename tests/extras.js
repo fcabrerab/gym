@@ -392,4 +392,49 @@ export async function ejecutar(c) {
     sinErrores(b, "F34");
     quitar(b);
   }
+
+  // B1-B5 el brillo de la 0.2.4: el aro del ejercicio abierto y la vuelta de luz al elegir algo
+  {
+    await preparar(await datosBeta());
+    const b = await cargarBeta();
+    const estilo = (el, pseudo) => b.w.getComputedStyle(el, pseudo);
+    pulsar(b.d, "abrir-ejercicio", "pec-deck");
+    const abierto = b.d.querySelector('li[data-ej="pec-deck"]');
+    const cerrado = b.d.querySelector("li.ej:not(.abierto)");
+    const aro = estilo(abierto, "::before");
+    const halo = estilo(abierto, "::after");
+    caso(abierto.classList.contains("abierto") && aro.content !== "none" && aro.backgroundImage.includes("conic-gradient") && halo.filter.includes("blur")
+      && estilo(cerrado, "::before").content === "none", "B1 el ejercicio abierto lleva el aro y su resplandor; los cerrados, no");
+    caso(aro.pointerEvents === "none" && halo.pointerEvents === "none" && aro.animationName.includes("aro-giro"), `B1 el aro gira y no recoge toques (${aro.animationName})`);
+    pulsar(b.d, "serie-hecha", "pec-deck");
+    await esperar(50);
+    const nuevo = b.d.querySelector('li[data-ej="pec-deck"]');
+    caso(nuevo !== abierto && nuevo.classList.contains("abierto") && estilo(nuevo, "::before").animationName.startsWith("aro-entrada"),
+      "B2 al marcar una serie el ejercicio se vuelve a pintar y su aro da la vuelta rápida");
+
+    b.d.querySelector('#nav [data-accion="ir-ajustes"]').click();
+    await esperar(50);
+    const vib = b.d.querySelector('[data-ajuste="vibracion"]');
+    if (vib.checked) {
+      vib.click();
+      await esperar(20);
+    }
+    caso(!vib.checked && !vib.classList.contains("destello"), "B3 al apagar un interruptor no brilla");
+    vib.click();
+    caso(vib.checked && vib.classList.contains("destello") && estilo(vib, "::after").animationName === "aro-destello", "B3 al encender un interruptor da una vuelta de luz");
+    await esperar(1100);
+    caso(!vib.classList.contains("destello"), "B3 la vuelta de luz se va sola");
+    const tema = b.d.querySelector('[data-accion="tema"]:not(.activa)');
+    tema.click();
+    caso(tema.classList.contains("activa") && tema.classList.contains("destello"), "B4 la opción de tema elegida da una vuelta de luz");
+
+    b.d.querySelector('#nav [data-accion="ir-historial"]').click();
+    await esperar(50);
+    b.d.querySelector('[data-accion="vista-ejercicios"]')?.click();
+    await esperar(20);
+    const elegido = b.d.querySelector('.selector-opcion.activa[data-accion="vista-ejercicios"]');
+    caso(Boolean(elegido?.classList.contains("destello")), "B5 en Historial, «Ejercicios» da una vuelta de luz aunque la pantalla se vuelva a pintar");
+    sinErrores(b, "B1-B5");
+    quitar(b);
+  }
 }
