@@ -1,11 +1,19 @@
 // Versión de la beta. La misma VERSION está en ../sw.js y en la meta «gym-beta-version» de ../index.html: cada
 // cambio en un archivo de beta/ obliga a subirla en los tres sitios (una prueba de tests/ comprueba que coinciden).
-export const VERSION = "0.2.5";
+export const VERSION = "0.2.6";
 export const FECHA_VERSION = "2026-11-08";
 
 // Novedades por versión, de la más nueva a la más vieja. Se enseñan en Ajustes → Beta → Novedades y, la primera
 // vez, en «Qué tiene de nuevo».
 export const NOVEDADES = [
+  {
+    version: "0.2.6",
+    fecha: "2026-11-08",
+    cambios: [
+      "Las dos luces del aro ya no se cruzan: dan vueltas en el mismo sentido, a media vuelta una de otra, persiguiéndose; cada una con la cabeza blanca delante y la cola cian, azul y morada.",
+      "Al abrir un ejercicio o marcar una serie dan una vuelta deprisa y luego siguen a su paso.",
+    ],
+  },
   {
     version: "0.2.5",
     fecha: "2026-11-08",

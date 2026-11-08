@@ -708,15 +708,14 @@ body.con-hoja .avisos { top: calc(env(safe-area-inset-top) + 12px); bottom: auto
 /* --- Lo de la 0.2.4: el brillo, dos luces que dan vueltas alrededor de lo elegido (prueba) --- */
 
 /* Lo elegido conserva su borde fino y, separado por un hueco transparente (máscara: vale sobre cualquier fondo),
-   lleva un aro de su misma forma por el que corren dos luces en sentidos contrarios, que se cruzan. Cada luz es una
-   franja larga blanca crema que acaba en cian, azul y morado y se apaga; entre ellas, el aro queda oscuro. Las dos
-   salen juntas de arriba cada vez que el aro aparece (al abrir el ejercicio y al marcar una serie, porque entonces
-   se vuelve a pintar), primero deprisa y luego a su paso. El ejercicio abierto lo lleva siempre, con un resplandor
-   suave detrás; los interruptores, las opciones y los selectores, una vez al elegirlos (clase «destello», que pone
-   js/ui/brillo.js un momento). Con «reducir movimiento», las luces se quedan quietas. En el tema claro, el blanco no
-   se vería: va en añil oscuro. */
-@property --aro-a { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
-@property --aro-b { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
+   lleva un aro de su misma forma por el que corren dos luces iguales, en el mismo sentido (el del reloj) y a media
+   vuelta una de otra: se persiguen (0.2.6; en la 0.2.5 se cruzaban). Cada luz es una franja larga blanca crema, con
+   la cabeza delante y una cola cian, azul y morada que se apaga; entre ellas, el aro queda oscuro. Cada vez que el aro
+   aparece (al abrir el ejercicio y al marcar una serie, porque entonces se vuelve a pintar) dan una vuelta deprisa y
+   luego siguen a su paso. El ejercicio abierto lo lleva siempre, con un resplandor suave detrás; los interruptores,
+   las opciones y los selectores, una vez al elegirlos (clase «destello», que pone js/ui/brillo.js un momento). Con
+   «reducir movimiento», las luces se quedan quietas. En el tema claro, el blanco no se vería: va en añil oscuro. */
+@property --aro-giro { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
 :root {
   --aro-luz: light-dark(#34277f, #fff3e3);
   --aro-cian: #66ddff;
@@ -724,12 +723,9 @@ body.con-hoja .avisos { top: calc(env(safe-area-inset-top) + 12px); bottom: auto
   --aro-morado: #a52cff;
   --aro-grosor: 2px;
   --aro-hueco: 3px;
-  /* La luz que va en el sentido del reloj: cola morada, cuerpo blanco y la cabeza delante (a más grados). */
-  --aro-luz-a: transparent 0deg, var(--aro-morado) 12deg 18deg, var(--aro-azul) 26deg, var(--aro-cian) 34deg,
-    var(--aro-luz) 46deg 100deg, transparent 124deg 360deg;
-  /* La que va al revés: la misma, en espejo. */
-  --aro-luz-b: transparent 0deg 236deg, var(--aro-luz) 260deg 314deg, var(--aro-cian) 326deg, var(--aro-azul) 334deg,
-    var(--aro-morado) 342deg 348deg, transparent 360deg;
+  /* Una luz (se repite cada 180°, así que son dos): cola morada, cuerpo blanco y la cabeza delante (a más grados). */
+  --aro-luces: transparent 0deg, var(--aro-morado) 12deg 18deg, var(--aro-azul) 26deg, var(--aro-cian) 34deg,
+    var(--aro-luz) 46deg 100deg, transparent 124deg 180deg;
 }
 .ej.abierto { position: relative; border: 1px solid var(--borde-campo); --aro-radio: 16px; --aro-borde: 1px; }
 .destello { position: relative; --aro-radio: 10px; --aro-borde: 1px; }
@@ -740,10 +736,9 @@ body.con-hoja .avisos { top: calc(env(safe-area-inset-top) + 12px); bottom: auto
   content: ""; position: absolute; pointer-events: none;
   inset: calc(-1 * (var(--aro-borde) + var(--aro-hueco) + var(--aro-grosor)));
   border-radius: calc(var(--aro-radio) + var(--aro-hueco) + var(--aro-grosor));
-  background: conic-gradient(from var(--aro-a), var(--aro-luz-a)), conic-gradient(from var(--aro-b), var(--aro-luz-b));
-  background-blend-mode: screen;
+  background: repeating-conic-gradient(from var(--aro-giro), var(--aro-luces));
   /* Quietas (y con «reducir movimiento»): una arriba a la derecha y otra abajo a la izquierda. */
-  --aro-a: -20deg; --aro-b: 200deg;
+  --aro-giro: -60deg;
 }
 /* El aro: solo el borde de la caja, con la máscara (lo de dentro, transparente). */
 .ej.abierto::before, .destello::after {
@@ -755,17 +750,17 @@ body.con-hoja .avisos { top: calc(env(safe-area-inset-top) + 12px); bottom: auto
 /* El resplandor: las mismas luces, borrosas y detrás de la tarjeta (su fondo tapa el centro). */
 .ej.abierto::after { z-index: -1; filter: blur(6px); opacity: .45; }
 .destello::after { opacity: 0; }
-/* Salen juntas de arriba, deprisa, y siguen a su paso (una vuelta cada 4,5 s, cada una en su sentido). */
-@keyframes aro-entrada { from { --aro-a: 0deg; --aro-b: 0deg; } to { --aro-a: 150deg; --aro-b: -150deg; } }
-@keyframes aro-giro { from { --aro-a: 150deg; --aro-b: -150deg; } to { --aro-a: 510deg; --aro-b: -510deg; } }
+/* Al aparecer, deprisa (2/3 de vuelta en 0,8 s, frenando hasta su paso) y luego una vuelta cada 4,5 s. */
+@keyframes aro-entrada { from { --aro-giro: -240deg; } to { --aro-giro: 0deg; } }
+@keyframes aro-giro { from { --aro-giro: 0deg; } to { --aro-giro: 360deg; } }
 @keyframes aro-destello {
-  0% { --aro-a: 0deg; --aro-b: 0deg; opacity: 0; }
+  0% { --aro-giro: -180deg; opacity: 0; }
   10%, 65% { opacity: 1; }
-  100% { --aro-a: 210deg; --aro-b: -210deg; opacity: 0; }
+  100% { --aro-giro: 90deg; opacity: 0; }
 }
 @keyframes aro-quieto { 0%, 70% { opacity: 1; } 100% { opacity: 0; } }
 @media (prefers-reduced-motion: no-preference) {
-  .ej.abierto::before, .ej.abierto::after { animation: aro-entrada .8s cubic-bezier(.1, .5, .6, .83), aro-giro 4.5s linear .8s infinite; }
+  .ej.abierto::before, .ej.abierto::after { animation: aro-entrada .8s cubic-bezier(.15, .6, .55, .88), aro-giro 4.5s linear .8s infinite; }
   .destello::after { animation: aro-destello .9s cubic-bezier(.2, .6, .4, 1); }
 }
 @media (prefers-reduced-motion: reduce) {
