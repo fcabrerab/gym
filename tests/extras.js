@@ -403,8 +403,8 @@ export async function ejecutar(c) {
     const cerrado = b.d.querySelector("li.ej:not(.abierto)");
     const aro = estilo(abierto, "::before");
     const halo = estilo(abierto, "::after");
-    caso(abierto.classList.contains("abierto") && aro.content !== "none" && aro.backgroundImage.includes("conic-gradient") && halo.filter.includes("blur")
-      && estilo(cerrado, "::before").content === "none", "B1 el ejercicio abierto lleva el aro y su resplandor; los cerrados, no");
+    caso(abierto.classList.contains("abierto") && aro.content !== "none" && (aro.backgroundImage.match(/conic-gradient/g) || []).length === 2
+      && halo.filter.includes("blur") && estilo(cerrado, "::before").content === "none", "B1 el ejercicio abierto lleva el aro con sus dos luces y su resplandor; los cerrados, no");
     caso(aro.pointerEvents === "none" && halo.pointerEvents === "none" && aro.animationName.includes("aro-giro"), `B1 el aro gira y no recoge toques (${aro.animationName})`);
     pulsar(b.d, "serie-hecha", "pec-deck");
     await esperar(50);
