@@ -3,7 +3,7 @@
 // de peso. Nada toca el almacenamiento: las funciones reciben los datos y la hora y devuelven copias.
 
 import { idSesion, leerRango, redondear } from "./util.js";
-import { diaPorId, nombreDia, seriesDelDia } from "./modelo.js";
+import { diaPorId, nombreDia, seriesDelDia, parejaSuperset } from "./modelo.js";
 
 export const HORAS_ABANDONO = 6;
 
@@ -92,6 +92,28 @@ export function siguientePendiente(dia, sesion, desdeId = null, pospuestosExtra 
   if (normal) return normal.exerciseId;
   const pospuesto = lista.find((e) => pospuestos.has(e.exerciseId) && !completo(e, sesion));
   return pospuesto ? pospuesto.exerciseId : null;
+}
+
+// Tras marcar una serie de un superset (D-120): a qué ejercicio se abre después y si el descanso que toca es el
+// corto (al cambiar al otro, a mitad de ronda) o el normal (de siempre: al empezar otra ronda, o si se sigue
+// solo con el que quede). El primero de los dos en la lista manda el orden de las rondas (A, B, A, B…): así
+// alternar no depende de cuál se haya marcado antes, ni de hacerlo en el orden «de libro» (D-120).
+// Null si el ejercicio marcado no está en un superset: sigue el flujo de siempre (siguientePendiente).
+export function siguienteTrasSerieSuperset(dia, sesion, exerciseId) {
+  const par = parejaSuperset(dia, exerciseId);
+  if (!par) return null;
+  const antes = dia.ejercicios.indexOf(par.propio) < dia.ejercicios.indexOf(par.pareja);
+  const primero = antes ? par.propio : par.pareja;
+  const segundo = antes ? par.pareja : par.propio;
+  const nP = hechasDe(sesion, primero.exerciseId).length;
+  const nS = hechasDe(sesion, segundo.exerciseId).length;
+  const compP = completo(primero, sesion);
+  const compS = completo(segundo, sesion);
+  if (nP > nS && !compS) return { id: segundo.exerciseId, corto: true };
+  if (nS > nP && !compP) return { id: primero.exerciseId, corto: true };
+  if (!compP) return { id: primero.exerciseId, corto: false };
+  if (!compS) return { id: segundo.exerciseId, corto: false };
+  return { id: siguientePendiente(dia, sesion, exerciseId), corto: false };
 }
 
 // --- Historial ---

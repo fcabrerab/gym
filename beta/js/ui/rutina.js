@@ -9,7 +9,7 @@ import { ctx } from "./contexto.js";
 import { miniatura, control, ponerErrorControl, boton, botonIcono, vacio, ayuda } from "./piezas.js";
 import * as almacen from "../almacen.js";
 import * as S from "../sesion.js";
-import { LIMITES, TIPOS, NOMBRE_TIPO, diaPorId, nombreDia, normalizarImagen, normalizarIncremento } from "../modelo.js";
+import { LIMITES, TIPOS, NOMBRE_TIPO, DESCANSO_SUPERSET_DEFECTO, diaPorId, nombreDia, normalizarImagen, normalizarIncremento, parejaSuperset } from "../modelo.js";
 import {
   ahora, idCorto, leerNumero, leerDescanso, formatoDescanso, formatoNumero, recortar, sinTildes, plural, limitar, redondear,
   NOMBRES_DIA, INICIALES_DIA, ORDEN_SEMANA,
@@ -25,6 +25,37 @@ function textoSemana(lista = []) {
 function enfocar(contenedor, accion, id) {
   const el = contenedor.querySelector(`[data-accion="${accion}"][data-id="${CSS.escape(id)}"]`);
   if (el && !el.disabled) el.focus({ preventScroll: true });
+}
+
+// --- Supersets (D-120): dos ejercicios del día, siempre seguidos en la lista, que se mueven juntos ---
+
+// Agrupa la lista de ejercicios de un día: {tipo: "solo", entrada} o {tipo: "superset", a, b} (dos seguidos con
+// el mismo supersetId). Lo usan tanto el pintado como el subir/bajar (que mueven el grupo entero).
+function agruparEjercicios(lista) {
+  const grupos = [];
+  for (let i = 0; i < lista.length; i += 1) {
+    const e = lista[i];
+    const sig = lista[i + 1];
+    if (e.supersetId && sig?.supersetId === e.supersetId) {
+      grupos.push({ tipo: "superset", a: e, b: sig });
+      i += 1;
+    } else {
+      grupos.push({ tipo: "solo", entrada: e });
+    }
+  }
+  return grupos;
+}
+
+// Sube o baja el grupo (solo o superset) al que pertenece el ejercicio, entero, pasando por encima del grupo
+// vecino (que puede ser de 1 o de 2). Devuelve true si lo ha movido.
+function moverGrupo(dia, exerciseId, sentido) {
+  const grupos = agruparEjercicios(dia.ejercicios);
+  const i = grupos.findIndex((g) => (g.tipo === "solo" ? g.entrada.exerciseId === exerciseId : g.a.exerciseId === exerciseId || g.b.exerciseId === exerciseId));
+  const j = i + sentido;
+  if (i < 0 || j < 0 || j >= grupos.length) return false;
+  [grupos[i], grupos[j]] = [grupos[j], grupos[i]];
+  dia.ejercicios = grupos.flatMap((g) => (g.tipo === "solo" ? [g.entrada] : [g.a, g.b]));
+  return true;
 }
 
 export function pintarRutina(contenedor, ruta) {
@@ -72,15 +103,28 @@ function pintarDia(contenedor, id) {
       class: ["semana-dia", dia.diasSemana.includes(w) && "activo"], type: "button", "data-accion": "dia-semana", "data-id": dia.id,
       "data-dia": String(w), "aria-pressed": String(dia.diasSemana.includes(w)), "aria-label": NOMBRES_DIA[w],
     }, INICIALES_DIA[w])));
-  const filas = dia.ejercicios.map((e, i) => {
+  const grupos = agruparEjercicios(dia.ejercicios);
+  const nGrupos = grupos.length;
+  const filaMiembro = (e) => {
     const x = datos.ejercicios[e.exerciseId] || { name: e.exerciseId };
-    return h("li", { class: "fila-con-orden" },
-      h("button", { class: "fila", type: "button", "data-accion": "editar-entrada", "data-id": e.exerciseId },
-        miniatura(x, { tamano: 48 }),
-        h("span", { class: "fila-textos" }, h("span", { class: "fila-titulo" }, x.name), h("span", { class: "fila-datos" }, `${e.series} × ${e.reps} · ${e.rest}`))),
-      h("div", { class: "botones-orden" },
-        botonIcono("arriba", "subir-ejercicio", `Subir ${x.name}`, { id: e.exerciseId, extra: { disabled: i === 0 } }),
-        botonIcono("abajo", "bajar-ejercicio", `Bajar ${x.name}`, { id: e.exerciseId, extra: { disabled: i === n - 1 } })));
+    return h("button", { class: "fila fila-superset-miembro", type: "button", "data-accion": "editar-entrada", "data-id": e.exerciseId },
+      miniatura(x, { tamano: 48 }),
+      h("span", { class: "fila-textos" }, h("span", { class: "fila-titulo" }, x.name), h("span", { class: "fila-datos" }, `${e.series} × ${e.reps} · ${e.rest}`)));
+  };
+  const filas = grupos.map((g, i) => {
+    const idGrupo = g.tipo === "solo" ? g.entrada.exerciseId : g.a.exerciseId;
+    const etiquetaOrden = g.tipo === "solo" ? (datos.ejercicios[g.entrada.exerciseId]?.name || "el ejercicio") : "el superset";
+    const subirBajar = h("div", { class: "botones-orden" },
+      botonIcono("arriba", "subir-ejercicio", `Subir ${etiquetaOrden}`, { id: idGrupo, extra: { disabled: i === 0 } }),
+      botonIcono("abajo", "bajar-ejercicio", `Bajar ${etiquetaOrden}`, { id: idGrupo, extra: { disabled: i === nGrupos - 1 } }));
+    if (g.tipo === "solo") return h("li", { class: "fila-con-orden" }, filaMiembro(g.entrada), subirBajar);
+    // A toda la anchura (si no, los dos miembros quedan demasiado estrechos junto a los botones de orden):
+    // el superset arriba, lado a lado, y subir/bajar debajo, a la derecha.
+    return h("li", { class: "fila-superset-grupo" },
+      h("div", { class: "fila-superset" },
+        h("p", { class: "fila-superset-etiqueta" }, icono("enlace", { tamano: 15 }), h("span", null, `Superset · descanso ${g.a.restSuperset}`)),
+        h("div", { class: "fila-superset-miembros" }, filaMiembro(g.a), filaMiembro(g.b))),
+      subirBajar);
   });
   const unico = datos.dias.length <= 1;
   vaciar(contenedor).append(h("div", { class: "pantalla-rutina", "data-dia": dia.id },
@@ -147,10 +191,7 @@ export function alAccionRutina(accion, el) {
       almacen.mutar((d) => {
         const dia = diaPorId(d, diaId);
         if (!dia) return;
-        const i = dia.ejercicios.findIndex((e) => e.exerciseId === id);
-        const j = i + (accion === "subir-ejercicio" ? -1 : 1);
-        if (i < 0 || j < 0 || j >= dia.ejercicios.length) return;
-        [dia.ejercicios[i], dia.ejercicios[j]] = [dia.ejercicios[j], dia.ejercicios[i]];
+        moverGrupo(dia, id, accion === "subir-ejercicio" ? -1 : 1);
       });
       ctx.repintar();
       return enfocar(contenedor, accion, id);
@@ -360,10 +401,38 @@ function elegirOtroDia({ titulo, diaId, exerciseId }) {
   });
 }
 
+// Elige con qué otro ejercicio del mismo día formar un superset (D-120). Devuelve el exerciseId o null. Solo
+// enseña los que todavía no están en un superset (uno ya emparejado habría que separarlo antes).
+function elegirParaSuperset({ diaId, exerciseId }) {
+  return new Promise((resolver) => {
+    let elegido = null;
+    const datos = almacen.datos();
+    const dia = diaPorId(datos, diaId);
+    const candidatos = (dia?.ejercicios || []).filter((e) => e.exerciseId !== exerciseId && !e.supersetId);
+    const filas = candidatos.map((e) => {
+      const x = datos.ejercicios[e.exerciseId] || { name: e.exerciseId };
+      return h("li", null, h("button", { class: "fila fila-biblioteca", type: "button", "data-accion": "elegir-pareja", "data-id": e.exerciseId },
+        miniatura(x, { tamano: 48 }), h("span", { class: "fila-textos" }, h("span", { class: "fila-titulo" }, x.name))));
+    });
+    const hoja = abrirHoja({
+      titulo: "Unir en superset con…",
+      cuerpo: candidatos.length ? h("ul", { class: "lista-filas" }, filas) : vacio("No queda ningún otro ejercicio libre en este día."),
+      alAccion: (accion, el) => {
+        if (accion === "elegir-pareja") {
+          elegido = el.dataset.id;
+          hoja.cerrar();
+        }
+      },
+      alCerrar: () => setTimeout(() => resolver(elegido), 0),
+    });
+  });
+}
+
 // --- Hoja del ejercicio (también se abre desde Entreno con «Editar») ---
 
 const ATAJOS_REPS = ["8-12", "10-15", "12-15", "12-20"];
 const ATAJOS_DESCANSO = ["1:00", "1:30", "2:00", "2:30", "3:00"];
+const ATAJOS_DESCANSO_SUPERSET = ["0:15", "0:20", "0:30", "0:40", "1:00"];
 const ATAJOS_INCREMENTO = [1, 2, 2.5, 5];
 
 export function abrirHojaEjercicio(diaId, exerciseId, { alCerrar = null } = {}) {
@@ -391,6 +460,24 @@ export function abrirHojaEjercicio(diaId, exerciseId, { alCerrar = null } = {}) 
     campo("incremento", "Sube de (kg)", h("div", null, texto("incremento", formatoNumero(x.incremento ?? 2.5), { inputmode: "decimal" }),
       chips("incremento-atajo", ATAJOS_INCREMENTO, (v) => formatoNumero(v))), "Lo que suman o restan −/+ al apuntar el peso."));
 
+  // Superset (D-120): dos ejercicios del día, intercalados (una serie de uno, una del otro). Con pareja, su
+  // descanso corto se ajusta aquí, como el de siempre; sin ella, un botón para unirlo con otro del mismo día.
+  const parSuperset = parejaSuperset(dia, exerciseId);
+  const bloqueSuperset = parSuperset
+    ? h("div", { class: "tarjeta formulario" },
+      h("h3", { class: "tarjeta-titulo" }, "Superset"),
+      h("p", { class: "ayuda" }, `Va intercalado con ${datos.ejercicios[parSuperset.pareja.exerciseId]?.name || "otro ejercicio"}: una serie de uno, una del otro.`),
+      h("div", { class: "campo" },
+        control({
+          campo: "restSuperset", rotulo: "Descanso entre los dos", valor: parSuperset.propio.restSuperset, inputmode: "text", id: exerciseId,
+          textoMenos: "−5 s", textoMas: "+5 s", etiquetaMenos: "Quitar 5 segundos de descanso", etiquetaMas: "Añadir 5 segundos de descanso",
+        }),
+        chips("restSuperset-atajo", ATAJOS_DESCANSO_SUPERSET)),
+      h("button", { class: "enlace-boton enlace-peligro", type: "button", "data-accion": "separar-superset" }, icono("papelera", { tamano: 18 }), h("span", null, "Separar el superset")))
+    : dia.ejercicios.length > 1
+      ? boton("Unir con otro ejercicio en superset…", "unir-superset", { clase: "boton-secundario boton-ancho", ico: "enlace" })
+      : null;
+
   const cuerpo = h("div", { class: "formulario" },
     campo("name", "Nombre", texto("name", x.name, { maxlength: String(LIMITES.nombre) })),
     h("div", { class: "campo" }, h("p", { class: "campo-rotulo" }, "Tipo"), tipos),
@@ -401,6 +488,7 @@ export function abrirHojaEjercicio(diaId, exerciseId, { alCerrar = null } = {}) 
       control({ campo: "rest", rotulo: "Descanso", valor: entrada.rest, inputmode: "text", id: exerciseId, textoMenos: "−15 s", textoMas: "+15 s", etiquetaMenos: "Quitar 15 segundos de descanso", etiquetaMas: "Añadir 15 segundos de descanso" }),
       chips("rest-atajo", ATAJOS_DESCANSO)),
     bloqueMarca,
+    bloqueSuperset,
     campo("muscleGroup", "Grupo muscular", texto("muscleGroup", x.muscleGroup, { maxlength: String(LIMITES.grupo), list: "grupos-existentes" })),
     datalistGrupos(datos),
     campo("notas", "Notas de la máquina", h("textarea", { class: "campo-texto campo-area", id: "hoja-notas", "data-campo": "notas", maxlength: String(LIMITES.notas), rows: "2", value: x.notas || "" }),
@@ -469,6 +557,20 @@ export function abrirHojaEjercicio(diaId, exerciseId, { alCerrar = null } = {}) 
         ponerErrorControl(ctrl, "");
         nodo.value = formatoDescanso(s);
         return guardarEntrada({ rest: formatoDescanso(s) });
+      }
+      case "restSuperset": {
+        const s = leerDescanso(valor);
+        const ctrl = nodo.closest(".control");
+        if (s == null) return ponerErrorControl(ctrl, "Escribe el descanso como 0:30 (minutos:segundos).");
+        ponerErrorControl(ctrl, "");
+        const formateado = formatoDescanso(limitar(s, 0, LIMITES.descansoMax));
+        nodo.value = formateado;
+        return almacen.mutar((d) => {
+          const dd = diaPorId(d, diaId);
+          const propio = dd?.ejercicios.find((e) => e.exerciseId === exerciseId);
+          if (!propio?.supersetId) return;
+          for (const e of dd.ejercicios) if (e.supersetId === propio.supersetId) e.restSuperset = formateado;
+        });
       }
       case "pr": {
         const ctrl = nodo.closest(".control");
@@ -569,6 +671,65 @@ export function abrirHojaEjercicio(diaId, exerciseId, { alCerrar = null } = {}) 
           validarYGuardar("rest", c);
           return;
         }
+        case "restSuperset-menos": case "restSuperset-mas": {
+          const c = valorDe("restSuperset");
+          const s = limitar((leerDescanso(c.value) ?? DESCANSO_SUPERSET_DEFECTO) + (accion === "restSuperset-mas" ? 5 : -5), 0, LIMITES.descansoMax);
+          c.value = formatoDescanso(s);
+          validarYGuardar("restSuperset", c);
+          return;
+        }
+        case "restSuperset-atajo": {
+          const c = valorDe("restSuperset");
+          c.value = el.dataset.valor;
+          validarYGuardar("restSuperset", c);
+          return;
+        }
+        case "unir-superset": {
+          elegirParaSuperset({ diaId, exerciseId }).then((parejaId) => {
+            if (!parejaId) return;
+            almacen.mutar((d) => {
+              const dd = diaPorId(d, diaId);
+              const propio = dd?.ejercicios.find((e) => e.exerciseId === exerciseId);
+              const otro = dd?.ejercicios.find((e) => e.exerciseId === parejaId);
+              if (!propio || !otro || propio.supersetId || otro.supersetId) return;
+              const id = `ss-${crypto.randomUUID()}`;
+              const texto = formatoDescanso(DESCANSO_SUPERSET_DEFECTO);
+              propio.supersetId = id;
+              propio.restSuperset = texto;
+              otro.supersetId = id;
+              otro.restSuperset = texto;
+              // Los deja seguidos, justo donde estaba el propio (así se mueven juntos al reordenar).
+              const iOtro = dd.ejercicios.findIndex((e) => e.exerciseId === parejaId);
+              const [sacado] = dd.ejercicios.splice(iOtro, 1);
+              const iPropio = dd.ejercicios.findIndex((e) => e.exerciseId === exerciseId);
+              dd.ejercicios.splice(iPropio + 1, 0, sacado);
+            });
+            hoja.cerrar().then(() => {
+              ctx.repintar();
+              avisar({ texto: "Superset creado." });
+            });
+          });
+          return;
+        }
+        case "separar-superset": {
+          almacen.mutar((d) => {
+            const dd = diaPorId(d, diaId);
+            const propio = dd?.ejercicios.find((e) => e.exerciseId === exerciseId);
+            if (!propio?.supersetId) return;
+            const otro = dd.ejercicios.find((e) => e.supersetId === propio.supersetId && e.exerciseId !== exerciseId);
+            delete propio.supersetId;
+            delete propio.restSuperset;
+            if (otro) {
+              delete otro.supersetId;
+              delete otro.restSuperset;
+            }
+          });
+          hoja.cerrar().then(() => {
+            ctx.repintar();
+            avisar({ texto: "Superset deshecho." });
+          });
+          return;
+        }
         case "incremento-atajo": {
           const c = valorDe("incremento");
           c.value = formatoNumero(Number(el.dataset.valor));
@@ -588,8 +749,21 @@ export function abrirHojaEjercicio(diaId, exerciseId, { alCerrar = null } = {}) 
               const dest = diaPorId(d, destino);
               const entradaActual = origen?.ejercicios.find((e) => e.exerciseId === exerciseId);
               if (!entradaActual || !dest || dest.ejercicios.some((e) => e.exerciseId === exerciseId) || dest.ejercicios.length >= LIMITES.ejerciciosPorDia) return;
-              dest.ejercicios.push(structuredClone(entradaActual));
-              if (mover) origen.ejercicios = origen.ejercicios.filter((e) => e.exerciseId !== exerciseId);
+              // La copia, suelta en el otro día (D-120): un superset necesita a los dos en el mismo día.
+              const copia = structuredClone(entradaActual);
+              delete copia.supersetId;
+              delete copia.restSuperset;
+              dest.ejercicios.push(copia);
+              if (mover) {
+                if (entradaActual.supersetId) {
+                  const otro = origen.ejercicios.find((e) => e.supersetId === entradaActual.supersetId && e.exerciseId !== exerciseId);
+                  if (otro) {
+                    delete otro.supersetId;
+                    delete otro.restSuperset;
+                  }
+                }
+                origen.ejercicios = origen.ejercicios.filter((e) => e.exerciseId !== exerciseId);
+              }
             });
             const destinoDia = diaPorId(almacen.datos(), destino);
             const texto = `${mover ? "Movido" : "Copiado"} a ${destinoDia?.label || "otro día"}: ${nombre}`;

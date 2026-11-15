@@ -1,11 +1,20 @@
 // Versión de la beta. La misma VERSION está en ../sw.js y en la meta «gym-beta-version» de ../index.html: cada
 // cambio en un archivo de beta/ obliga a subirla en los tres sitios (una prueba de tests/ comprueba que coinciden).
-export const VERSION = "0.2.6";
-export const FECHA_VERSION = "2026-11-08";
+export const VERSION = "0.2.7";
+export const FECHA_VERSION = "2026-11-15";
 
 // Novedades por versión, de la más nueva a la más vieja. Se enseñan en Ajustes → Beta → Novedades y, la primera
 // vez, en «Qué tiene de nuevo».
 export const NOVEDADES = [
+  {
+    version: "0.2.7",
+    fecha: "2026-11-15",
+    cambios: [
+      "Supersets: en la hoja de un ejercicio, «Unir con otro ejercicio en superset…» los junta para hacerlos intercalados (una serie de uno, una del otro). Se ven lado a lado, con un descanso corto entre los dos (ajustable, 0:30 de base) y el de siempre al completar la pareja.",
+      "Al reordenar en Rutina, el superset se mueve entero; «Separar el superset» lo deshace.",
+      "En Entreno, el descanso corto cambia al otro ejercicio; el de siempre, al volver a empezar ronda.",
+    ],
+  },
   {
     version: "0.2.6",
     fecha: "2026-11-08",

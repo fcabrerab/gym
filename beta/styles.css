@@ -216,13 +216,25 @@ a { color: var(--info); }
 }
 .ayuda-serie .icono { color: var(--info); }
 
-.lista-ej { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+/* Dos columnas: un ejercicio normal ocupa las dos (grid-column: 1 / -1); los dos de un superset replegado (D-120),
+   una cada uno, así quedan lado a lado (y uno bajo otro si no cabe, con flex-wrap no haría falta nada más, pero
+   el grid dos columnas ya se encarga solo). */
+.lista-ej { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .ej {
+  grid-column: 1 / -1;
   background: var(--superficie); border: 1px solid var(--borde); border-radius: 16px; box-shadow: var(--sombra);
   scroll-margin-top: calc(var(--alto-cabecera-real, var(--alto-cabecera)) + 8px);
   scroll-margin-bottom: calc(var(--alto-nav) + var(--alto-barra) + 16px);
 }
 .ej.abierto { border: 2px solid var(--info); }
+.ej.ej-en-columna { grid-column: auto; }
+.ej-superset-etiqueta {
+  margin: 0; padding: 6px 10px 0; display: flex; align-items: center; gap: 4px;
+  font-size: 12px; font-weight: 700; color: var(--info); text-transform: uppercase; letter-spacing: .02em;
+}
+.ej-superset-etiqueta .icono { flex: none; }
+.ej-en-columna .ej-fila { min-height: 64px; padding: 6px 10px 6px 6px; }
+.ej-en-columna .ej-nombre { -webkit-line-clamp: 3; line-clamp: 3; }
 .ej-fila {
   display: flex; align-items: center; gap: 12px; width: 100%; min-height: 72px; padding: 8px 12px 8px 8px;
   background: none; border: 0; border-radius: 16px; text-align: left;
@@ -492,6 +504,22 @@ body.con-hoja .avisos { top: calc(env(safe-area-inset-top) + 12px); bottom: auto
 .fila-con-orden .fila { flex: 1; min-width: 0; }
 .botones-orden { display: flex; gap: 8px; flex: none; }
 .botones-orden .boton-icono { background: var(--superficie-2); border: 1px solid var(--borde); }
+
+/* Superset (D-120) en el editor de la rutina: a toda la anchura (junto a los botones de orden, los dos
+   ejercicios quedarían demasiado estrechos), con subir/bajar debajo, a la derecha. */
+.fila-superset-grupo { display: flex; flex-direction: column; gap: 6px; }
+.fila-superset-grupo .botones-orden { align-self: flex-end; }
+.fila-superset {
+  display: flex; flex-direction: column; gap: 8px; padding: 10px;
+  background: var(--seleccion); border: 1px solid var(--info); border-radius: 16px;
+}
+.fila-superset-etiqueta {
+  margin: 0; display: flex; align-items: center; gap: 4px;
+  font-size: 12px; font-weight: 700; color: var(--info); text-transform: uppercase; letter-spacing: .02em;
+}
+.fila-superset-etiqueta .icono { flex: none; }
+.fila-superset-miembros { display: flex; flex-wrap: wrap; gap: 8px; }
+.fila-superset-miembro { flex: 1 1 150px; min-width: 150px; min-height: 56px; }
 .fila-con-boton {
   display: flex; align-items: center; gap: 8px; padding: 8px 8px 8px 12px; min-height: 64px;
   background: var(--superficie); border: 1px solid var(--borde); border-radius: 16px;

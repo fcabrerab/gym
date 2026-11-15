@@ -92,6 +92,7 @@ const TRAZOS = {
   alerta: ["M12 3.5l9.5 16.5h-19z", "M12 10v4.5", "M12 17.2v.3"],
   trofeo: ["M8 4h8v5a4 4 0 0 1-8 0z", "M8 6H5v1a3 3 0 0 0 3 3", "M16 6h3v1a3 3 0 0 1-3 3", "M12 13v4", "M8.5 20h7", "M10 17h4"],
   campana: ["M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z", "M10 20.5h4"],
+  enlace: ["M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7", "M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"],
 };
 
 export function icono(nombre, { tamano = 24, clase = "" } = {}) {

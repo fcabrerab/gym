@@ -2,7 +2,7 @@
 // migraciones, deducción del tipo de ejercicio y de los días de la semana, y el tiempo estimado.
 // Todo son funciones puras: reciben la hora como parámetro y no tocan el almacenamiento.
 
-import { leerDescanso, leerNumero, sinTildes, recortar, limitar, fechaValida } from "./util.js";
+import { leerDescanso, formatoDescanso, leerNumero, sinTildes, recortar, limitar, fechaValida } from "./util.js";
 
 export const ESQUEMA = 1;
 
@@ -24,6 +24,10 @@ export const AJUSTES_POR_DEFECTO = Object.freeze({
   segundosPorSerie: 40,
   recordatorioCopiaDias: 7,
 });
+
+// Descanso corto por defecto entre el A y el B de un superset (D-120): se ajusta por pareja, en la hoja del
+// ejercicio, igual que el descanso de siempre.
+export const DESCANSO_SUPERSET_DEFECTO = 30;
 
 // Los textos tienen margen de sobra para lo que llega de la versión normal (que no pone límites): así copiar e
 // importar no recortan nada en la práctica. Si algo pasa de aquí, se recorta con aviso.
@@ -218,6 +222,45 @@ export function apartarRaros(lista, valido, tipo, descartado) {
   return buenos;
 }
 
+// Un superset (D-120) son dos ejercicios del mismo día con el mismo «supersetId», siempre seguidos en la lista
+// (así se mueven juntos al reordenar). Lo que no cumple eso (un id suelto, con uno solo o con tres o más) se
+// limpia: queda cada ejercicio por su cuenta. El descanso corto entre los dos («restSuperset») se deja igual en
+// los dos del par; si falta o no se entiende, el de por defecto.
+function repararSupersetsDia(dia) {
+  const porId = new Map();
+  for (const e of dia.ejercicios) {
+    if (esTexto(e.supersetId) && e.supersetId) {
+      (porId.get(e.supersetId) ?? porId.set(e.supersetId, []).get(e.supersetId)).push(e);
+    } else {
+      delete e.supersetId;
+      delete e.restSuperset;
+    }
+  }
+  const validos = [];
+  for (const miembros of porId.values()) {
+    if (miembros.length !== 2) {
+      for (const e of miembros) {
+        delete e.supersetId;
+        delete e.restSuperset;
+      }
+      continue;
+    }
+    const segundos = miembros.map((e) => leerDescanso(e.restSuperset)).find((s) => s != null) ?? DESCANSO_SUPERSET_DEFECTO;
+    const texto = formatoDescanso(limitar(segundos, 0, LIMITES.descansoMax));
+    for (const e of miembros) e.restSuperset = texto;
+    validos.push(miembros);
+  }
+  // El editor y la sesión dan por hecho que los dos de una pareja van siempre seguidos en la lista (así se
+  // mueven juntos al reordenar): una copia importada a mano que los traiga separados, aquí se junta.
+  for (const [a, b] of validos) {
+    const iA = dia.ejercicios.indexOf(a);
+    const iB = dia.ejercicios.indexOf(b);
+    if (Math.abs(iA - iB) === 1) continue;
+    dia.ejercicios.splice(dia.ejercicios.indexOf(b), 1);
+    dia.ejercicios.splice(dia.ejercicios.indexOf(a) + 1, 0, b);
+  }
+}
+
 // Completa lo que falte y no es esencial. Lo que tiene forma rara se aparta en «descartado» (no se pierde).
 export function reparar(entrada) {
   const d = structuredClone(entrada);
@@ -237,6 +280,7 @@ export function reparar(entrada) {
     dia.diasSemana = Array.isArray(dia.diasSemana)
       ? [...new Set(dia.diasSemana.filter((n) => Number.isInteger(n) && n >= 0 && n <= 6))]
       : deducirDiasSemana(dia.id, dia.label);
+    repararSupersetsDia(dia);
   }
   const antes = d.descartado.length;
   d.sesiones = apartarRaros(d.sesiones, sesionValida, "sesion", d.descartado).map(completarSesion);
@@ -290,6 +334,16 @@ export function nombreDia(dia) {
 
 export function seriesDelDia(dia) {
   return (dia?.ejercicios || []).reduce((s, e) => s + (Number(e.series) || 0), 0);
+}
+
+// La pareja de un ejercicio en un superset (D-120), o null si no está en uno. {propio, pareja}: las dos entradas
+// del día, tal cual (con su series, reps, rest y restSuperset).
+export function parejaSuperset(dia, exerciseId) {
+  const lista = dia?.ejercicios || [];
+  const propio = lista.find((e) => e.exerciseId === exerciseId);
+  if (!propio?.supersetId) return null;
+  const pareja = lista.find((e) => e.supersetId === propio.supersetId && e.exerciseId !== exerciseId);
+  return pareja ? { propio, pareja } : null;
 }
 
 // La marca de cada ejercicio es el kg de su última entrada en «marcas» (o null si no tiene ninguna).

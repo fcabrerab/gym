@@ -376,4 +376,62 @@ async function correcciones({ caso, util, modelo, normal, copias, S, rutina, eje
   const descanso = await import("/beta/js/descanso.js");
   caso(descanso.empezarDescanso({ exerciseId: "x", diaId: "d", nombre: "X", texto: "t", duracion: 0 }) === null && !localStorage.getItem("gym-beta-descanso"),
     "empezarDescanso con 0 s no empieza ningún descanso");
+
+  // --- Supersets (D-120) ---
+
+  // reparar() junta a los que no están seguidos, les pone el descanso corto por defecto y limpia un supersetId
+  // sin pareja (o con tres o más).
+  const dsJuntar = await datosBeta();
+  const diaJuntar = dsJuntar.dias.find((d) => d.id === "tuesday-push");
+  const [sA, sB, sC] = diaJuntar.ejercicios;
+  sA.supersetId = "ss-separados";
+  sC.supersetId = "ss-separados"; // sB queda en medio: no están seguidos
+  const diaJuntado = modelo.reparar(dsJuntar).datos.dias.find((d) => d.id === "tuesday-push");
+  const iJA = diaJuntado.ejercicios.findIndex((e) => e.exerciseId === sA.exerciseId);
+  const iJC = diaJuntado.ejercicios.findIndex((e) => e.exerciseId === sC.exerciseId);
+  caso(Math.abs(iJA - iJC) === 1 && diaJuntado.ejercicios[iJA].restSuperset === "0:30" && diaJuntado.ejercicios[iJC].restSuperset === "0:30",
+    `reparar junta un superset que no estaba seguido (índices ${iJA} y ${iJC}) y le pone 0:30 por defecto`);
+  const dsSuelto = await datosBeta();
+  dsSuelto.dias.find((d) => d.id === "tuesday-push").ejercicios[0].supersetId = "ss-sin-pareja";
+  const diaSuelto = modelo.reparar(dsSuelto).datos.dias.find((d) => d.id === "tuesday-push");
+  caso(!diaSuelto.ejercicios[0].supersetId && !diaSuelto.ejercicios[0].restSuperset, "reparar limpia un supersetId sin pareja");
+
+  // parejaSuperset y el flujo de la sesión: se alterna A/B con el descanso corto hasta que uno de los dos se
+  // completa, y entonces se sigue con el otro (descanso normal), hasta acabar los dos.
+  const dsFlujo = await datosBeta();
+  const diaFlujo = dsFlujo.dias.find((d) => d.id === "tuesday-push");
+  const [fA, fB, fC] = diaFlujo.ejercicios;
+  fA.supersetId = "ss-flujo"; fA.restSuperset = "0:20"; fA.series = 2;
+  fB.supersetId = "ss-flujo"; fB.restSuperset = "0:20"; fB.series = 1;
+  caso(modelo.parejaSuperset(diaFlujo, fA.exerciseId)?.pareja.exerciseId === fB.exerciseId, "parejaSuperset encuentra al otro del par");
+  caso(modelo.parejaSuperset(diaFlujo, fC.exerciseId) === null, "parejaSuperset da null fuera de un superset");
+  let sesS = S.empezarSesion(diaFlujo.id, 1);
+  sesS = S.marcarSerie(sesS, fA.exerciseId, { kg: 10, reps: 8 }, 1); // A, ronda 1 (le queda 1)
+  let sig = S.siguienteTrasSerieSuperset(diaFlujo, sesS, fA.exerciseId);
+  caso(sig?.id === fB.exerciseId && sig.corto === true, "tras la primera serie de A, toca B con el descanso corto");
+  sesS = S.marcarSerie(sesS, fB.exerciseId, { kg: 10, reps: 8 }, 2); // B, su única serie: ya completo
+  sig = S.siguienteTrasSerieSuperset(diaFlujo, sesS, fB.exerciseId);
+  caso(sig?.id === fA.exerciseId && sig.corto === false, "con B completo, se sigue con A (el descanso de siempre, no el corto)");
+  sesS = S.marcarSerie(sesS, fA.exerciseId, { kg: 10, reps: 8 }, 3); // A, ronda 2: también completo
+  sig = S.siguienteTrasSerieSuperset(diaFlujo, sesS, fA.exerciseId);
+  caso(sig?.id === fC.exerciseId, "con los dos del superset completos, se sigue con el siguiente de la lista");
+  caso(S.siguienteTrasSerieSuperset(diaFlujo, sesS, fC.exerciseId) === null, "un ejercicio sin pareja no entra en este flujo (null: sigue el de siempre)");
+  // Fuera de orden (se abre y marca antes el segundo del par): toca el primero, también con el descanso corto.
+  let sesOOO = S.empezarSesion(diaFlujo.id, 10);
+  sesOOO = S.marcarSerie(sesOOO, fB.exerciseId, { kg: 10, reps: 8 }, 10);
+  const sigOOO = S.siguienteTrasSerieSuperset(diaFlujo, sesOOO, fB.exerciseId);
+  caso(sigOOO?.id === fA.exerciseId && sigOOO.corto === true, "si se marca antes el segundo del par, toca el primero con el descanso corto");
+
+  // La exportación lleva el superset en «beta.dias» (no en «exercises», la forma que entiende la normal); al
+  // importar, vuelve con la misma pareja y su descanso corto.
+  const expFlujo = copias.construirExportacion(dsFlujo, 1);
+  const diaExportado = expFlujo.days.find((d) => d.id === diaFlujo.id);
+  caso(expFlujo.beta.dias[diaFlujo.id]?.supersets?.length === 1 && !("supersetId" in diaExportado.exercises[0]),
+    "la exportación lleva el superset en «beta.dias», no en «exercises» (la forma de la normal)");
+  const otrosFlujo = await datosBeta();
+  const leidoFlujo = await copias.leerCopia(JSON.stringify(expFlujo), { actuales: otrosFlujo, ahoraMs: 2, cargar });
+  const diaLeido = leidoFlujo.datosNuevos?.dias.find((d) => d.id === diaFlujo.id);
+  const parLeido = diaLeido ? modelo.parejaSuperset(diaLeido, fA.exerciseId) : null;
+  caso(leidoFlujo.ok && parLeido?.pareja.exerciseId === fB.exerciseId && parLeido.propio.restSuperset === "0:20",
+    "al importar una copia, el superset y su descanso corto (0:20) vuelven");
 }

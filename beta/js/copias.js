@@ -3,14 +3,29 @@
 
 import { VERSION } from "./version.js";
 import {
-  ESQUEMA, AJUSTES_NORMAL, LIMITES, TIPOS, normalizarAjustes, normalizarIncremento, normalizarEjercicio, normalizarMarca,
+  ESQUEMA, AJUSTES_NORMAL, LIMITES, TIPOS, DESCANSO_SUPERSET_DEFECTO, normalizarAjustes, normalizarIncremento, normalizarEjercicio, normalizarMarca,
   sesionValida, marcaValida, apunteValido, normalizarApunte, apartarRaros, completarSesion,
 } from "./modelo.js";
 import { fusionarComoLaNormal, datosDesdeSnapshot, cargarBase, sanear } from "./normal.js";
-import { fechaLocal, recortar, diasEntre } from "./util.js";
+import { fechaLocal, recortar, diasEntre, leerDescanso, formatoDescanso } from "./util.js";
 
 const esObjeto = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
 const dos = (n) => String(n).padStart(2, "0");
+
+// Los supersets (D-120) de un día, para «beta.dias» en la exportación: la forma de «exercises» (D-120, la que
+// entiende la normal) no se toca, así que van aparte, como los días de la semana.
+function paresDeSuperset(dia) {
+  const porId = new Map();
+  for (const e of dia.ejercicios) {
+    if (!e.supersetId) continue;
+    (porId.get(e.supersetId) ?? porId.set(e.supersetId, []).get(e.supersetId)).push(e);
+  }
+  const pares = [];
+  for (const miembros of porId.values()) {
+    if (miembros.length === 2) pares.push({ a: miembros[0].exerciseId, b: miembros[1].exerciseId, rest: miembros[0].restSuperset });
+  }
+  return pares;
+}
 
 export const TEXTO_NO_PARECE = "Este archivo no parece una copia del gimnasio.";
 export const TEXTO_FORMA_RARA = "Este archivo no se puede cargar: tiene datos con una forma que la beta no entiende.";
@@ -63,7 +78,7 @@ export function construirExportacion(datos, ahoraMs) {
       ejercicios: Object.fromEntries(Object.entries(datos.ejercicios).map(([id, x]) => [id, {
         name: x.name, image: x.image, muscleGroup: x.muscleGroup, pr: x.pr ?? null, tipo: x.tipo, incremento: x.incremento, notas: x.notas,
       }])),
-      dias: Object.fromEntries(datos.dias.map((d) => [d.id, { diasSemana: d.diasSemana }])),
+      dias: Object.fromEntries(datos.dias.map((d) => [d.id, { diasSemana: d.diasSemana, supersets: paresDeSuperset(d) }])),
       sesiones: datos.sesiones,
       marcas: datos.marcas,
       apuntes: datos.apuntes,
@@ -222,6 +237,20 @@ function leerExportacion(v, { actuales, ahoraMs }) {
       for (const dia of datos.dias) {
         const ds = beta.dias[dia.id]?.diasSemana;
         if (Array.isArray(ds)) dia.diasSemana = [...new Set(ds.filter((n) => Number.isInteger(n) && n >= 0 && n <= 6))];
+        const ss = beta.dias[dia.id]?.supersets;
+        if (!Array.isArray(ss)) continue;
+        for (const par of ss) {
+          if (!esObjeto(par)) continue;
+          const a = dia.ejercicios.find((e) => e.exerciseId === par.a);
+          const b = dia.ejercicios.find((e) => e.exerciseId === par.b);
+          if (!a || !b || a === b || a.supersetId || b.supersetId) continue;
+          const segundos = leerDescanso(par.rest) ?? DESCANSO_SUPERSET_DEFECTO;
+          const id = `ss-${a.exerciseId}-${b.exerciseId}`;
+          a.supersetId = id;
+          a.restSuperset = formatoDescanso(segundos);
+          b.supersetId = id;
+          b.restSuperset = formatoDescanso(segundos);
+        }
       }
     }
     if (Array.isArray(beta.sesiones) || Array.isArray(beta.marcas)) {

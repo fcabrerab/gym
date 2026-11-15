@@ -16,7 +16,7 @@ import * as almacen from "../almacen.js";
 import * as S from "../sesion.js";
 import * as descanso from "../descanso.js";
 import * as copiaPc from "../copia-pc.js";
-import { estimarTiempo, tiempoRestante, diaPorId, LIMITES } from "../modelo.js";
+import { estimarTiempo, tiempoRestante, diaPorId, parejaSuperset, DESCANSO_SUPERSET_DEFECTO, LIMITES } from "../modelo.js";
 import { necesitaCopia, guardarCopiaAuto } from "../copias.js";
 import {
   ahora, fechaLocal, fechaCorta, diaMes, hora, haceDias, formatoKg, formatoNumero, formatoMinutos, formatoDuracion, formatoCuenta,
@@ -291,7 +291,13 @@ function pintarLista() {
     return;
   }
   est.lista.hidden = false;
-  for (const entrada of dia.ejercicios) est.lista.append(bloque(entrada, datos, dia, enCurso));
+  for (const entrada of dia.ejercicios) {
+    const par = parejaSuperset(dia, entrada.exerciseId);
+    // Lado a lado solo con los dos replegados: si cualquiera de los dos está abierto, los dos pasan a ocupar
+    // toda la fila (igual que un ejercicio normal: más sitio para la serie y los controles).
+    const enColumna = Boolean(par) && est.abierto !== entrada.exerciseId && est.abierto !== par.pareja.exerciseId;
+    est.lista.append(bloque(entrada, datos, dia, enCurso, { par, enColumna }));
+  }
   pintarTodoHecho();
 }
 
@@ -311,18 +317,28 @@ function bloqueDe(id) {
   return est.lista?.querySelector(`li[data-ej="${CSS.escape(id)}"]`) || null;
 }
 
+// La pareja de un superset (D-120), o null. Al abrir, cerrar o posponer uno de los dos, el otro también cambia
+// de ancho (de lado a lado a toda la fila, o al revés): hay que repintarlo también.
+function idPareja(dia, id) {
+  return id ? (parejaSuperset(dia, id)?.pareja.exerciseId ?? null) : null;
+}
+
 function pospuestos(enCurso, diaId) {
   return enCurso ? enCurso.pospuestos || [] : est.pospuestosSin[diaId] || [];
 }
 
-function bloque(entrada, datos, dia, enCurso) {
+function bloque(entrada, datos, dia, enCurso, { par = null, enColumna = false } = {}) {
   const id = entrada.exerciseId;
   const x = datos.ejercicios[id] || { id, name: id, tipo: "peso", image: "", muscleGroup: "" };
   const hechas = S.hechasDe(enCurso, id);
   const completo = hechas.length >= entrada.series;
   const pospuesto = !completo && pospuestos(enCurso, dia.id).includes(id);
   const abierto = est.abierto === id;
-  const li = h("li", { class: ["ej", abierto && "abierto", completo && "hecho"], "data-ej": id });
+  const li = h("li", { class: ["ej", abierto && "abierto", completo && "hecho", par && "ej-superset", enColumna && "ej-en-columna"], "data-ej": id });
+
+  const superset = par
+    ? h("p", { class: "ej-superset-etiqueta" }, icono("enlace", { tamano: 15 }), h("span", null, `Superset · descanso ${entrada.restSuperset}`))
+    : null;
 
   const estado = completo
     ? h("span", { class: "ej-estado ej-estado-hecho" }, icono("check", { tamano: 20 }), h("span", null, `${hechas.length}/${entrada.series}`))
@@ -331,17 +347,18 @@ function bloque(entrada, datos, dia, enCurso) {
       : h("span", { class: "ej-estado" }, `${hechas.length}/${entrada.series}`);
 
   if (!abierto) {
-    li.append(h("button", { class: "ej-fila", type: "button", "data-accion": "abrir-ejercicio", "data-id": id, "aria-expanded": "false" },
+    li.append(...[superset, h("button", { class: "ej-fila", type: "button", "data-accion": "abrir-ejercicio", "data-id": id, "aria-expanded": "false" },
       miniatura(x, { tamano: 56 }),
       h("span", { class: "ej-textos" },
         h("span", { class: "ej-nombre" }, x.name),
         h("span", { class: "ej-datos" }, completo ? textoSeries(hechas, x.tipo) : lineaDatos(entrada, x))),
-      estado));
+      estado)].filter(Boolean));
     return li;
   }
 
   const plan = `${entrada.series} × ${entrada.reps} · descanso ${entrada.rest}`;
   const lineaGrupo = [x.muscleGroup, x.tipo === "peso" && x.pr != null ? `Marca ${formatoKg(x.pr)}` : null].filter(Boolean).join(" · ");
+  if (superset) li.append(superset);
   li.append(h("div", { class: "ej-cabecera" },
     x.image
       ? h("button", { class: "ej-foto", type: "button", "data-accion": "ver-imagen", "data-id": id, "aria-label": `Ver la imagen de ${x.name}` }, miniatura(x, { tamano: 72 }))
@@ -468,7 +485,11 @@ function repintarBloques(ids) {
   for (const id of new Set(ids.filter(Boolean))) {
     const viejo = bloqueDe(id);
     const entrada = dia.ejercicios.find((e) => e.exerciseId === id);
-    if (viejo && entrada) viejo.replaceWith(bloque(entrada, datos, dia, enCurso));
+    if (viejo && entrada) {
+      const par = parejaSuperset(dia, id);
+      const enColumna = Boolean(par) && est.abierto !== id && est.abierto !== par.pareja.exerciseId;
+      viejo.replaceWith(bloque(entrada, datos, dia, enCurso, { par, enColumna }));
+    }
   }
   pintarResumen();
   pintarTodoHecho();
@@ -618,11 +639,11 @@ function elegirDia(id) {
 function alternarEjercicio(id) {
   const anterior = est.abierto;
   est.abierto = anterior === id ? null : id;
-  const { enCurso } = datosDia();
+  const { dia, enCurso } = datosDia();
   if (enCurso && enCurso.actual !== est.abierto) {
     almacen.guardarSesion({ ...enCurso, actual: est.abierto });
   }
-  repintarBloques([anterior, id]);
+  repintarBloques([anterior, id, idPareja(dia, anterior), idPareja(dia, id)]);
   if (est.abierto) desplazarA(est.abierto);
 }
 
@@ -659,7 +680,7 @@ function posponer(id) {
     const sig = S.siguientePendiente(dia, null, id, est.pospuestosSin[dia.id]);
     est.abierto = sig === id ? null : sig;
   }
-  repintarBloques([id, est.abierto]);
+  repintarBloques([id, est.abierto, idPareja(dia, id), idPareja(dia, est.abierto)]);
   if (est.abierto) desplazarA(est.abierto);
   avisar({ texto: `${x?.name || "Ejercicio"}: lo dejas para el final.`, accion: "Deshacer", alPulsar: () => deshacerPosponer(dia.id, id) });
 }
@@ -674,7 +695,8 @@ function deshacerPosponer(diaId, id) {
   if (est.diaId !== diaId || !est.nodo?.isConnected) return;
   const anterior = est.abierto;
   est.abierto = id;
-  repintarBloques([anterior, id]);
+  const dia = diaPorId(almacen.datos(), diaId);
+  repintarBloques([anterior, id, idPareja(dia, anterior), idPareja(dia, id)]);
   desplazarA(id);
 }
 
@@ -758,13 +780,19 @@ async function serieHecha(id) {
   s = S.marcarSerie(s, id, valores, t);
   const quedanEj = entrada.series - (indice + 1);
   const quedanSesion = S.quedanSeries(dia, s);
-  if (quedanEj <= 0) {
-    const sig = S.siguientePendiente(dia, s, id);
-    s.actual = sig;
-    est.abierto = sig;
+  // En un superset (D-120), el siguiente no es necesariamente el mismo ejercicio hasta acabarlo: se alterna con
+  // la pareja (descanso corto) hasta que uno de los dos se completa, y entonces se sigue con el otro (normal).
+  const trasSuperset = S.siguienteTrasSerieSuperset(dia, s, id);
+  let siguiente;
+  let descansoCorto = false;
+  if (trasSuperset) {
+    siguiente = trasSuperset.id;
+    descansoCorto = trasSuperset.corto;
   } else {
-    est.abierto = id;
+    siguiente = quedanEj <= 0 ? S.siguientePendiente(dia, s, id) : id;
   }
+  s.actual = siguiente;
+  est.abierto = siguiente;
   if (!almacen.guardarSesion(s)) return;
   if (nueva) {
     delete est.elegidos[dia.id];
@@ -773,16 +801,22 @@ async function serieHecha(id) {
   if (!almacen.leerUi().ayudaSerieVista) almacen.cambiarUi((u) => { u.ayudaSerieVista = true; });
 
   let idDescanso = null;
-  const segundos = leerDescanso(entrada.rest) ?? 90;
+  const segundos = descansoCorto
+    ? leerDescanso(entrada.restSuperset) ?? DESCANSO_SUPERSET_DEFECTO
+    : leerDescanso(entrada.rest) ?? 90;
   if (datos.ajustes.descansoAlMarcar && quedanSesion > 0) {
     if (segundos > 0) {
       let texto;
       let capa;
-      if (quedanEj > 0) {
+      if (descansoCorto) {
+        const pareja = datos.ejercicios[siguiente];
+        texto = `Cambia a ${pareja?.name || "el otro ejercicio"}`;
+        capa = texto;
+      } else if (siguiente === id) {
         texto = `Te toca la serie ${indice + 2} de ${entrada.series}`;
         capa = `Serie ${indice + 2} de ${entrada.series} · ${x.name}`;
       } else {
-        const sig = est.abierto ? datos.ejercicios[est.abierto] : null;
+        const sig = siguiente ? datos.ejercicios[siguiente] : null;
         texto = sig ? `Siguiente: ${sig.name}` : "Siguiente ejercicio";
         capa = texto;
       }
@@ -797,7 +831,7 @@ async function serieHecha(id) {
   repintarBloques([abiertoAntes, id, est.abierto]);
   pintarPestanas();
   marcarRecien();
-  if (quedanEj <= 0 && est.abierto) desplazarA(est.abierto);
+  if (siguiente !== id && est.abierto) desplazarA(est.abierto);
   asegurarHechaVisible(est.abierto);
 
   const maxPrevio = Math.max(0, ...previasHoy.map((p) => p.kg ?? 0));
