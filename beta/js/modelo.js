@@ -346,6 +346,24 @@ export function parejaSuperset(dia, exerciseId) {
   return pareja ? { propio, pareja } : null;
 }
 
+// Agrupa la lista de ejercicios de un día: {tipo: "solo", entrada} o {tipo: "superset", a, b} (dos seguidos con
+// el mismo supersetId: siempre van así, repararSupersetsDia los junta si no). Lo usan el editor (Rutina), para
+// pintar y mover el par entero, y la sesión (Entreno), para pintarlo en una sola tarjeta compartida.
+export function agruparEjercicios(lista) {
+  const grupos = [];
+  for (let i = 0; i < lista.length; i += 1) {
+    const e = lista[i];
+    const sig = lista[i + 1];
+    if (e.supersetId && sig?.supersetId === e.supersetId) {
+      grupos.push({ tipo: "superset", a: e, b: sig });
+      i += 1;
+    } else {
+      grupos.push({ tipo: "solo", entrada: e });
+    }
+  }
+  return grupos;
+}
+
 // La marca de cada ejercicio es el kg de su última entrada en «marcas» (o null si no tiene ninguna).
 export function rehacerMarcas(datos) {
   const ultima = new Map();

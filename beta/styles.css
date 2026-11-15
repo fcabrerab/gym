@@ -216,25 +216,27 @@ a { color: var(--info); }
 }
 .ayuda-serie .icono { color: var(--info); }
 
-/* Dos columnas: un ejercicio normal ocupa las dos (grid-column: 1 / -1); los dos de un superset replegado (D-120),
-   una cada uno, así quedan lado a lado (y uno bajo otro si no cabe, con flex-wrap no haría falta nada más, pero
-   el grid dos columnas ya se encarga solo). */
-.lista-ej { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.lista-ej { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .ej {
-  grid-column: 1 / -1;
   background: var(--superficie); border: 1px solid var(--borde); border-radius: 16px; box-shadow: var(--sombra);
   scroll-margin-top: calc(var(--alto-cabecera-real, var(--alto-cabecera)) + 8px);
   scroll-margin-bottom: calc(var(--alto-nav) + var(--alto-barra) + 16px);
 }
 .ej.abierto { border: 2px solid var(--info); }
-.ej.ej-en-columna { grid-column: auto; }
+/* Superset (D-120) en Entreno: los dos, en la misma tarjeta, siempre (en reposo o haciéndolos): el replegado
+   como una fila normal y el que se está haciendo, con sus controles, dentro de la misma tarjeta, uno debajo
+   del otro y el descanso corto como separador. Así nunca se ve como dos ejercicios sueltos. */
 .ej-superset-etiqueta {
-  margin: 0; padding: 6px 10px 0; display: flex; align-items: center; gap: 4px;
+  margin: 0; padding: 8px 12px 0; display: flex; align-items: center; gap: 4px;
   font-size: 12px; font-weight: 700; color: var(--info); text-transform: uppercase; letter-spacing: .02em;
 }
 .ej-superset-etiqueta .icono { flex: none; }
-.ej-en-columna .ej-fila { min-height: 64px; padding: 6px 10px 6px 6px; }
-.ej-en-columna .ej-nombre { -webkit-line-clamp: 3; line-clamp: 3; }
+.ej-superset-separador {
+  margin: 0; padding: 2px 12px; display: flex; align-items: center; gap: 8px;
+  font-size: 12px; font-weight: 600; color: var(--texto-2); white-space: nowrap;
+}
+.ej-superset-separador::before, .ej-superset-separador::after { content: ""; flex: 1; height: 1px; background: var(--borde); }
+.ej-superset-miembro.abierto { border-top: 1px solid var(--borde); border-bottom: 1px solid var(--borde); }
 .ej-fila {
   display: flex; align-items: center; gap: 12px; width: 100%; min-height: 72px; padding: 8px 12px 8px 8px;
   background: none; border: 0; border-radius: 16px; text-align: left;
@@ -505,21 +507,29 @@ body.con-hoja .avisos { top: calc(env(safe-area-inset-top) + 12px); bottom: auto
 .botones-orden { display: flex; gap: 8px; flex: none; }
 .botones-orden .boton-icono { background: var(--superficie-2); border: 1px solid var(--borde); }
 
-/* Superset (D-120) en el editor de la rutina: a toda la anchura (junto a los botones de orden, los dos
-   ejercicios quedarían demasiado estrechos), con subir/bajar debajo, a la derecha. */
+/* Superset (D-120) en el editor de la rutina: una sola tarjeta con los dos, uno debajo del otro a toda la
+   anchura (dos columnas no se leían bien), y el descanso corto como separador entre ellos. Subir/bajar, debajo
+   de la tarjeta, a la derecha (junto a ella, los dos quedarían demasiado estrechos). */
 .fila-superset-grupo { display: flex; flex-direction: column; gap: 6px; }
 .fila-superset-grupo .botones-orden { align-self: flex-end; }
 .fila-superset {
-  display: flex; flex-direction: column; gap: 8px; padding: 10px;
-  background: var(--seleccion); border: 1px solid var(--info); border-radius: 16px;
+  display: flex; flex-direction: column;
+  background: var(--seleccion); border: 1px solid var(--info); border-radius: 16px; overflow: hidden;
 }
 .fila-superset-etiqueta {
-  margin: 0; display: flex; align-items: center; gap: 4px;
+  margin: 0; padding: 8px 12px 0; display: flex; align-items: center; gap: 4px;
   font-size: 12px; font-weight: 700; color: var(--info); text-transform: uppercase; letter-spacing: .02em;
 }
 .fila-superset-etiqueta .icono { flex: none; }
-.fila-superset-miembros { display: flex; flex-wrap: wrap; gap: 8px; }
-.fila-superset-miembro { flex: 1 1 150px; min-width: 150px; min-height: 56px; }
+.fila-superset-fila {
+  display: flex; align-items: center; gap: 12px; width: 100%; min-height: 64px; padding: 8px 12px;
+  background: none; border: 0; border-radius: 0; text-align: left; color: var(--texto);
+}
+.fila-superset-separador {
+  margin: 0; padding: 2px 12px; display: flex; align-items: center; gap: 8px;
+  font-size: 12px; font-weight: 600; color: var(--texto-2); white-space: nowrap;
+}
+.fila-superset-separador::before, .fila-superset-separador::after { content: ""; flex: 1; height: 1px; background: var(--borde); }
 .fila-con-boton {
   display: flex; align-items: center; gap: 8px; padding: 8px 8px 8px 12px; min-height: 64px;
   background: var(--superficie); border: 1px solid var(--borde); border-radius: 16px;

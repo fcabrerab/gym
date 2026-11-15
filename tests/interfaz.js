@@ -433,5 +433,45 @@ export async function ejecutar(c) {
     sinErrores(b, "I14");
     quitar(b);
   }
+  // I16 Supersets (D-120): los dos en una sola tarjeta, que no se separa ni al abrir uno ni al marcar una serie.
+  {
+    let idA;
+    let idB;
+    const datos = await datosBeta({
+      cambios: (d) => {
+        const dia = d.dias.find((x) => x.id === "tuesday-push");
+        const [a, b2] = dia.ejercicios;
+        a.supersetId = "ss-i16";
+        a.restSuperset = "0:20";
+        b2.supersetId = "ss-i16";
+        b2.restSuperset = "0:20";
+        idA = a.exerciseId;
+        idB = b2.exerciseId;
+      },
+    });
+    await preparar(datos);
+    const b = await cargarBeta();
+    pulsar(b.d, "elegir-dia", "tuesday-push");
+    await esperar(50);
+    const tarjetas = () => b.d.querySelectorAll("li.ej-superset").length;
+    const dentroDeLaTarjeta = (id) => b.d.querySelector("li.ej-superset")?.querySelector(`[data-ej="${id}"]`) != null;
+    caso(tarjetas() === 1 && dentroDeLaTarjeta(idA) && dentroDeLaTarjeta(idB), `I16 los dos del superset van en una sola tarjeta (${tarjetas()})`);
+    const separador = textoDe(b.d, "li.ej-superset .ej-superset-separador");
+    caso(separador.includes("0:20"), `I16 el separador, entre los dos, dice el descanso corto: «${separador}»`);
+    pulsar(b.d, "abrir-ejercicio", idA);
+    await esperar(50);
+    caso(tarjetas() === 1 && dentroDeLaTarjeta(idA) && dentroDeLaTarjeta(idB), "I16 al abrir uno para hacerlo, los dos siguen en la misma tarjeta");
+    pulsar(b.d, "kg-mas", idA);
+    pulsar(b.d, "serie-hecha", idA);
+    await esperar(50);
+    const abiertoB = b.d.querySelector(`[data-ej="${idB}"]`)?.classList.contains("abierto");
+    caso(tarjetas() === 1 && dentroDeLaTarjeta(idA) && dentroDeLaTarjeta(idB) && abiertoB,
+      "I16 tras marcar la serie de A, se abre B (sin separarse de A) dentro de la misma tarjeta");
+    const textoBarra = textoDe(b.d, "#barra-descanso .barra-texto");
+    caso(barraVisible(b.d) && textoBarra.startsWith("Cambia a"), `I16 el descanso que toca es el corto, de cambiar al otro: «${textoBarra}»`);
+    sinErrores(b, "I16");
+    quitar(b);
+  }
+
   nota("interfaz hecha");
 }

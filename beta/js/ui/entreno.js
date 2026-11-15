@@ -16,7 +16,7 @@ import * as almacen from "../almacen.js";
 import * as S from "../sesion.js";
 import * as descanso from "../descanso.js";
 import * as copiaPc from "../copia-pc.js";
-import { estimarTiempo, tiempoRestante, diaPorId, parejaSuperset, DESCANSO_SUPERSET_DEFECTO, LIMITES } from "../modelo.js";
+import { estimarTiempo, tiempoRestante, diaPorId, agruparEjercicios, DESCANSO_SUPERSET_DEFECTO, LIMITES } from "../modelo.js";
 import { necesitaCopia, guardarCopiaAuto } from "../copias.js";
 import {
   ahora, fechaLocal, fechaCorta, diaMes, hora, haceDias, formatoKg, formatoNumero, formatoMinutos, formatoDuracion, formatoCuenta,
@@ -291,12 +291,8 @@ function pintarLista() {
     return;
   }
   est.lista.hidden = false;
-  for (const entrada of dia.ejercicios) {
-    const par = parejaSuperset(dia, entrada.exerciseId);
-    // Lado a lado solo con los dos replegados: si cualquiera de los dos está abierto, los dos pasan a ocupar
-    // toda la fila (igual que un ejercicio normal: más sitio para la serie y los controles).
-    const enColumna = Boolean(par) && est.abierto !== entrada.exerciseId && est.abierto !== par.pareja.exerciseId;
-    est.lista.append(bloque(entrada, datos, dia, enCurso, { par, enColumna }));
+  for (const grupo of agruparEjercicios(dia.ejercicios)) {
+    est.lista.append(grupo.tipo === "solo" ? bloque(grupo.entrada, datos, dia, enCurso) : bloqueSuperset(grupo.a, grupo.b, datos, dia, enCurso));
   }
   pintarTodoHecho();
 }
@@ -314,31 +310,23 @@ function pintarFinal() {
 }
 
 function bloqueDe(id) {
-  return est.lista?.querySelector(`li[data-ej="${CSS.escape(id)}"]`) || null;
-}
-
-// La pareja de un superset (D-120), o null. Al abrir, cerrar o posponer uno de los dos, el otro también cambia
-// de ancho (de lado a lado a toda la fila, o al revés): hay que repintarlo también.
-function idPareja(dia, id) {
-  return id ? (parejaSuperset(dia, id)?.pareja.exerciseId ?? null) : null;
+  return est.lista?.querySelector(`[data-ej="${CSS.escape(id)}"]`) || null;
 }
 
 function pospuestos(enCurso, diaId) {
   return enCurso ? enCurso.pospuestos || [] : est.pospuestosSin[diaId] || [];
 }
 
-function bloque(entrada, datos, dia, enCurso, { par = null, enColumna = false } = {}) {
+// El contenido de un ejercicio, replegado o abierto, sin la tarjeta que lo envuelve: lo comparten bloque() (un
+// ejercicio normal, con su propia tarjeta) y bloqueSuperset() (los dos de un superset, dentro de una tarjeta
+// compartida que no cambia estén haciéndose o no, D-120).
+function contenidoEjercicio(entrada, datos, dia, enCurso) {
   const id = entrada.exerciseId;
   const x = datos.ejercicios[id] || { id, name: id, tipo: "peso", image: "", muscleGroup: "" };
   const hechas = S.hechasDe(enCurso, id);
   const completo = hechas.length >= entrada.series;
   const pospuesto = !completo && pospuestos(enCurso, dia.id).includes(id);
   const abierto = est.abierto === id;
-  const li = h("li", { class: ["ej", abierto && "abierto", completo && "hecho", par && "ej-superset", enColumna && "ej-en-columna"], "data-ej": id });
-
-  const superset = par
-    ? h("p", { class: "ej-superset-etiqueta" }, icono("enlace", { tamano: 15 }), h("span", null, `Superset · descanso ${entrada.restSuperset}`))
-    : null;
 
   const estado = completo
     ? h("span", { class: "ej-estado ej-estado-hecho" }, icono("check", { tamano: 20 }), h("span", null, `${hechas.length}/${entrada.series}`))
@@ -347,19 +335,20 @@ function bloque(entrada, datos, dia, enCurso, { par = null, enColumna = false } 
       : h("span", { class: "ej-estado" }, `${hechas.length}/${entrada.series}`);
 
   if (!abierto) {
-    li.append(...[superset, h("button", { class: "ej-fila", type: "button", "data-accion": "abrir-ejercicio", "data-id": id, "aria-expanded": "false" },
-      miniatura(x, { tamano: 56 }),
-      h("span", { class: "ej-textos" },
-        h("span", { class: "ej-nombre" }, x.name),
-        h("span", { class: "ej-datos" }, completo ? textoSeries(hechas, x.tipo) : lineaDatos(entrada, x))),
-      estado)].filter(Boolean));
-    return li;
+    return {
+      abierto, completo,
+      nodos: [h("button", { class: "ej-fila", type: "button", "data-accion": "abrir-ejercicio", "data-id": id, "aria-expanded": "false" },
+        miniatura(x, { tamano: 56 }),
+        h("span", { class: "ej-textos" },
+          h("span", { class: "ej-nombre" }, x.name),
+          h("span", { class: "ej-datos" }, completo ? textoSeries(hechas, x.tipo) : lineaDatos(entrada, x))),
+        estado)],
+    };
   }
 
   const plan = `${entrada.series} × ${entrada.reps} · descanso ${entrada.rest}`;
   const lineaGrupo = [x.muscleGroup, x.tipo === "peso" && x.pr != null ? `Marca ${formatoKg(x.pr)}` : null].filter(Boolean).join(" · ");
-  if (superset) li.append(superset);
-  li.append(h("div", { class: "ej-cabecera" },
+  const cabecera = h("div", { class: "ej-cabecera" },
     x.image
       ? h("button", { class: "ej-foto", type: "button", "data-accion": "ver-imagen", "data-id": id, "aria-label": `Ver la imagen de ${x.name}` }, miniatura(x, { tamano: 72 }))
       : h("span", { class: "ej-foto" }, miniatura(x, { tamano: 72 })),
@@ -367,7 +356,7 @@ function bloque(entrada, datos, dia, enCurso, { par = null, enColumna = false } 
       h("span", { class: "ej-nombre ej-nombre-completo" }, x.name),
       lineaGrupo ? h("span", { class: "ej-datos" }, lineaGrupo) : null,
       h("span", { class: "ej-datos" }, plan)),
-    estado));
+    estado);
 
   const cuerpo = h("div", { class: "ej-cuerpo" });
   if (x.notas) cuerpo.append(h("p", { class: "ej-notas" }, icono("lapiz", { tamano: 18 }), h("span", null, x.notas)));
@@ -421,7 +410,29 @@ function bloque(entrada, datos, dia, enCurso, { par = null, enColumna = false } 
     !completo && !pospuesto ? h("button", { class: "enlace-boton", type: "button", "data-accion": "posponer", "data-id": id }, icono("despues", { tamano: 20 }), h("span", null, "Hacer después")) : null,
     h("button", { class: "enlace-boton", type: "button", "data-accion": "ver-ejercicio", "data-id": id }, icono("historial", { tamano: 20 }), h("span", null, "Historial")),
     h("button", { class: "enlace-boton", type: "button", "data-accion": "editar-ejercicio", "data-id": id }, icono("lapiz", { tamano: 20 }), h("span", null, "Editar"))));
-  li.append(cuerpo);
+  return { abierto, completo, nodos: [cabecera, cuerpo] };
+}
+
+function bloque(entrada, datos, dia, enCurso) {
+  const { nodos, abierto, completo } = contenidoEjercicio(entrada, datos, dia, enCurso);
+  const li = h("li", { class: ["ej", abierto && "abierto", completo && "hecho"], "data-ej": entrada.exerciseId });
+  li.append(...nodos);
+  return li;
+}
+
+// Los dos de un superset (D-120), en una sola tarjeta que no cambia estén haciéndose o no: el replegado, como
+// una fila normal; el que se está haciendo, con sus controles; y entre los dos, el descanso corto.
+function bloqueSuperset(a, b, datos, dia, enCurso) {
+  const ca = contenidoEjercicio(a, datos, dia, enCurso);
+  const cb = contenidoEjercicio(b, datos, dia, enCurso);
+  const miembro = (entrada, c) => h("div", { class: ["ej-superset-miembro", c.abierto && "abierto", c.completo && "hecho"], "data-ej": entrada.exerciseId }, ...c.nodos);
+  const li = h("li", { class: ["ej", "ej-superset", (ca.abierto || cb.abierto) && "abierto"] });
+  li.append(
+    h("p", { class: "ej-superset-etiqueta" }, icono("enlace", { tamano: 15 }), h("span", null, "Superset")),
+    miembro(a, ca),
+    h("p", { class: "ej-superset-separador" }, h("span", null, `⇄ descanso ${a.restSuperset}`)),
+    miembro(b, cb),
+  );
   return li;
 }
 
@@ -478,17 +489,26 @@ function alternarCrono(id) {
   }
 }
 
-// Repinta solo los bloques indicados (y la línea de progreso, banners y final).
+// Repinta solo los bloques indicados (y la línea de progreso, banners y final). Un superset (D-120) va siempre
+// entero: los dos están en la misma tarjeta, así que repintar cualquiera de los dos repinta la pareja completa.
 function repintarBloques(ids) {
   const { datos, dia, enCurso } = datosDia();
   if (!dia || !est.lista) return;
+  const grupos = agruparEjercicios(dia.ejercicios);
+  const hechos = new Set();
   for (const id of new Set(ids.filter(Boolean))) {
-    const viejo = bloqueDe(id);
-    const entrada = dia.ejercicios.find((e) => e.exerciseId === id);
-    if (viejo && entrada) {
-      const par = parejaSuperset(dia, id);
-      const enColumna = Boolean(par) && est.abierto !== id && est.abierto !== par.pareja.exerciseId;
-      viejo.replaceWith(bloque(entrada, datos, dia, enCurso, { par, enColumna }));
+    if (hechos.has(id)) continue;
+    const grupo = grupos.find((g) => (g.tipo === "solo" ? g.entrada.exerciseId === id : g.a.exerciseId === id || g.b.exerciseId === id));
+    if (!grupo) continue;
+    if (grupo.tipo === "solo") {
+      hechos.add(id);
+      const viejo = bloqueDe(id);
+      if (viejo) viejo.replaceWith(bloque(grupo.entrada, datos, dia, enCurso));
+    } else {
+      hechos.add(grupo.a.exerciseId);
+      hechos.add(grupo.b.exerciseId);
+      const viejo = bloqueDe(grupo.a.exerciseId)?.closest("li.ej");
+      if (viejo) viejo.replaceWith(bloqueSuperset(grupo.a, grupo.b, datos, dia, enCurso));
     }
   }
   pintarResumen();
@@ -503,9 +523,10 @@ function repintarTodo() {
 }
 
 function desplazarA(id) {
-  const li = bloqueDe(id);
+  // En un superset (D-120) salta a la tarjeta entera (closest), no solo a su mitad: así se ve también la pareja.
+  const el = bloqueDe(id)?.closest("li.ej") ?? bloqueDe(id);
   // Salto inmediato (sin animación): es más fiable y respeta «reducir movimiento» sin más.
-  if (li && typeof li.scrollIntoView === "function") li.scrollIntoView({ block: "start", behavior: "auto" });
+  if (el && typeof el.scrollIntoView === "function") el.scrollIntoView({ block: "start", behavior: "auto" });
 }
 
 // Deja el ✓ del ejercicio a la vista, por encima de la barra de descanso y de la navegación (el CSS le da ese
@@ -561,7 +582,7 @@ export function alCampoEntreno(ev) {
 
 // Intro en el último campo de la serie: se cierra el teclado (app.js) y aquí se deja el ✓ a la vista, sin apuntar nada.
 export function alSoltarCampoEntreno(campo) {
-  const id = campo?.closest?.("li[data-ej]")?.dataset.ej;
+  const id = campo?.closest?.("[data-ej]")?.dataset.ej;
   if (id) asegurarHechaVisible(id);
 }
 
@@ -639,11 +660,11 @@ function elegirDia(id) {
 function alternarEjercicio(id) {
   const anterior = est.abierto;
   est.abierto = anterior === id ? null : id;
-  const { dia, enCurso } = datosDia();
+  const { enCurso } = datosDia();
   if (enCurso && enCurso.actual !== est.abierto) {
     almacen.guardarSesion({ ...enCurso, actual: est.abierto });
   }
-  repintarBloques([anterior, id, idPareja(dia, anterior), idPareja(dia, id)]);
+  repintarBloques([anterior, id]);
   if (est.abierto) desplazarA(est.abierto);
 }
 
@@ -680,7 +701,7 @@ function posponer(id) {
     const sig = S.siguientePendiente(dia, null, id, est.pospuestosSin[dia.id]);
     est.abierto = sig === id ? null : sig;
   }
-  repintarBloques([id, est.abierto, idPareja(dia, id), idPareja(dia, est.abierto)]);
+  repintarBloques([id, est.abierto]);
   if (est.abierto) desplazarA(est.abierto);
   avisar({ texto: `${x?.name || "Ejercicio"}: lo dejas para el final.`, accion: "Deshacer", alPulsar: () => deshacerPosponer(dia.id, id) });
 }
@@ -695,8 +716,7 @@ function deshacerPosponer(diaId, id) {
   if (est.diaId !== diaId || !est.nodo?.isConnected) return;
   const anterior = est.abierto;
   est.abierto = id;
-  const dia = diaPorId(almacen.datos(), diaId);
-  repintarBloques([anterior, id, idPareja(dia, anterior), idPareja(dia, id)]);
+  repintarBloques([anterior, id]);
   desplazarA(id);
 }
 

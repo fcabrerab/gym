@@ -9,7 +9,7 @@ import { ctx } from "./contexto.js";
 import { miniatura, control, ponerErrorControl, boton, botonIcono, vacio, ayuda } from "./piezas.js";
 import * as almacen from "../almacen.js";
 import * as S from "../sesion.js";
-import { LIMITES, TIPOS, NOMBRE_TIPO, DESCANSO_SUPERSET_DEFECTO, diaPorId, nombreDia, normalizarImagen, normalizarIncremento, parejaSuperset } from "../modelo.js";
+import { LIMITES, TIPOS, NOMBRE_TIPO, DESCANSO_SUPERSET_DEFECTO, diaPorId, nombreDia, normalizarImagen, normalizarIncremento, parejaSuperset, agruparEjercicios } from "../modelo.js";
 import {
   ahora, idCorto, leerNumero, leerDescanso, formatoDescanso, formatoNumero, recortar, sinTildes, plural, limitar, redondear,
   NOMBRES_DIA, INICIALES_DIA, ORDEN_SEMANA,
@@ -28,23 +28,6 @@ function enfocar(contenedor, accion, id) {
 }
 
 // --- Supersets (D-120): dos ejercicios del día, siempre seguidos en la lista, que se mueven juntos ---
-
-// Agrupa la lista de ejercicios de un día: {tipo: "solo", entrada} o {tipo: "superset", a, b} (dos seguidos con
-// el mismo supersetId). Lo usan tanto el pintado como el subir/bajar (que mueven el grupo entero).
-function agruparEjercicios(lista) {
-  const grupos = [];
-  for (let i = 0; i < lista.length; i += 1) {
-    const e = lista[i];
-    const sig = lista[i + 1];
-    if (e.supersetId && sig?.supersetId === e.supersetId) {
-      grupos.push({ tipo: "superset", a: e, b: sig });
-      i += 1;
-    } else {
-      grupos.push({ tipo: "solo", entrada: e });
-    }
-  }
-  return grupos;
-}
 
 // Sube o baja el grupo (solo o superset) al que pertenece el ejercicio, entero, pasando por encima del grupo
 // vecino (que puede ser de 1 o de 2). Devuelve true si lo ha movido.
@@ -107,7 +90,7 @@ function pintarDia(contenedor, id) {
   const nGrupos = grupos.length;
   const filaMiembro = (e) => {
     const x = datos.ejercicios[e.exerciseId] || { name: e.exerciseId };
-    return h("button", { class: "fila fila-superset-miembro", type: "button", "data-accion": "editar-entrada", "data-id": e.exerciseId },
+    return h("button", { class: "fila-superset-fila", type: "button", "data-accion": "editar-entrada", "data-id": e.exerciseId },
       miniatura(x, { tamano: 48 }),
       h("span", { class: "fila-textos" }, h("span", { class: "fila-titulo" }, x.name), h("span", { class: "fila-datos" }, `${e.series} × ${e.reps} · ${e.rest}`)));
   };
@@ -118,12 +101,14 @@ function pintarDia(contenedor, id) {
       botonIcono("arriba", "subir-ejercicio", `Subir ${etiquetaOrden}`, { id: idGrupo, extra: { disabled: i === 0 } }),
       botonIcono("abajo", "bajar-ejercicio", `Bajar ${etiquetaOrden}`, { id: idGrupo, extra: { disabled: i === nGrupos - 1 } }));
     if (g.tipo === "solo") return h("li", { class: "fila-con-orden" }, filaMiembro(g.entrada), subirBajar);
-    // A toda la anchura (si no, los dos miembros quedan demasiado estrechos junto a los botones de orden):
-    // el superset arriba, lado a lado, y subir/bajar debajo, a la derecha.
+    // Una sola tarjeta con los dos, uno debajo del otro a toda la anchura (nada de dos columnas estrechas:
+    // ahí no se lee bien), con el descanso corto como separador entre ellos; subir/bajar, debajo, a la derecha.
     return h("li", { class: "fila-superset-grupo" },
       h("div", { class: "fila-superset" },
-        h("p", { class: "fila-superset-etiqueta" }, icono("enlace", { tamano: 15 }), h("span", null, `Superset · descanso ${g.a.restSuperset}`)),
-        h("div", { class: "fila-superset-miembros" }, filaMiembro(g.a), filaMiembro(g.b))),
+        h("p", { class: "fila-superset-etiqueta" }, icono("enlace", { tamano: 15 }), h("span", null, "Superset")),
+        filaMiembro(g.a),
+        h("p", { class: "fila-superset-separador" }, h("span", null, `⇄ descanso ${g.a.restSuperset}`)),
+        filaMiembro(g.b)),
       subirBajar);
   });
   const unico = datos.dias.length <= 1;
