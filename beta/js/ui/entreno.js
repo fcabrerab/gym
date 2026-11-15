@@ -1231,7 +1231,7 @@ export function montarBarra(nodo, capa) {
     h("div", { class: "barra-fila" },
       h("div", { class: "barra-izq" },
         h("span", { class: "barra-cuenta" }),
-        h("span", { class: "barra-texto" })),
+        h("span", { class: "barra-texto" }, h("span", { class: "barra-texto-interior" }))),
       h("div", { class: "barra-botones" },
         b("−15 s", "descanso-menos15", { "aria-label": "Quitar 15 segundos" }),
         b("+15 s", "descanso-mas15", { "aria-label": "Añadir 15 segundos" }),
@@ -1269,6 +1269,20 @@ export function accionBarra(accion) {
   }
 }
 
+// Si el texto no cabe, se mueve como en un reproductor antiguo (una pausa, un paseo hasta el final, otra pausa
+// y vuelta): solo se mide al cambiar el texto, no en cada segundo (el «tic» de la cuenta no lo toca).
+function ponerTextoBarra(contenedor, interior, valor) {
+  if (interior.textContent === valor) return;
+  interior.textContent = valor;
+  contenedor.classList.remove("con-marquesina");
+  contenedor.style.removeProperty("--desborde");
+  const desborde = interior.scrollWidth - contenedor.clientWidth;
+  if (desborde > 0) {
+    contenedor.style.setProperty("--desborde", `${desborde}px`);
+    contenedor.classList.add("con-marquesina");
+  }
+}
+
 function pintarBarra(e) {
   const nodo = est.barra;
   if (!nodo) return;
@@ -1277,23 +1291,26 @@ function pintarBarra(e) {
   document.body.classList.toggle("con-descanso", visible);
   if (!visible) return;
   const cuenta = nodo.querySelector(".barra-cuenta");
-  const texto = nodo.querySelector(".barra-texto");
+  const textoEnv = nodo.querySelector(".barra-texto");
+  const texto = textoEnv.querySelector(".barra-texto-interior");
   const final = e.fase === "te-toca" || e.fase === "acabo";
   nodo.classList.toggle("barra-final", final);
   nodo.classList.toggle("barra-pausa", e.fase === "pausa");
+  let nuevoTexto;
   if (e.fase === "te-toca") {
     cuenta.textContent = "¡Te toca!";
-    texto.textContent = e.capa || e.detalle || "";
+    nuevoTexto = e.capa || e.detalle || "";
   } else if (e.fase === "acabo") {
     cuenta.textContent = "0:00";
-    texto.textContent = e.texto;
+    nuevoTexto = e.texto;
   } else if (e.fase === "pausa") {
     cuenta.textContent = formatoCuenta(e.quedan);
-    texto.textContent = `En pausa · ${e.capa || e.nombre || "Descanso"}`;
+    nuevoTexto = `En pausa · ${e.capa || e.nombre || "Descanso"}`;
   } else {
     cuenta.textContent = formatoCuenta(e.quedan);
-    texto.textContent = e.capa || e.texto || "Descanso";
+    nuevoTexto = e.capa || e.texto || "Descanso";
   }
+  ponerTextoBarra(textoEnv, texto, nuevoTexto);
   // El botón de pausa solo se rehace cuando cambia (el tictac de cada segundo solo toca el texto de la cuenta).
   const pausa = nodo.querySelector('[data-accion="descanso-pausa"]');
   const enPausa = String(e.fase === "pausa");

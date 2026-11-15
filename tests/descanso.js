@@ -144,4 +144,35 @@ export async function ejecutar(c) {
     sinErrores(b, "D5");
     quitar(b);
   }
+
+  // D6 El texto de la barra, si no cabe, se mueve como en un reproductor antiguo; si cabe, se queda quieto.
+  {
+    await preparar(await datosBeta({
+      cambios: (d) => {
+        for (const dia of d.dias) for (const e of dia.ejercicios) e.rest = "0:10";
+        d.ejercicios["machine-chest-press"].name = "Press de pecho con mancuernas en banco inclinado, con agarre muy estrecho";
+      },
+    }));
+    const b = await cargarBeta();
+    await marcar(b, "machine-chest-press");
+    const barraLarga = b.d.querySelector(".barra-texto");
+    const desborde = barraLarga.style.getPropertyValue("--desborde");
+    caso(barraLarga.classList.contains("con-marquesina") && desborde !== "", `D6 un texto largo que no cabe se mueve (--desborde: ${desborde || "(vacío)"})`);
+    sinErrores(b, "D6");
+    quitar(b);
+  }
+  {
+    await preparar(await datosBeta({
+      cambios: (d) => {
+        for (const dia of d.dias) for (const e of dia.ejercicios) e.rest = "0:10";
+        d.ejercicios["machine-chest-press"].name = "Press";
+      },
+    }));
+    const b = await cargarBeta();
+    await marcar(b, "machine-chest-press");
+    const barraCorta = b.d.querySelector(".barra-texto");
+    caso(!barraCorta.classList.contains("con-marquesina"), "D6 un texto corto que sí cabe no se mueve");
+    sinErrores(b, "D6");
+    quitar(b);
+  }
 }

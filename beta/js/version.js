@@ -1,11 +1,19 @@
 // Versión de la beta. La misma VERSION está en ../sw.js y en la meta «gym-beta-version» de ../index.html: cada
 // cambio en un archivo de beta/ obliga a subirla en los tres sitios (una prueba de tests/ comprueba que coinciden).
-export const VERSION = "0.2.8";
+export const VERSION = "0.2.9";
 export const FECHA_VERSION = "2026-11-15";
 
 // Novedades por versión, de la más nueva a la más vieja. Se enseñan en Ajustes → Beta → Novedades y, la primera
 // vez, en «Qué tiene de nuevo».
 export const NOVEDADES = [
+  {
+    version: "0.2.9",
+    fecha: "2026-11-15",
+    cambios: [
+      "Si el texto de la barra de descanso no cabe, ahora se mueve, como en un reproductor antiguo: una pausa, un paseo hasta el final, otra pausa y vuelta (con «Reducir movimiento» no se mueve, se queda con los puntos suspensivos).",
+      "Quitada una raya que sobraba entre los enlaces de abajo (Editar…) y el separador de un superset.",
+    ],
+  },
   {
     version: "0.2.8",
     fecha: "2026-11-15",

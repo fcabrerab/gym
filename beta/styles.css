@@ -236,7 +236,9 @@ a { color: var(--info); }
   font-size: 12px; font-weight: 600; color: var(--texto-2); white-space: nowrap;
 }
 .ej-superset-separador::before, .ej-superset-separador::after { content: ""; flex: 1; height: 1px; background: var(--borde); }
-.ej-superset-miembro.abierto { border-top: 1px solid var(--borde); border-bottom: 1px solid var(--borde); }
+/* Entre los enlaces de abajo (Editar…) del que esté abierto y el separador del superset no van dos rayas: la
+   de los enlaces se quita (la del separador ya marca el corte). */
+.ej-superset-miembro .ej-enlaces { border-top: 0; padding-top: 0; }
 .ej-fila {
   display: flex; align-items: center; gap: 12px; width: 100%; min-height: 72px; padding: 8px 12px 8px 8px;
   background: none; border: 0; border-radius: 16px; text-align: left;
@@ -351,7 +353,19 @@ body.con-descanso .boton-hecha { scroll-margin-bottom: calc(var(--alto-nav) + va
   font-size: 32px; font-weight: 700; line-height: 1;
   font-variant-numeric: tabular-nums; color: var(--cuenta); white-space: nowrap;
 }
-.barra-texto { font-size: 13px; line-height: 1.25; color: var(--texto-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.barra-texto { font-size: 13px; line-height: 1.25; color: var(--texto-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+.barra-texto-interior { display: inline-block; }
+/* Si no cabe, como en un reproductor antiguo: una pausa, un paseo hasta el final, otra pausa y vuelta, sin fin
+   (con «reducir movimiento» no se mueve: se queda en los puntos suspensivos de siempre). */
+@media (prefers-reduced-motion: no-preference) {
+  .barra-texto.con-marquesina { text-overflow: clip; }
+  .barra-texto.con-marquesina .barra-texto-interior { animation: marquesina-barra 8s linear infinite; }
+}
+@keyframes marquesina-barra {
+  0%, 12.5% { transform: translateX(0); }
+  50%, 62.5% { transform: translateX(calc(-1 * var(--desborde, 0px))); }
+  100% { transform: translateX(0); }
+}
 .barra-pausa .barra-cuenta { color: var(--texto-2); }
 .barra-final .barra-cuenta { font-size: 22px; line-height: 1.1; color: var(--hecho); }
 .barra-final .barra-texto { color: var(--texto); font-weight: 600; }
