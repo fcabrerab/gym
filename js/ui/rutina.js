@@ -1,12 +1,15 @@
 // Pantalla Rutina (el editor): lista de días (orden y añadir), cada día (nombre, título, nota, días de la
 // semana, ejercicios en orden, añadir de la biblioteca o crear uno, eliminar con deshacer) y la hoja de cada
 // ejercicio, con etiquetas visibles y cada campo validado al salir. Los campos guardan al cambiar y nunca se
-// repinta la lista mientras se escribe.
+// repinta la lista mientras se escribe. El orden (de los días y de los ejercicios) se cambia con las flechas o
+// arrastrando una fila (D-122), y las filas se deslizan a su sitio nuevo en vez de saltar.
 
 import { h, icono, vaciar } from "./dom.js";
 import { avisar, avisarDeshacer, confirmar, abrirHoja } from "./avisos.js";
 import { ctx } from "./contexto.js";
 import { miniatura, control, ponerErrorControl, boton, botonIcono, vacio, ayuda } from "./piezas.js";
+import { hacerArrastrable } from "./arrastre.js";
+import { foto, animar } from "./movimiento.js";
 import * as almacen from "../almacen.js";
 import * as S from "../sesion.js";
 import { LIMITES, TIPOS, NOMBRE_TIPO, DESCANSO_SUPERSET_DEFECTO, diaPorId, nombreDia, normalizarImagen, normalizarIncremento, parejaSuperset, agruparEjercicios } from "../modelo.js";
@@ -29,6 +32,9 @@ function enfocar(contenedor, accion, id) {
 
 // --- Supersets (D-120): dos ejercicios del día, siempre seguidos en la lista, que se mueven juntos ---
 
+const claveGrupo = (g) => (g.tipo === "solo" ? g.entrada.exerciseId : g.a.exerciseId);
+const aplanar = (grupos) => grupos.flatMap((g) => (g.tipo === "solo" ? [g.entrada] : [g.a, g.b]));
+
 // Sube o baja el grupo (solo o superset) al que pertenece el ejercicio, entero, pasando por encima del grupo
 // vecino (que puede ser de 1 o de 2). Devuelve true si lo ha movido.
 function moverGrupo(dia, exerciseId, sentido) {
@@ -37,15 +43,74 @@ function moverGrupo(dia, exerciseId, sentido) {
   const j = i + sentido;
   if (i < 0 || j < 0 || j >= grupos.length) return false;
   [grupos[i], grupos[j]] = [grupos[j], grupos[i]];
-  dia.ejercicios = grupos.flatMap((g) => (g.tipo === "solo" ? [g.entrada] : [g.a, g.b]));
+  dia.ejercicios = aplanar(grupos);
   return true;
+}
+
+// Lleva el grupo de esa clave (solo o superset, entero) al puesto «hasta» de la lista de grupos (al soltar un
+// arrastre, D-122). Devuelve true si lo ha movido.
+function moverGrupoA(dia, clave, hasta) {
+  const grupos = agruparEjercicios(dia.ejercicios);
+  const i = grupos.findIndex((g) => claveGrupo(g) === clave);
+  if (i < 0 || !Number.isInteger(hasta) || hasta < 0 || hasta >= grupos.length || i === hasta) return false;
+  const [g] = grupos.splice(i, 1);
+  grupos.splice(hasta, 0, g);
+  dia.ejercicios = aplanar(grupos);
+  return true;
+}
+
+// --- Orden con transición y arrastrando (D-122) ---
+
+// Las filas que se ordenan en pantalla (días o grupos de ejercicios), cada una con su clave: data-orden.
+const piezasOrden = (contenedor) => [...contenedor.querySelectorAll("[data-orden]")].map((li) => [li.dataset.orden, li]);
+
+// Cambia el orden (con «cambiar», que guarda), repinta y desliza cada fila desde donde estaba (también la que se
+// soltaba, desde donde la dejó el dedo). Devuelve false si no había nada que cambiar.
+function reordenar(contenedor, cambiar) {
+  const antes = foto(piezasOrden(contenedor));
+  if (!cambiar()) return false;
+  ctx.repintar();
+  animar(antes, piezasOrden(contenedor));
+  return true;
+}
+
+// Al levantar una fila para arrastrarla, un toque de vibración (si está activada en Ajustes).
+function vibrarAlLevantar() {
+  if (almacen.datos()?.ajustes?.vibracion) navigator.vibrate?.(15);
+}
+
+function soltarDia(contenedor, clave, hasta) {
+  return reordenar(contenedor, () => {
+    const dias = almacen.datos().dias;
+    const i = dias.findIndex((x) => x.id === clave);
+    if (i < 0 || !Number.isInteger(hasta) || hasta < 0 || hasta >= dias.length || i === hasta) return false;
+    almacen.mutar((d) => {
+      const j = d.dias.findIndex((x) => x.id === clave);
+      if (j < 0) return;
+      const [x] = d.dias.splice(j, 1);
+      d.dias.splice(hasta, 0, x);
+    });
+    return true;
+  });
+}
+
+function soltarEjercicio(contenedor, diaId, clave, hasta) {
+  return reordenar(contenedor, () => {
+    const dia = diaPorId(almacen.datos(), diaId);
+    if (!dia || !moverGrupoA(structuredClone(dia), clave, hasta)) return false;
+    almacen.mutar((d) => {
+      const dd = diaPorId(d, diaId);
+      if (dd) moverGrupoA(dd, clave, hasta);
+    });
+    return true;
+  });
 }
 
 export function pintarRutina(contenedor, ruta) {
   if (ruta.nombre === "dia") return pintarDia(contenedor, ruta.param);
   const datos = almacen.datos();
   const n = datos.dias.length;
-  const filas = datos.dias.map((d, i) => h("li", { class: "fila-con-orden" },
+  const filas = datos.dias.map((d, i) => h("li", { class: "fila-con-orden", "data-orden": d.id },
     h("button", { class: "fila", type: "button", "data-accion": "abrir-dia", "data-id": d.id },
       h("span", { class: "fila-textos" },
         h("span", { class: "fila-titulo" }, nombreDia(d)),
@@ -54,10 +119,14 @@ export function pintarRutina(contenedor, ruta) {
     h("div", { class: "botones-orden" },
       botonIcono("arriba", "subir-dia", `Subir ${d.label}`, { id: d.id, extra: { disabled: i === 0 } }),
       botonIcono("abajo", "bajar-dia", `Bajar ${d.label}`, { id: d.id, extra: { disabled: i === n - 1 } }))));
+  const lista = h("ul", { class: "lista-filas lista-orden" }, filas);
+  hacerArrastrable(lista, { alSoltar: (clave, hasta) => soltarDia(contenedor, clave, hasta), alLevantar: vibrarAlLevantar });
   vaciar(contenedor).append(h("div", { class: "pantalla-rutina" },
     h("h1", { class: "titulo-pantalla" }, "Rutina"),
-    h("p", { class: "subtitulo-pantalla" }, "Toca un día para cambiar sus ejercicios. Las flechas cambian el orden de las pestañas."),
-    h("ul", { class: "lista-filas" }, filas),
+    h("p", { class: "subtitulo-pantalla" }, n > 1
+      ? "Toca un día para cambiar sus ejercicios. Para cambiar el orden de las pestañas, mantén pulsado un día y arrástralo, o usa las flechas."
+      : "Toca un día para cambiar sus ejercicios."),
+    lista,
     n < LIMITES.dias
       ? boton("Añadir día", "anadir-dia", { clase: "boton-secundario boton-ancho", ico: "mas" })
       : ayuda(`Caben ${LIMITES.dias} días como mucho.`)));
@@ -88,29 +157,37 @@ function pintarDia(contenedor, id) {
     }, INICIALES_DIA[w])));
   const grupos = agruparEjercicios(dia.ejercicios);
   const nGrupos = grupos.length;
-  const filaMiembro = (e) => {
+  // Un ejercicio suelto es una tarjeta («fila», como la de un día); uno de un superset, una fila dentro de la tarjeta
+  // compartida («fila-superset-fila»). Desde la 0.2.8 hasta la 1.1.0, los sueltos también salían sin tarjeta.
+  const filaMiembro = (e, clase = "fila") => {
     const x = datos.ejercicios[e.exerciseId] || { name: e.exerciseId };
-    return h("button", { class: "fila-superset-fila", type: "button", "data-accion": "editar-entrada", "data-id": e.exerciseId },
+    return h("button", { class: clase, type: "button", "data-accion": "editar-entrada", "data-id": e.exerciseId },
       miniatura(x, { tamano: 48 }),
       h("span", { class: "fila-textos" }, h("span", { class: "fila-titulo" }, x.name), h("span", { class: "fila-datos" }, `${e.series} × ${e.reps} · ${e.rest}`)));
   };
   const filas = grupos.map((g, i) => {
-    const idGrupo = g.tipo === "solo" ? g.entrada.exerciseId : g.a.exerciseId;
+    const idGrupo = claveGrupo(g);
     const etiquetaOrden = g.tipo === "solo" ? (datos.ejercicios[g.entrada.exerciseId]?.name || "el ejercicio") : "el superset";
     const subirBajar = h("div", { class: "botones-orden" },
       botonIcono("arriba", "subir-ejercicio", `Subir ${etiquetaOrden}`, { id: idGrupo, extra: { disabled: i === 0 } }),
       botonIcono("abajo", "bajar-ejercicio", `Bajar ${etiquetaOrden}`, { id: idGrupo, extra: { disabled: i === nGrupos - 1 } }));
-    if (g.tipo === "solo") return h("li", { class: "fila-con-orden" }, filaMiembro(g.entrada), subirBajar);
-    // Una sola tarjeta con los dos, uno debajo del otro a toda la anchura (nada de dos columnas estrechas:
-    // ahí no se lee bien), con el descanso corto como separador entre ellos; subir/bajar, debajo, a la derecha.
-    return h("li", { class: "fila-superset-grupo" },
+    if (g.tipo === "solo") return h("li", { class: "fila-con-orden", "data-orden": idGrupo }, filaMiembro(g.entrada), subirBajar);
+    // Una sola tarjeta con los dos, uno debajo del otro a toda la anchura de la tarjeta (nada de dos columnas
+    // estrechas: ahí no se lee bien), con el descanso corto como separador entre ellos; subir/bajar, a su derecha,
+    // como en los demás (desde la 1.1.0: antes iban debajo).
+    return h("li", { class: "fila-superset-grupo", "data-orden": idGrupo },
       h("div", { class: "fila-superset" },
         h("p", { class: "fila-superset-etiqueta" }, icono("enlace", { tamano: 15 }), h("span", null, "Superset")),
-        filaMiembro(g.a),
+        filaMiembro(g.a, "fila-superset-fila"),
         h("p", { class: "fila-superset-separador" }, h("span", null, `⇄ descanso ${g.a.restSuperset}`)),
-        filaMiembro(g.b)),
+        filaMiembro(g.b, "fila-superset-fila")),
       subirBajar);
   });
+  let lista = null;
+  if (n) {
+    lista = h("ul", { class: "lista-filas lista-orden" }, filas);
+    hacerArrastrable(lista, { alSoltar: (clave, hasta) => soltarEjercicio(contenedor, dia.id, clave, hasta), alLevantar: vibrarAlLevantar });
+  }
   const unico = datos.dias.length <= 1;
   vaciar(contenedor).append(h("div", { class: "pantalla-rutina", "data-dia": dia.id },
     botonVolver(),
@@ -122,7 +199,8 @@ function pintarDia(contenedor, id) {
       h("div", { class: "campo" }, h("p", { class: "campo-rotulo" }, "Qué días de la semana toca"), semana,
         h("p", { class: "ayuda" }, "Ese día, la app abre este entreno."))),
     h("h2", { class: "seccion-titulo" }, "Ejercicios"),
-    n ? h("ul", { class: "lista-filas" }, filas) : vacio("Este día no tiene ejercicios todavía."),
+    nGrupos > 1 ? h("p", { class: "ayuda ayuda-orden" }, "Para cambiar el orden, mantén pulsado un ejercicio y arrástralo, o usa las flechas.") : null,
+    lista || vacio("Este día no tiene ejercicios todavía."),
     n < LIMITES.ejerciciosPorDia
       ? boton("Añadir ejercicio", "anadir-ejercicio", { clase: "boton-principal boton-ancho", ico: "mas", id: dia.id })
       : ayuda(`Caben ${LIMITES.ejerciciosPorDia} ejercicios por día como mucho.`),
@@ -148,13 +226,15 @@ export function alAccionRutina(accion, el) {
       if (history.state?.nivel > 1) return history.back();
       return ctx.irA("#/rutina", "replace");
     case "subir-dia": case "bajar-dia": {
-      almacen.mutar((d) => {
-        const i = d.dias.findIndex((x) => x.id === id);
-        const j = i + (accion === "subir-dia" ? -1 : 1);
-        if (i < 0 || j < 0 || j >= d.dias.length) return;
-        [d.dias[i], d.dias[j]] = [d.dias[j], d.dias[i]];
+      reordenar(contenedor, () => {
+        almacen.mutar((d) => {
+          const i = d.dias.findIndex((x) => x.id === id);
+          const j = i + (accion === "subir-dia" ? -1 : 1);
+          if (i < 0 || j < 0 || j >= d.dias.length) return;
+          [d.dias[i], d.dias[j]] = [d.dias[j], d.dias[i]];
+        });
+        return true;
       });
-      ctx.repintar();
       return enfocar(contenedor, accion, id);
     }
     case "anadir-dia": return anadirDia();
@@ -173,12 +253,14 @@ export function alAccionRutina(accion, el) {
     }
     case "subir-ejercicio": case "bajar-ejercicio": {
       const diaId = el.closest("[data-dia]")?.dataset.dia;
-      almacen.mutar((d) => {
-        const dia = diaPorId(d, diaId);
-        if (!dia) return;
-        moverGrupo(dia, id, accion === "subir-ejercicio" ? -1 : 1);
+      reordenar(contenedor, () => {
+        almacen.mutar((d) => {
+          const dia = diaPorId(d, diaId);
+          if (!dia) return;
+          moverGrupo(dia, id, accion === "subir-ejercicio" ? -1 : 1);
+        });
+        return true;
       });
-      ctx.repintar();
       return enfocar(contenedor, accion, id);
     }
     case "editar-entrada": {

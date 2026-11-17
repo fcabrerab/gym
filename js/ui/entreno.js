@@ -1,9 +1,12 @@
 // Pantalla Entreno: pestañas de los días, banners, resumen del día, lista compacta de ejercicios con la serie
 // actual (−/+ y ✓), terminar o descartar la sesión; y la barra de descanso y la capa «¡Te toca!», que app.js
 // monta una sola vez fuera de la pantalla para que se vean en todas.
-// Nunca se repinta toda la pantalla por una serie: solo el bloque del ejercicio y la línea de progreso.
+// Nunca se repinta toda la pantalla por una serie: solo el bloque del ejercicio y la línea de progreso. Al abrir o
+// cerrar un ejercicio (también tras un ✓ o «Hacer después»), las tarjetas se despliegan, se repliegan y se deslizan
+// a su sitio en vez de saltar (D-122, js/ui/movimiento.js).
 
 import { h, icono, vaciar } from "./dom.js";
+import { foto, animar } from "./movimiento.js";
 import { avisar, cerrarAviso, confirmar, abrirHoja, anunciar } from "./avisos.js";
 import { ctx } from "./contexto.js";
 import {
@@ -514,6 +517,26 @@ function repintarTodo() {
   if (est.nodo?.isConnected) pintarEntreno(est.nodo.parentElement);
 }
 
+// Lo que se desliza al abrir o cerrar un ejercicio (D-122): los bloques de la pantalla y cada tarjeta de la lista (la
+// de un superset, por su primer ejercicio). foto() antes de cambiar nada; animarEntreno() cuando ya está todo en su
+// sitio (también el desplazamiento de la pantalla, que así se ve como un deslizamiento corto y no como un salto).
+function piezasEntreno() {
+  const piezas = [["banners", est.banners], ["resumen", est.resumen], ["ayuda", est.ayuda], ["todo-hecho", est.todoHecho], ["final", est.final]];
+  for (const li of est.lista?.children || []) {
+    const clave = li.dataset.ej ?? li.querySelector("[data-ej]")?.dataset.ej;
+    if (clave) piezas.push([`ej:${clave}`, li]);
+  }
+  return piezas;
+}
+
+function fotoEntreno() {
+  return est.nodo?.isConnected ? foto(piezasEntreno()) : null;
+}
+
+function animarEntreno(antes) {
+  if (antes && est.nodo?.isConnected) animar(antes, piezasEntreno(), { fantasmas: true });
+}
+
 function desplazarA(id) {
   // En un superset (D-120) salta a la tarjeta entera (closest), no solo a su mitad: así se ve también la pareja.
   const el = bloqueDe(id)?.closest("li.ej") ?? bloqueDe(id);
@@ -645,6 +668,7 @@ function elegirDia(id) {
 }
 
 function alternarEjercicio(id) {
+  const antes = fotoEntreno();
   const anterior = est.abierto;
   est.abierto = anterior === id ? null : id;
   const { enCurso } = datosDia();
@@ -653,6 +677,7 @@ function alternarEjercicio(id) {
   }
   repintarBloques([anterior, id]);
   if (est.abierto) desplazarA(est.abierto);
+  animarEntreno(antes);
 }
 
 function usarSugerencia(id, kg) {
@@ -678,6 +703,7 @@ function posponer(id) {
   const { datos, dia, enCurso } = datosDia();
   const x = datos.ejercicios[id];
   if (!dia) return;
+  const antes = fotoEntreno();
   if (enCurso) {
     const s = { ...enCurso, pospuestos: [...new Set([...(enCurso.pospuestos || []), id])] };
     s.actual = S.siguientePendiente(dia, s, id);
@@ -690,6 +716,7 @@ function posponer(id) {
   }
   repintarBloques([id, est.abierto]);
   if (est.abierto) desplazarA(est.abierto);
+  animarEntreno(antes);
   avisar({ texto: `${x?.name || "Ejercicio"}: lo dejas para el final.`, accion: "Deshacer", alPulsar: () => deshacerPosponer(dia.id, id) });
 }
 
@@ -701,10 +728,12 @@ function deshacerPosponer(diaId, id) {
     est.pospuestosSin[diaId] = (est.pospuestosSin[diaId] || []).filter((p) => p !== id);
   }
   if (est.diaId !== diaId || !est.nodo?.isConnected) return;
+  const antes = fotoEntreno();
   const anterior = est.abierto;
   est.abierto = id;
   repintarBloques([anterior, id]);
   desplazarA(id);
+  animarEntreno(antes);
 }
 
 // Empieza a mano el descanso del ejercicio (sin apuntar nada).
@@ -833,6 +862,7 @@ async function serieHecha(id) {
       descanso.saltar();
     }
   }
+  const antes = fotoEntreno();
   descanso.actualizarPantalla();
 
   repintarBloques([abiertoAntes, id, est.abierto]);
@@ -840,6 +870,7 @@ async function serieHecha(id) {
   marcarRecien();
   if (siguiente !== id && est.abierto) desplazarA(est.abierto);
   asegurarHechaVisible(est.abierto);
+  animarEntreno(antes);
 
   const maxPrevio = Math.max(0, ...previasHoy.map((p) => p.kg ?? 0));
   const marcaNueva = x.tipo === "peso" && valores.kg > 0 && (x.pr == null || valores.kg > x.pr) && valores.kg > maxPrevio;

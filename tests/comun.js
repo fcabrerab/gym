@@ -415,6 +415,29 @@ export function espiar(f) {
     Object.defineProperty(d, "hidden", { configurable: true, get: () => false });
     d.dispatchEvent(new w.Event("visibilitychange"));
   };
+  // Las animaciones de la app (las transiciones de la 1.1.0, D-122): en el Chrome sin ventana de las pruebas no se
+  // pintan fotogramas, así que no llegan a empezar nunca y la pieza se quedaría en su primer paso (movida). Por eso se
+  // acaban al momento: su código corre entero (también los fantasmas) y nada se queda movido. Las pruebas que las
+  // miran ponen e.dejarAnimar = true y luego las acaban con e.acabarAnimaciones().
+  e.animaciones = [];
+  e.dejarAnimar = false;
+  const animarOriginal = w.Element.prototype.animate;
+  w.Element.prototype.animate = function animate(...args) {
+    const a = animarOriginal.apply(this, args);
+    if (e.dejarAnimar) e.animaciones.push(a);
+    else a.finish();
+    return a;
+  };
+  e.acabarAnimaciones = () => {
+    e.dejarAnimar = false;
+    for (const a of e.animaciones.splice(0)) {
+      try {
+        a.finish();
+      } catch {
+        // Ya cancelada.
+      }
+    }
+  };
   e.todosLosErrores = () => [...e.erroresApp(), ...e.errores];
   e.dialogosNavegador = () => e.alertas + e.confirmaciones + e.prompts;
   return e;

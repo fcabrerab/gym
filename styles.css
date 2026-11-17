@@ -515,11 +515,11 @@ body.con-hoja .avisos { top: calc(env(safe-area-inset-top) + 12px); bottom: auto
 .botones-orden { display: flex; gap: 8px; flex: none; }
 .botones-orden .boton-icono { background: var(--superficie-2); border: 1px solid var(--borde); }
 
-/* Superset (D-120) en el editor de la rutina: una sola tarjeta con los dos, uno debajo del otro a toda la
-   anchura (dos columnas no se leían bien), y el descanso corto como separador entre ellos. Subir/bajar, debajo
-   de la tarjeta, a la derecha (junto a ella, los dos quedarían demasiado estrechos). */
-.fila-superset-grupo { display: flex; flex-direction: column; gap: 6px; }
-.fila-superset-grupo .botones-orden { align-self: flex-end; }
+/* Superset (D-120) en el editor de la rutina: una sola tarjeta con los dos, uno debajo del otro a toda la anchura
+   de la tarjeta (dos columnas no se leían bien), y el descanso corto como separador entre ellos. Subir/bajar, a su
+   derecha, como en las demás filas (desde la 1.1.0; antes iban debajo): la tarjeta queda tan ancha como una fila. */
+.fila-superset-grupo { display: flex; gap: 8px; align-items: center; }
+.fila-superset-grupo .fila-superset { flex: 1; min-width: 0; }
 .fila-superset {
   display: flex; flex-direction: column;
   background: var(--seleccion); border: 1px solid var(--info); border-radius: 16px; overflow: hidden;
@@ -807,3 +807,27 @@ body.con-hoja .avisos { top: calc(env(safe-area-inset-top) + 12px); bottom: auto
 @media (prefers-reduced-motion: reduce) {
   .destello::after { animation: aro-quieto .9s linear; }
 }
+
+/* --- Lo de la 1.1.0: ordenar arrastrando y transiciones (D-122) --- */
+
+/* Las filas que se ordenan arrastrando (Rutina, js/ui/arrastre.js): mantenerlas pulsadas no selecciona texto ni saca
+   el menú del móvil, y la miniatura no se arrastra sola. */
+.lista-orden > [data-orden] { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.lista-orden img { -webkit-user-drag: none; }
+.ayuda-orden { margin: -4px 0 8px; }
+/* La levantada va encima de las demás, con sombra, y sigue al dedo; las demás se apartan deslizándose para dejarle
+   hueco (con «reducir movimiento», al momento). */
+.ordenando > .arrastrando, .ordenando > .volviendo { position: relative; z-index: 5; }
+.arrastrando > .fila, .arrastrando > .fila-superset { box-shadow: 0 10px 24px rgb(0 0 0 / .28); }
+@media (prefers-reduced-motion: no-preference) {
+  .ordenando > [data-orden]:not(.arrastrando) { transition: transform .18s cubic-bezier(.2, 0, 0, 1); }
+}
+
+/* La capa de los «fantasmas» (js/ui/movimiento.js): lo que se veía de una tarjeta vuelta a pintar, que se desvanece
+   encima de la nueva. Por encima de la pantalla y por debajo de la cabecera (20), la barra de descanso (25), la
+   navegación (30), las hojas (50) y los avisos (60); no recoge toques. */
+.capa-movimiento { position: fixed; inset: 0; z-index: 2; pointer-events: none; overflow: hidden; }
+.capa-movimiento > .fantasma { position: absolute; margin: 0; overflow: hidden; }
+/* Mientras una tarjeta se mueve es una capa propia, y el resplandor del aro (detrás, con z-index −1) quedaría encima de
+   su fondo: se esconde esos 0,2 s (el aro, no). */
+.ej.abierto.en-movimiento::after { opacity: 0; }
