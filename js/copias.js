@@ -1,5 +1,7 @@
-// Copias de seguridad: exportar en el formato que importa la normal (más la clave «beta»), leer una copia con
-// validación y vista previa sin tocar nada, aplicarla, y las copias automáticas en IndexedDB (gym-beta-copias).
+// Copias de seguridad: exportar en el formato de la versión vieja (la normal) más la clave «beta», con todo lo de esta
+// app (el nombre es de cuando era la beta y se queda: así se leen igual las copias viejas y las nuevas, y el PC las
+// reconoce), leer una copia con validación y vista previa sin tocar nada, aplicarla, y las copias automáticas en
+// IndexedDB (gym-beta-copias).
 
 import { VERSION } from "./version.js";
 import {
@@ -28,7 +30,7 @@ function paresDeSuperset(dia) {
 }
 
 export const TEXTO_NO_PARECE = "Este archivo no parece una copia del gimnasio.";
-export const TEXTO_FORMA_RARA = "Este archivo no se puede cargar: tiene datos con una forma que la beta no entiende.";
+export const TEXTO_FORMA_RARA = "Este archivo no se puede cargar: tiene datos con una forma que la app no entiende.";
 
 // --- Exportar ---
 
@@ -88,10 +90,10 @@ export function construirExportacion(datos, ahoraMs) {
   return exportacion;
 }
 
-// «gym-beta-copia-2026-11-04-1930.json», con la fecha local.
+// «gym-copia-2026-11-04-1930.json», con la fecha local (hasta la 0.2.10, «gym-beta-copia-…»).
 export function nombreArchivo(ahoraMs) {
   const d = new Date(ahoraMs);
-  return `gym-beta-copia-${fechaLocal(ahoraMs)}-${dos(d.getHours())}${dos(d.getMinutes())}.json`;
+  return `gym-copia-${fechaLocal(ahoraMs)}-${dos(d.getHours())}${dos(d.getMinutes())}.json`;
 }
 
 function descargar(texto, nombre) {
@@ -126,7 +128,7 @@ export function guardarCopia(datos, ahoraMs, { forzarDescarga = false } = {}) {
     sePuede = false;
   }
   if (sePuede) {
-    return navigator.share({ files: [archivo], title: "Copia de Gym Beta" })
+    return navigator.share({ files: [archivo], title: "Copia de Gym" })
       .then(() => ({ metodo: "compartida", nombre }))
       .catch((err) => (err?.name === "AbortError" ? { metodo: null, cancelado: true, nombre } : descargar(texto, nombre)));
   }
@@ -199,7 +201,7 @@ function leerExportacion(v, { actuales, ahoraMs }) {
   }
   const beta = esObjeto(v.beta) ? v.beta : null;
   if (beta && Number(beta.esquema) > ESQUEMA) {
-    return { ok: false, error: "Esta copia es de una versión más nueva de la beta. Actualiza la beta y vuelve a intentarlo." };
+    return { ok: false, error: "Esta copia es de una versión más nueva de la app. Actualiza la app y vuelve a intentarlo." };
   }
   const avisos = [];
   if (esObjeto(v.settings)) {
@@ -391,11 +393,11 @@ export function necesitaCopia(datos, ahoraMs, posponerHasta = null, ultimaPc = n
   if (Number.isFinite(ultimaPc) && !(datos.actualizado > ultimaPc)) return null;
   const dias = datos.ajustes?.recordatorioCopiaDias ?? 7;
   const ultima = datos.copia?.ultima ?? null;
-  if (ultima == null) return datos.sesiones.length > 0 ? "Aún no has guardado ninguna copia de la beta." : null;
+  if (ultima == null) return datos.sesiones.length > 0 ? "Aún no has guardado ninguna copia." : null;
   if (!(datos.actualizado > ultima)) return null;
   const n = diasEntre(ultima, ahoraMs);
   if (n <= dias) return null;
-  return `Hace ${n} días que no guardas una copia de la beta.`;
+  return `Hace ${n} días que no guardas una copia.`;
 }
 
 // --- Copias automáticas (IndexedDB) ---

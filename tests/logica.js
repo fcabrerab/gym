@@ -3,12 +3,12 @@
 import { base, datosBeta, sesionInventada, diffsNormal, COPIAS_MALAS, ms } from "./datos.js";
 
 export async function ejecutar({ caso, nota }) {
-  const util = await import("/beta/js/util.js");
-  const modelo = await import("/beta/js/modelo.js");
-  const normal = await import("/beta/js/normal.js");
-  const copias = await import("/beta/js/copias.js");
-  const S = await import("/beta/js/sesion.js");
-  const { VERSION } = await import("/beta/js/version.js");
+  const util = await import("/js/util.js");
+  const modelo = await import("/js/modelo.js");
+  const normal = await import("/js/normal.js");
+  const copias = await import("/js/copias.js");
+  const S = await import("/js/sesion.js");
+  const { VERSION } = await import("/js/version.js");
   const { rutina, ejercicios } = await base();
 
   // L1 descansos
@@ -102,7 +102,7 @@ export async function ejecutar({ caso, nota }) {
   caso(Array.isArray(exp.beta?.sesiones) && exp.beta.sesiones.length === 1 && exp.beta.version === VERSION && exp.gymApp === true && exp.version === 1,
     "L6 la clave beta lleva las sesiones y la versión");
   caso(Object.keys(exp).join() === "gymApp,version,exportedAt,settings,days,beta", `L6 orden de las claves: ${Object.keys(exp).join(", ")}`);
-  caso(copias.nombreArchivo(new Date(2026, 10, 4, 9, 5).getTime()) === "gym-beta-copia-2026-11-04-0905.json", "L6 nombre del archivo con la fecha local");
+  caso(copias.nombreArchivo(new Date(2026, 10, 4, 9, 5).getTime()) === "gym-copia-2026-11-04-0905.json", "L6 nombre del archivo con la fecha local");
   const vuelta = await copias.leerCopia(JSON.stringify(exp), { actuales: null, ahoraMs: 5 });
   const limpio = (d) => { const c = structuredClone(d); delete c.rev; delete c.origen; delete c.copia; delete c.creado; delete c.actualizado; c.marcas = c.marcas.map((m) => ({ ...m, fecha: 0 })); return c; };
   const iguales = vuelta.ok && JSON.stringify(limpio(vuelta.datosNuevos)) === JSON.stringify(limpio({ ...conSesion, marcas: conSesion.marcas }));
@@ -216,22 +216,16 @@ export async function ejecutar({ caso, nota }) {
   const dc = await datosBeta();
   dc.copia = { ultima: ms("2026-10-26T10:00:00"), metodo: "descargada" };
   dc.actualizado = ms("2026-10-30T10:00:00");
-  caso(copias.necesitaCopia(dc, ms("2026-11-03T18:00:00")) === "Hace 8 días que no guardas una copia de la beta."
+  caso(copias.necesitaCopia(dc, ms("2026-11-03T18:00:00")) === "Hace 8 días que no guardas una copia."
     && copias.necesitaCopia(dc, ms("2026-11-03T18:00:00"), ms("2026-11-04T00:00:00")) === null
     && copias.necesitaCopia({ ...dc, actualizado: dc.copia.ultima }, ms("2026-11-03T18:00:00")) === null,
   "Recordatorio de copia: a los 8 días con cambios sí; pospuesto o sin cambios, no");
 
-  // Volver a copiar desde la normal y cargar copias: lo que se conserva
+  // Cargar copias (de la versión vieja y de esta app): lo que se conserva
   const actuales = await datosBeta();
   actuales.sesiones.push(sesionInventada(actuales, "tuesday-push", "2026-11-01T18:00:00"));
   actuales.ejercicios["pec-deck"].notas = "Asiento 3";
   actuales.ejercicios["pec-deck"].incremento = 5;
-  const snapN2b = normal.fusionarComoLaNormal(diffs.N2, rutina, ejercicios);
-  const nuevos = normal.datosDesdeSnapshot(snapN2b, { origen: "normal", ahoraMs: 9, ejerciciosBase: ejercicios }).datos;
-  const recopiado = normal.aplicarRecopia(actuales, nuevos, 9);
-  caso(recopiado.sesiones.length === 1 && recopiado.ejercicios["pec-deck"].pr === 50 && recopiado.ejercicios["pec-deck"].notas === "Asiento 3"
-    && recopiado.ejercicios["pec-deck"].incremento === 5 && recopiado.marcas.some((m) => m.exerciseId === "pec-deck" && m.kg === 50 && m.motivo === "copia"),
-  "aplicarRecopia conserva el historial, las notas y el incremento, y apunta la marca que cambia");
   const leidaNormal = await copias.leerCopia(JSON.stringify(normal.fusionarComoLaNormal(diffs.N2, rutina, ejercicios)), { actuales, ahoraMs: 9 });
   const cargada = copias.aplicarCopia(actuales, leidaNormal, 9);
   caso(leidaNormal.ok && !leidaNormal.traeHistorial && cargada.sesiones.length === 1 && cargada.ejercicios["pec-deck"].notas === "Asiento 3"
@@ -256,7 +250,7 @@ export async function ejecutar({ caso, nota }) {
 // Lo arreglado en la 0.2.0 tras las revisiones (cada caso dice qué comprueba).
 async function correcciones({ caso, util, modelo, normal, copias, S, rutina, ejercicios }) {
   const cargar = async () => ({ rutina: structuredClone(rutina), ejercicios: structuredClone(ejercicios) });
-  const piezas = await import("/beta/js/ui/piezas.js");
+  const piezas = await import("/js/ui/piezas.js");
 
   // Sesión abandonada: solo cuenta el tiempo (pasada la medianoche sigue la misma sesión).
   caso(!S.abandonada({ ultimoCambio: ms("2026-11-03T23:50:00") }, ms("2026-11-04T00:02:00"))
@@ -323,23 +317,9 @@ async function correcciones({ caso, util, modelo, normal, copias, S, rutina, eje
   if (temaAntes == null) localStorage.removeItem("gym-theme-v1"); else localStorage.setItem("gym-theme-v1", temaAntes);
   caso(sinTema === "oscuro" && claro === "claro", `tema de la normal: sin elegir → ${sinTema}; «light» → ${claro}`);
 
-  // Las dos versiones a la vez: qué cambia, qué bajaría y quedarse con la marca más alta.
-  caso(normal.huellaTexto('{"a":1}') === normal.huellaTexto('{"a":1}') && normal.huellaTexto('{"a":1}') !== normal.huellaTexto('{"a":2}') && normal.huellaTexto(null) === "vacia",
-    "huella de los datos de la normal: igual con el mismo texto y distinta si cambia");
-  const beta = await datosBeta({ cambios: (d) => { d.ejercicios["pec-deck"].pr = 60; d.ejercicios["leg-press"].pr = null; } });
-  const laNormal = normal.datosDesdeSnapshot(normal.fusionarComoLaNormal({ exercises: { "lat-pulldown": { pr: 55 } } }, rutina, ejercicios), { origen: "normal", ahoraMs: 1, ejerciciosBase: ejercicios }).datos;
-  const cmp = normal.compararConNormal(beta, laNormal);
-  caso(cmp.marcas.length === 3 && cmp.marcas.some((m) => m.id === "lat-pulldown" && m.beta === 52 && m.normal === 55) && cmp.soloNormal.length === 0,
-    `compararConNormal: ${cmp.marcas.map((m) => `${m.id} ${m.beta}/${m.normal}`).join(", ")}`);
-  const efecto = normal.efectoEnLaNormal(beta, laNormal, ejercicios);
-  caso(efecto.bajan.some((m) => m.id === "lat-pulldown" && m.de === 55 && m.a === 52) && efecto.publicadas.some((m) => m.id === "leg-press" && m.kg === 73),
-    "efectoEnLaNormal: la marca de la normal que bajaría y la que saldría con la publicada");
-  const bajan = normal.marcasQueBajan(beta, laNormal);
-  const conMax = normal.aplicarRecopia(beta, laNormal, 9, { quedarseMaxima: true });
-  const sinMax = normal.aplicarRecopia(beta, laNormal, 9);
-  caso(bajan.some((m) => m.id === "pec-deck" && m.de === 60 && m.a === 47) && conMax.ejercicios["pec-deck"].pr === 60 && conMax.ejercicios["lat-pulldown"].pr === 55
-    && sinMax.ejercicios["pec-deck"].pr === 47,
-  "volver a copiar: dice qué marcas bajan y, con «quedarse con la más alta», no baja ninguna");
+  // Lo que compara con la versión vieja, retirado en la 1.0.0 (D-121): ya no está en normal.js.
+  caso(["huellaTexto", "huellaNormal", "compararConNormal", "efectoEnLaNormal", "marcasQueBajan", "aplicarRecopia"].every((f) => !(f in normal)),
+    "normal.js ya no compara con la versión vieja (solo copia de ella la primera vez y lee sus copias)");
 
   // Mensajes de los campos de una serie, uno por caso (y 0 kg con peso es que falta el peso).
   caso(piezas.errorPeso(1000) === "Como mucho 999,5 kg." && piezas.errorPeso(0) === piezas.TEXTO_PON_EL_PESO && piezas.errorPeso(null) === "Escribe un número, por ejemplo 82,5"
@@ -350,7 +330,7 @@ async function correcciones({ caso, util, modelo, normal, copias, S, rutina, eje
     "el ✓ dice «Pon el peso» mientras falta");
 
   // «Deshacer» de un cambio de datos: solo si no ha habido otro después (no se lleva por delante lo de después).
-  const almacen = await import("/beta/js/almacen.js");
+  const almacen = await import("/js/almacen.js");
   const textoAntes = localStorage.getItem("gym-beta-datos");
   localStorage.setItem("gym-beta-datos", JSON.stringify(await datosBeta()));
   almacen.cargarDatos();
@@ -373,7 +353,7 @@ async function correcciones({ caso, util, modelo, normal, copias, S, rutina, eje
   if (textoAntes == null) localStorage.removeItem("gym-beta-datos"); else localStorage.setItem("gym-beta-datos", textoAntes);
 
   // Un descanso de 0 s no empieza nada.
-  const descanso = await import("/beta/js/descanso.js");
+  const descanso = await import("/js/descanso.js");
   caso(descanso.empezarDescanso({ exerciseId: "x", diaId: "d", nombre: "X", texto: "t", duracion: 0 }) === null && !localStorage.getItem("gym-beta-descanso"),
     "empezarDescanso con 0 s no empieza ningún descanso");
 

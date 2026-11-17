@@ -181,7 +181,7 @@ function textoFallo(r) {
 
 function textoSuscripcion(err) {
   if (err?.message === "sin-push") return "Este navegador no admite avisos desde el PC.";
-  if (err?.message === "sin-sw") return "La beta aún se está preparando: vuelve a intentarlo en unos segundos.";
+  if (err?.message === "sin-sw") return "La app aún se está preparando: vuelve a intentarlo en unos segundos.";
   if (err?.name === "NotAllowedError") return "Hace falta el permiso de notificaciones (en los ajustes de Chrome).";
   return "El navegador no ha podido suscribirse a los avisos.";
 }

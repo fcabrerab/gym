@@ -165,7 +165,7 @@ function ponerMedios({ titulo, artista, acciones = {} }) {
   try {
     if (typeof MediaMetadata === "function") {
       medios.metadata = new MediaMetadata({
-        title: titulo, artist: artista, album: "Gym Beta", artwork: [{ src: "./icono-512.png", sizes: "512x512", type: "image/png" }],
+        title: titulo, artist: artista, album: "Gym", artwork: [{ src: "./icono-512.png", sizes: "512x512", type: "image/png" }],
       });
     }
   } catch {

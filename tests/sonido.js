@@ -46,8 +46,8 @@ export async function ejecutar(c) {
   const {
     caso, esperar, real, hastaQue, hastaQueVirtual, limpiarBeta, guardar, leerJson, cargarBeta, quitar, pulsar, textoDe, avisoActual, sinErrores,
   } = c;
-  const sonido = await import("/beta/js/sonido.js");
-  const { VERSION } = await import("/beta/js/version.js");
+  const sonido = await import("/js/sonido.js");
+  const { VERSION } = await import("/js/version.js");
   const F = sonido.MUESTRAS_POR_SEGUNDO;
   const datosGuardados = () => leerJson("gym-beta-datos");
   const barraVisible = (d) => !d.getElementById("barra-descanso").hidden;
@@ -122,8 +122,8 @@ export async function ejecutar(c) {
 
   // S3 El ajuste: apagado de serie, los datos de antes valen, va en «beta» al exportar (nunca en «settings»)
   {
-    const modelo = await import("/beta/js/modelo.js");
-    const copias = await import("/beta/js/copias.js");
+    const modelo = await import("/js/modelo.js");
+    const copias = await import("/js/copias.js");
     caso(modelo.AJUSTES_POR_DEFECTO.descansoConSonido === false && modelo.normalizarAjustes({}).descansoConSonido === false
       && modelo.normalizarAjustes({ descansoConSonido: "sí" }).descansoConSonido === false && modelo.normalizarAjustes({ descansoConSonido: true }).descansoConSonido === true,
     "S3 «descansoConSonido» apagado de serie; un valor raro vale apagado y true se respeta");
@@ -185,8 +185,8 @@ export async function ejecutar(c) {
     caso(e.audios.length === 1 && e.audios[0].src.startsWith("blob:") && Math.abs(w1.segundos - 32) < 0.1,
       `S5 el ✓ pone a sonar el WAV de lo que queda más el aviso (${e.audios.length} play(), ${w1.segundos.toFixed(2)} s para 0:30)`);
     const md = m.metadata;
-    caso(md?.title === "Descanso · Press de pecho tumbado en máquina" && md.artist === "Te toca la serie 2 de 3" && md.album === "Gym Beta"
-      && md.artwork?.[0]?.src.endsWith("/beta/icono-512.png") && md.artwork[0].sizes === "512x512" && md.artwork[0].type === "image/png",
+    caso(md?.title === "Descanso · Press de pecho tumbado en máquina" && md.artist === "Te toca la serie 2 de 3" && md.album === "Gym"
+      && md.artwork?.[0]?.src.endsWith("/icono-512.png") && md.artwork[0].sizes === "512x512" && md.artwork[0].type === "image/png",
     `S5 Media Session: «${md?.title}» / «${md?.artist}» / «${md?.album}», con el icono de la app`);
     caso(["pause", "play", "nexttrack", "seekforward", "seekbackward"].every((a) => typeof m.botones[a] === "function") && m.playbackState === "playing"
       && posicion()?.duration === 30 && posicion().position < 0.5 && posicion().playbackRate === 1,
@@ -299,7 +299,7 @@ export async function ejecutar(c) {
   // S8 Al abrir la app con un descanso en marcha (sin un toque, el navegador puede no dejar sonar): no se avisa de
   // nada y el primer toque pone el sonido. Con descanso.js cargado en esta página y su <audio> con espías.
   {
-    const descanso = await import("/beta/js/descanso.js");
+    const descanso = await import("/js/descanso.js");
     const reproducir = HTMLMediaElement.prototype.play;
     const llamadas = [];
     let falla = "NotAllowedError";

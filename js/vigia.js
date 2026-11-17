@@ -1,6 +1,6 @@
-// Vigía del arranque (script clásico, no módulo): si los módulos de la beta no llegan (mala cobertura la primera
-// vez, antes de que el service worker los guarde), en vez de quedarse en «Cargando la beta…» para siempre, dice que no
-// se ha podido abrir y ofrece volver a intentarlo o ir a la versión normal. app.js pone data-modulos en cuanto llega.
+// Vigía del arranque (script clásico, no módulo): si los módulos de la app no llegan (mala cobertura la primera
+// vez, antes de que el service worker los guarde), en vez de quedarse en «Cargando…» para siempre, dice que no se ha
+// podido abrir y ofrece volver a intentarlo. app.js pone data-modulos en cuanto llega.
 (function vigia() {
   var raiz = document.documentElement;
   var hecho = false;
@@ -21,20 +21,16 @@
     caja.setAttribute("role", "alert");
     var titulo = document.createElement("h1");
     titulo.className = "titulo-pantalla";
-    titulo.textContent = "No se ha podido abrir la beta";
+    titulo.textContent = "No se ha podido abrir la app";
     var texto = document.createElement("p");
     texto.className = "arranque-texto";
-    texto.textContent = "Puede que falte conexión. Vuelve a intentarlo; mientras tanto, la versión normal funciona igual.";
+    texto.textContent = "Puede que falte conexión. Vuelve a intentarlo en un momento.";
     var reintentar = document.createElement("button");
     reintentar.type = "button";
     reintentar.className = "boton boton-principal boton-ancho";
     reintentar.textContent = "Volver a intentarlo";
     reintentar.addEventListener("click", function recargar() { location.reload(); });
-    var normal = document.createElement("a");
-    normal.className = "enlace-boton";
-    normal.href = "../?normal";
-    normal.textContent = "Usar la versión normal";
-    caja.append(titulo, texto, reintentar, normal);
+    caja.append(titulo, texto, reintentar);
     pantalla.replaceChildren(caja);
     raiz.dataset.listo = "error";
   }

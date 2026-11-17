@@ -22,7 +22,7 @@ export async function ejecutar(c) {
     const datos = await datosBeta();
     datos.sesiones.push(sesionInventada(datos, "tuesday-push", "2026-10-27T18:00:00", { reps: 12 }));
     datos.ejercicios["machine-chest-press"].notas = "Asiento 4 · respaldo 2";
-    datos.ejercicios["machine-chest-press"].image = "/images/icon.svg";
+    datos.ejercicios["machine-chest-press"].image = "/icon.svg";
     await preparar(datos);
     const b = await cargarBeta();
     pulsar(b.d, "abrir-ejercicio", "machine-chest-press");
@@ -141,7 +141,7 @@ export async function ejecutar(c) {
     pulsar(b.d, "deshacer");
     await esperar(30);
     caso(datosGuardados().apuntes.length === 1, "F29 deshacer el borrado del apunte");
-    const copias = await import("/beta/js/copias.js");
+    const copias = await import("/js/copias.js");
     caso(copias.construirExportacion(datosGuardados(), 1).beta.apuntes.length === 1, "F29 los apuntes van en beta.apuntes al exportar");
     pulsar(b.d, "cerrar-hoja");
     await hastaQueVirtual(() => !hojaAbierta(b.d), 2000);
@@ -266,14 +266,14 @@ export async function ejecutar(c) {
   {
     await preparar(await datosBeta(), { "gym-beta-ui": { versionVista: "0.0.9" } });
     const b = await cargarBeta();
-    const { VERSION } = await import("/beta/js/version.js");
-    caso(avisoActual(b.d) === `Beta actualizada a la ${VERSION}` && existe(b.d, "aviso-accion") && leerJson("gym-beta-ui").versionVista === VERSION, `F29 al abrir una versión nueva: «${avisoActual(b.d)}» con «Novedades»`);
+    const { VERSION } = await import("/js/version.js");
+    caso(avisoActual(b.d) === `App actualizada a la ${VERSION}` && existe(b.d, "aviso-accion") && leerJson("gym-beta-ui").versionVista === VERSION, `F29 al abrir una versión nueva: «${avisoActual(b.d)}» con «Novedades»`);
     quitar(b);
   }
 
   // F17 recuperar una copia automática
   {
-    const copias = await import("/beta/js/copias.js");
+    const copias = await import("/js/copias.js");
     const vieja = await datosBeta({ cambios: (d) => { d.dias[0].title = "De la copia"; } });
     await preparar(await datosBeta());
     await real(copias.guardarCopiaAuto(vieja, "fin de sesión", ms("2026-11-02T19:34:00"), { espera: 60000 }));

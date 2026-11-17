@@ -151,7 +151,7 @@ export function alGuardarSesion() {
     if (r.ok || falloAvisado) return;
     falloAvisado = true;
     deps.avisar(r.red
-      ? "No se ha podido guardar la copia en el PC: no responde. Se intentará otra vez al abrir la beta."
+      ? "No se ha podido guardar la copia en el PC: no responde. Se intentará otra vez al abrir la app."
       : `No se ha podido guardar la copia en el PC. ${r.texto}`);
   });
 }

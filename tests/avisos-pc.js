@@ -58,7 +58,7 @@ export async function ejecutar(c) {
 
   // A1 La dirección del PC: solo https y …ts.net, sin ruta, usuario ni otro puerto
   {
-    const m = await import("/beta/js/avisos-pc.js");
+    const m = await import("/js/avisos-pc.js");
     const pruebas = [
       ["f-pc-2.taild411c0.ts.net", "https://f-pc-2.taild411c0.ts.net"],
       ["https://F-PC-2.taild411c0.ts.net/", "https://f-pc-2.taild411c0.ts.net"],

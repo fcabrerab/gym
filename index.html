@@ -3,98 +3,64 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#0f172a">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' https: data: blob:; media-src 'self' blob:; connect-src 'self' https://*.ts.net; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#131c2e" media="(prefers-color-scheme: dark)">
+  <meta name="description" content="App del gimnasio: apunta series, descansos y marcas.">
+  <!-- La misma versión que js/version.js y sw.js: si el HTML y el JavaScript no coinciden, la app no arranca a medias. -->
+  <meta name="gym-beta-version" content="1.0.0">
   <link rel="manifest" href="./manifest.json">
-  <link rel="icon" href="./images/icon.svg" type="image/svg+xml">
-  <link rel="apple-touch-icon" href="./images/icon.svg">
-  <script>
-    // Abre la última versión que se eligió: si la última vez se pasó a la beta con el botón «Beta», se va directo a
-    // ella. El enlace «Versión normal» de la beta llega con «?normal»: se queda aquí y se recuerda.
-    (() => {
-      const CLAVE = "gym-beta-preferida";
-      try {
-        if (new URLSearchParams(location.search).has("normal")) {
-          localStorage.setItem(CLAVE, "normal");
-          history.replaceState(null, "", location.pathname + location.hash);
-        } else if (localStorage.getItem(CLAVE) === "beta") {
-          location.replace("./beta/");
-          return;
-        }
-      } catch {
-        // Sin localStorage: se queda en la normal.
-      }
-      document.addEventListener("click", (evento) => {
-        if (!evento.target.closest?.(".beta-link")) return;
-        try { localStorage.setItem(CLAVE, "beta"); } catch { /* sin localStorage: el botón lleva igual */ }
-      });
-    })();
-  </script>
-  <link rel="stylesheet" href="./styles.css?v=16">
-  <title>Gym Routine</title>
+  <link rel="icon" href="./icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="./icon.svg">
+  <!-- «?1»: el service worker de la app vieja guardó «styles.css» a secas; la primera vez que se abre esta, aún puede
+       mandar él y, con otra dirección, no le da la hoja vieja. No hay que cambiarlo en cada versión. -->
+  <link rel="stylesheet" href="./styles.css?1">
+  <title>Gym</title>
 </head>
-<body>
-  <div class="app-shell">
-    <header class="topbar">
-      <div>
-        <p class="eyebrow">Rutina personal</p>
-        <h1>Gym Routine</h1>
-      </div>
-      <div class="header-actions">
-        <a class="beta-link" href="./beta/" title="Probar la versión nueva (beta)">Beta</a>
-        <button id="modeToggleBtn" class="mode-btn icon-btn active" type="button" aria-label="Cambiar a modo editar" aria-pressed="false">✎</button>
-        <details class="mini-menu">
-          <summary class="mode-btn" aria-label="Abrir menú">☰</summary>
-          <div class="mini-menu-panel">
-            <div class="menu-section-title">Tema</div>
-            <button id="themeLightBtn" class="theme-chip" type="button">Claro</button>
-            <button id="themeDarkBtn" class="theme-chip" type="button">Oscuro</button>
-            <div class="menu-section-title">Avisos del temporizador</div>
-            <label class="menu-check"><input id="timerAlertSetting" type="checkbox"> Alerta visual</label>
-            <label class="menu-check"><input id="timerSoundSetting" type="checkbox"> Sonido</label>
-            <label class="menu-check"><input id="timerNotificationSetting" type="checkbox"> Notificación</label>
-            <button id="addDayMenuBtn" class="theme-chip" type="button">Añadir día</button>
-            <small class="menu-help">Crea un día nuevo en la rutina.</small>
-            <button class="theme-chip" id="exportBtnGlobal" type="button">Exportar datos</button>
-            <small class="menu-help">Descarga tus cambios locales en JSON.</small>
-            <button class="theme-chip" id="importBtnGlobal" type="button">Importar datos</button>
-            <small class="menu-help">Carga un JSON guardado previamente.</small>
-            <button class="theme-chip" id="restoreLocalBtnGlobal" type="button">Restaurar datos locales</button>
-            <small class="menu-help">Borra solo las personalizaciones locales.</small>
-            <button class="theme-chip" id="restoreRoutineBtnGlobal" type="button">Restaurar rutina base</button>
-            <small class="menu-help">Vuelve a la rutina base sin borrar PRs.</small>
-          </div>
-        </details>
-      </div>
-    </header>
-
-    <div class="day-toolbar">
-      <nav class="day-nav" id="dayNav" aria-label="Navegación de días"></nav>
+<body class="arrancando">
+  <header class="cabecera" id="cabecera">
+    <div class="cabecera-fila">
+      <p class="marca"><span class="marca-nombre">Gimnasio</span></p>
+      <!-- El lápiz: apuntar un fallo o una idea desde cualquier pantalla (antes, «BETA»; el id se queda). -->
+      <button type="button" class="boton-apuntar" id="boton-beta" aria-label="Apuntar un fallo o una idea" title="Apuntar un fallo o una idea">
+        <svg class="icono" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 20h4L19.5 8.5l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg>
+      </button>
     </div>
+    <div class="fila-dias" id="fila-dias" role="group" aria-label="Días de la rutina" hidden></div>
+  </header>
 
-    <main id="app" class="app-main" aria-live="polite"></main>
-  </div>
+  <main id="pantalla" class="pantalla" tabindex="-1">
+    <p class="cargando">Cargando…</p>
+  </main>
 
-  <template id="exerciseCardTemplate">
-    <article class="exercise-card">
-      <img class="exercise-image" alt="">
-      <div class="exercise-body">
-        <div class="exercise-title-row">
-          <h2 class="exercise-name"></h2>
-        </div>
-        <div class="exercise-meta">
-          <button class="meta-pill rest-pill rest-btn" type="button"></button>
-          <div class="quick-pr">
-            <input class="pr-input" type="number" min="0" step="0.5" inputmode="decimal">
-            <span>kg</span>
-          </div>
-          <span class="meta-pill series-pill"></span>
-          <span class="meta-pill reps-pill"></span>
-          <span class="meta-pill muscle-pill"></span>
-        </div>
-      </div>
-    </article>
-  </template>
+  <div id="barra-descanso" class="barra-descanso" role="region" aria-label="Descanso" hidden></div>
+  <div id="avisos" class="avisos" aria-live="polite"></div>
 
-  <script src="./app.js?v=16" type="module"></script>
+  <nav id="nav" class="nav" aria-label="Secciones">
+    <button type="button" class="nav-boton" data-accion="ir-entreno">
+      <svg class="icono" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6.5 7.5v9"/><path d="M17.5 7.5v9"/><path d="M3.5 10v4"/><path d="M20.5 10v4"/><path d="M6.5 12h11"/></svg>
+      <span>Entreno</span>
+    </button>
+    <button type="button" class="nav-boton" data-accion="ir-historial">
+      <svg class="icono" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 19.5h16"/><path d="M5.5 15.5l4-5 3.5 3 5.5-7"/></svg>
+      <span>Historial</span>
+    </button>
+    <button type="button" class="nav-boton" data-accion="ir-rutina">
+      <svg class="icono" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 5.5h16v14H4z"/><path d="M4 10h16"/><path d="M8.5 3v4"/><path d="M15.5 3v4"/></svg>
+      <span>Rutina</span>
+    </button>
+    <button type="button" class="nav-boton" data-accion="ir-ajustes">
+      <svg class="icono" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 7h9"/><path d="M17 7h3"/><path d="M4 17h3"/><path d="M11 17h9"/><path d="M15 4.5v5"/><path d="M9 14.5v5"/></svg>
+      <span>Ajustes</span>
+    </button>
+  </nav>
+
+  <div id="capa-fin" class="capa-fin" role="status" hidden></div>
+  <div id="anuncios" class="solo-lector" aria-live="polite"></div>
+  <noscript><p class="noscript">La app necesita JavaScript.</p></noscript>
+
+  <script src="./js/vigia.js"></script>
+  <script type="module" src="./js/app.js"></script>
 </body>
 </html>

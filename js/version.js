@@ -1,11 +1,22 @@
-// Versión de la beta. La misma VERSION está en ../sw.js y en la meta «gym-beta-version» de ../index.html: cada
-// cambio en un archivo de beta/ obliga a subirla en los tres sitios (una prueba de tests/ comprueba que coinciden).
-export const VERSION = "0.2.10";
-export const FECHA_VERSION = "2026-11-16";
+// Versión de la app. La misma VERSION está en ../sw.js y en la meta «gym-beta-version» de ../index.html: cada
+// cambio en un archivo de la app obliga a subirla en los tres sitios (una prueba de tests/ comprueba que coinciden).
+// Hasta la 0.2.10 fue la beta, en beta/; desde la 1.0.0, es la app, en la dirección de siempre (D-121).
+export const VERSION = "1.0.0";
+export const FECHA_VERSION = "2026-11-17";
 
-// Novedades por versión, de la más nueva a la más vieja. Se enseñan en Ajustes → Beta → Novedades y, la primera
+// Novedades por versión, de la más nueva a la más vieja. Se enseñan en Ajustes → La app → Novedades y, la primera
 // vez, en «Qué tiene de nuevo».
 export const NOVEDADES = [
+  {
+    version: "1.0.0",
+    fecha: "2026-11-17",
+    cambios: [
+      "La beta pasa a ser la app del gimnasio, en la dirección de siempre (sin «beta» al final). La versión vieja se retira; tus datos siguen aquí, como estaban.",
+      "El botón «BETA» de arriba es ahora un lápiz: sirve igual para apuntar un fallo o una idea desde cualquier pantalla.",
+      "Fuera lo que comparaba con la versión vieja («Ver qué cambia», «Volver a copiar…» y su aviso). Tus datos de la versión vieja se quedan en el móvil, sin tocar.",
+      "Si tenías los avisos desde el PC o la copia en el PC, siguen solos: no hay que volver a activarlos.",
+    ],
+  },
   {
     version: "0.2.10",
     fecha: "2026-11-16",

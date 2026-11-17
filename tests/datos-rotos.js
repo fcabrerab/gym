@@ -15,11 +15,11 @@ export async function ejecutar(c) {
     const rescates = clavesBeta().filter((k) => k.startsWith("gym-beta-rescate-"));
     caso(rescates.length === 1 && localStorage.getItem(rescates[0]) === roto, `R1 se guarda aparte, con el texto idéntico (${rescates.join(", ")})`);
     caso(localStorage.getItem("gym-beta-datos") === roto, "R1 gym-beta-datos no cambia");
-    caso(b.listo === "error" && textoDe(b.d, "#pantalla").includes("No se han podido leer tus datos de la beta"), `R1 sale la pantalla y data-listo="${b.listo}"`);
+    caso(b.listo === "error" && textoDe(b.d, "#pantalla").includes("No se han podido leer tus datos"), `R1 sale la pantalla y data-listo="${b.listo}"`);
     pulsar(b.d, "descargar-danados");
     await esperar(50);
     const descarga = b.espia.descargas[0];
-    caso(descarga?.nombre?.startsWith("gym-beta-datos-danados-") && b.espia.blobs.length === 1 && (await c.real(b.espia.blobs[0].text())) === roto, `R1 «Descargar los datos dañados» baja el texto crudo (${descarga?.nombre})`);
+    caso(descarga?.nombre?.startsWith("gym-datos-danados-") && b.espia.blobs.length === 1 && (await c.real(b.espia.blobs[0].text())) === roto, `R1 «Descargar los datos dañados» baja el texto crudo (${descarga?.nombre})`);
     sinErrores(b, "R1");
     quitar(b);
     const b2 = await cargarBeta();
@@ -35,7 +35,7 @@ export async function ejecutar(c) {
     guardar("gym-beta-datos", nuevo);
     const antes = fotoBeta();
     const b = await cargarBeta();
-    caso(textoDe(b.d, "#pantalla").includes("Estos datos son de una versión más nueva de la beta. Recarga para actualizar.") && b.listo === "error",
+    caso(textoDe(b.d, "#pantalla").includes("Estos datos son de una versión más nueva de la app. Recarga para actualizar.") && b.listo === "error",
       "R2 con esquema 99 sale el aviso de versión más nueva");
     caso(JSON.stringify(fotoBeta()) === JSON.stringify(antes), "R2 sin escribir nada");
     sinErrores(b, "R2");

@@ -25,7 +25,7 @@ export async function conImagenesLocales(diff = {}) {
   const { ejercicios } = await base();
   const d = structuredClone(diff);
   d.exercises ||= {};
-  for (const e of ejercicios) d.exercises[e.id] = { image: "/images/icon.svg", ...(d.exercises[e.id] || {}) };
+  for (const e of ejercicios) d.exercises[e.id] = { image: "/icon.svg", ...(d.exercises[e.id] || {}) };
   return d;
 }
 
@@ -79,7 +79,7 @@ export async function diffsNormal() {
 // Datos de la beta hechos a partir de data/*.json, con las imágenes vacías (sin red) y la hora fija.
 export async function datosBeta({ sesiones = [], cambios = null, creado = ms("2026-10-20T10:00:00") } = {}) {
   const { rutina, ejercicios } = await base();
-  const { fusionarComoLaNormal, datosDesdeSnapshot } = await import("/beta/js/normal.js");
+  const { fusionarComoLaNormal, datosDesdeSnapshot } = await import("/js/normal.js");
   const snap = fusionarComoLaNormal({}, rutina, ejercicios);
   for (const d of snap.days) for (const e of d.exercises) e.image = "";
   const { datos } = datosDesdeSnapshot(snap, { origen: "base", ahoraMs: creado, ejerciciosBase: ejercicios });
@@ -122,6 +122,6 @@ export const COPIAS_MALAS = {
   "sin días": ['{"gymApp": true, "version": 1, "days": []}', "La copia no trae ningún día."],
   "día sin id": ['{"days": [{"label": "Martes", "exercises": []}]}', "La copia tiene un día sin identificador."],
   "ejercicio sin id": ['{"days": [{"id": "d1", "label": "Martes", "exercises": [{"name": "Algo"}]}]}', "La copia tiene un ejercicio sin identificador (día Martes)."],
-  "beta más nueva": ['{"days": [{"id": "d1", "label": "Martes", "exercises": []}], "beta": {"esquema": 99}}', "Esta copia es de una versión más nueva de la beta. Actualiza la beta y vuelve a intentarlo."],
+  "beta más nueva": ['{"days": [{"id": "d1", "label": "Martes", "exercises": []}], "beta": {"esquema": 99}}', "Esta copia es de una versión más nueva de la app. Actualiza la app y vuelve a intentarlo."],
   "una lista": ["[1, 2, 3]", "Este archivo no parece una copia del gimnasio."],
 };

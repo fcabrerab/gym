@@ -14,12 +14,13 @@ export function colorGrupo(grupo) {
   return n % COLORES;
 }
 
-// Dirección de una imagen: las relativas («images/press.png») vienen de la normal y se resuelven contra su carpeta.
+// Dirección de una imagen: las relativas («images/press.png») vienen de la versión vieja y se resuelven contra su
+// carpeta, que ahora es la de la app.
 export function direccionImagen(imagen) {
   if (!imagen) return "";
   if (/^(https?:\/\/|\/)/i.test(imagen)) return imagen;
   try {
-    return new URL(imagen, new URL("../", location.href)).href;
+    return new URL(imagen, new URL("./", location.href)).href;
   } catch {
     return "";
   }

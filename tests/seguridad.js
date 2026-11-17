@@ -28,12 +28,12 @@ export async function ejecutar(c) {
   const { caso, nota, esperar, limpiarBeta, guardar, cargarBeta, quitar, textoDe, sinErrores, leerNormal } = c;
   const texto = (ruta) => fetch(ruta, { cache: "no-store" }).then((r) => (r.ok ? r.text() : Promise.reject(new Error(`${ruta}: ${r.status}`))));
 
-  const sw = await texto("/beta/sw.js");
+  const sw = await texto("/sw.js");
   const bloque = sw.match(/const ARCHIVOS = \[([\s\S]*?)\];/)?.[1] || "";
   const archivos = [...bloque.matchAll(/"([^"]+)"/g)].map((m) => m[1]);
-  const rutas = [...new Set(archivos.map((a) => (a === "./" ? "/beta/" : `/beta/${a.replace(/^\.\//, "")}`)))];
+  const rutas = [...new Set(archivos.map((a) => (a === "./" ? "/" : `/${a.replace(/^\.\//, "")}`)))];
   const textos = {};
-  for (const r of [...rutas, "/beta/sw.js"]) textos[r] = await texto(r);
+  for (const r of [...rutas, "/sw.js"]) textos[r] = await texto(r);
 
   // S1 palabras prohibidas
   const hallazgos = [];
@@ -42,43 +42,47 @@ export async function ejecutar(c) {
   }
   caso(hallazgos.length === 0 && Object.keys(textos).length >= 20, `S1 ninguna palabra prohibida en ${Object.keys(textos).length} archivos${hallazgos.length ? ` (${hallazgos.join("; ")})` : ""}`);
 
-  // ARCHIVOS lista todo beta/ (el servidor local enseña el contenido de las carpetas sin index.html)
+  // ARCHIVOS lista toda la app (el servidor local enseña el contenido de las carpetas sin index.html)
   const listar = async (carpeta) => {
     const html = await texto(carpeta);
     return [...html.matchAll(/href="([^"?#]+)"/g)].map((m) => decodeURIComponent(m[1])).filter((h) => !h.endsWith("/") && !h.startsWith("."));
   };
   const enDisco = [
-    ...["index.html", "styles.css", "manifest.json", "icon.svg"].map((f) => `/beta/${f}`),
-    ...(await listar("/beta/js/")).map((f) => `/beta/js/${f}`),
-    ...(await listar("/beta/js/ui/")).map((f) => `/beta/js/ui/${f}`),
+    ...["index.html", "styles.css", "manifest.json", "icon.svg", "icono-512.png", "insignia-512.png"].map((f) => `/${f}`),
+    ...(await listar("/js/")).map((f) => `/js/${f}`),
+    ...(await listar("/js/ui/")).map((f) => `/js/ui/${f}`),
   ];
   const faltan = enDisco.filter((r) => !rutas.includes(r));
-  caso(faltan.length === 0 && rutas.includes("/beta/") && rutas.includes("/beta/index.html"), `ARCHIVOS de sw.js lista todo beta/ (${rutas.length} entradas)${faltan.length ? `; faltan ${faltan.join(", ")}` : ""}`);
+  const ajenos = rutas.filter((r) => /^\/(data|tests|beta)\//.test(r));
+  caso(faltan.length === 0 && ajenos.length === 0 && rutas.includes("/") && rutas.includes("/index.html"),
+    `ARCHIVOS de sw.js lista toda la app y nada de data/, tests/ ni beta/ (${rutas.length} entradas)${faltan.length ? `; faltan ${faltan.join(", ")}` : ""}${ajenos.length ? `; sobran ${ajenos.join(", ")}` : ""}`);
 
   // S2 CSP
-  const indice = textos["/beta/index.html"];
+  const indice = textos["/index.html"];
   const csp = indice.match(/http-equiv="Content-Security-Policy" content="([^"]+)"/)?.[1];
   caso(csp === CSP, `S2 index.html lleva la CSP${csp === CSP ? "" : `: «${csp}»`}`);
 
   // S4 la misma versión
-  const { VERSION } = await import("/beta/js/version.js");
+  const { VERSION } = await import("/js/version.js");
   const versionSw = sw.match(/const VERSION = "([^"]+)"/)?.[1];
   caso(versionSw === VERSION, `S4 VERSION de sw.js (${versionSw}) igual a la de js/version.js (${VERSION})`);
   const versionHtml = indice.match(/<meta name="gym-beta-version" content="([^"]+)"/)?.[1];
   caso(versionHtml === VERSION, `S4 la meta gym-beta-version de index.html (${versionHtml}) es la misma (${VERSION})`);
-  const { NOVEDADES } = await import("/beta/js/version.js");
+  const { NOVEDADES } = await import("/js/version.js");
   caso(NOVEDADES[0]?.version === VERSION, `S4 las novedades empiezan por la versión actual (${NOVEDADES[0]?.version})`);
 
   // S5 sin «/gym/» a fuego
   const conGym = Object.entries(textos).filter(([, t]) => t.includes("/gym/")).map(([r]) => r);
-  caso(conGym.length === 0, `S5 ningún archivo de beta/ tiene /gym/ a fuego${conGym.length ? ` (${conGym.join(", ")})` : ""}`);
+  caso(conGym.length === 0, `S5 ningún archivo de la app tiene /gym/ a fuego${conGym.length ? ` (${conGym.join(", ")})` : ""}`);
 
-  // Manifiesto
-  const manifiesto = JSON.parse(textos["/beta/manifest.json"]);
-  caso(manifiesto.name === "Gym Beta" && manifiesto.start_url === "./" && manifiesto.scope === "./" && !("id" in manifiesto), "El manifiesto es «Gym Beta», con start_url y scope «./» y sin id");
+  // Manifiesto: el start_url «./index.html» y sin id, como el de la app vieja: es la identidad de la app instalada en el
+  // móvil (sin id, el id es el start_url); si cambiara, el móvil la vería como otra app (D-121).
+  const manifiesto = JSON.parse(textos["/manifest.json"]);
+  caso(manifiesto.name === "Gym" && manifiesto.short_name === "Gym" && manifiesto.start_url === "./index.html" && manifiesto.scope === "./" && !("id" in manifiesto),
+    "El manifiesto es «Gym», con start_url «./index.html» (el de la app vieja), scope «./» y sin id");
 
   // Prefijo: almacen.js se niega a escribir o borrar claves sin gym-beta-
-  const almacen = await import("/beta/js/almacen.js");
+  const almacen = await import("/js/almacen.js");
   const antesNormal = leerNormal();
   let negadas = 0;
   for (const clave of ["gym-routine-data-v1", "gym-theme-v1", "otra-cosa"]) {

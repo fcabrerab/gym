@@ -7,8 +7,7 @@ import { ctx } from "./contexto.js";
 import { boton, control, ponerErrorControl, textoSerie, textoSeries, vacio, seccion, pasoEn, leerCamposEn } from "./piezas.js";
 import * as almacen from "../almacen.js";
 import * as S from "../sesion.js";
-import { LIMITES, normalizarMarca } from "../modelo.js";
-import { cargarBaseGuardada } from "../normal.js";
+import { LIMITES } from "../modelo.js";
 import {
   ahora, fechaCorta, fechaLarga, diaMes, hora, formatoKg, formatoNumero, formatoDuracion, leerNumero, redondear, limitar,
   diasEntre, INICIALES_DIA, ORDEN_SEMANA,
@@ -17,7 +16,7 @@ import {
 const est = { limite: 50 };
 
 const MOTIVOS = {
-  copia: "copia de la versión normal",
+  copia: "copia de la versión vieja",
   sesion: "sesión",
   "a-mano": "a mano",
   importada: "copia cargada",
@@ -82,7 +81,7 @@ function listaSesiones() {
   const t = ahora();
   const sesiones = [...datos.sesiones].reverse();
   if (!sesiones.length) {
-    return h("div", null, tiraSemana(datos, t), vacio("Aún no hay sesiones. Cuando termines tu primer entreno en la beta, aparecerá aquí."));
+    return h("div", null, tiraSemana(datos, t), vacio("Aún no hay sesiones. Cuando termines tu primer entreno, aparecerá aquí."));
   }
   const filas = sesiones.slice(0, est.limite).map((s) => {
     const hechas = s.ejercicios.reduce((n, e) => n + e.series.length, 0);
@@ -266,9 +265,6 @@ function hojaMarca(id) {
   const cuerpo = h("div", { class: "controles controles-hoja" },
     control({ campo: "pr", rotulo: "Marca (kg)", valor: x.pr != null ? formatoNumero(x.pr) : "", unidad: "kg", inputmode: "decimal", id,
       etiquetaMenos: `Quitar ${formatoNumero(x.incremento || 2.5)} kg`, etiquetaMas: `Añadir ${formatoNumero(x.incremento || 2.5)} kg` }));
-  // La marca publicada de este ejercicio: la normal no guarda «sin marca» al cargar una copia y pone esa.
-  let publicada = null;
-  cargarBaseGuardada().then((b) => { publicada = normalizarMarca(b.ejercicios.find((e) => e.id === id)?.pr); }).catch(() => {});
   const guardar = (kg) => {
     const antes = x.pr ?? null;
     if (kg === antes) {
@@ -276,11 +272,7 @@ function hojaMarca(id) {
       return;
     }
     const deshacer = almacen.mutar((d) => S.cambiarMarca(d, id, kg, ahora(), "a-mano"));
-    const texto = kg != null
-      ? `Marca cambiada a ${formatoKg(kg)}`
-      : publicada != null
-        ? `Marca quitada. Si cargas una copia en la versión normal, allí saldrá la publicada (${formatoKg(publicada)}).`
-        : "Marca quitada";
+    const texto = kg != null ? `Marca cambiada a ${formatoKg(kg)}` : "Marca quitada";
     hoja.cerrar().then(() => {
       ctx.repintar();
       avisarDeshacer(texto, deshacer, () => ctx.repintar());

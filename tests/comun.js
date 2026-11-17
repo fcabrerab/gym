@@ -1,6 +1,9 @@
-// Utilidades de las pruebas de la beta. Solo se usan en 127.0.0.1 o localhost (tests/index.html lo comprueba antes
-// de importar nada). Cargan la beta (o la normal) en un iframe de la misma dirección y la manejan desde fuera.
+// Utilidades de las pruebas de la app (la que fue la beta: muchos nombres de aquí son de entonces). Solo se usan en
+// 127.0.0.1 o localhost (tests/index.html lo comprueba antes de importar nada). Cargan la app en un iframe de la misma
+// dirección y la manejan desde fuera.
 
+// Las claves de la versión vieja (la normal, retirada en la 1.0.0: D-121): la app solo lee la primera, y nunca escribe
+// ni borra ninguna; las pruebas lo comprueban.
 export const CLAVES_NORMAL = ["gym-routine-data-v1", "gym-ui-mode-v1", "gym-theme-v1", "gym-active-day-v1"];
 
 const lineas = [];
@@ -46,7 +49,8 @@ export function soloLocal() {
   return ["127.0.0.1", "localhost"].includes(location.hostname);
 }
 
-// Una petición pequeña para que el reloj virtual no avance. El servidor local de pruebas (HTTP/1.0) abre una conexión
+// Una petición pequeña para que el reloj virtual no avance. Va a tests/, que el service worker de la app no atiende
+// (si la atendiera, saldría de su caché sin ir a la red y el reloj sí avanzaría). El servidor local de pruebas (HTTP/1.0) abre una conexión
 // por petición y Windows las deja un rato en TIME_WAIT: si se lanzan muchas pruebas y capturas seguidas, se acaban los
 // puertos y las peticiones fallan («Failed to fetch»). Entonces se espera un poco y se sigue, y al final se avisa.
 let sondeos = 0;
@@ -55,7 +59,7 @@ export const contarSondeos = () => sondeos;
 async function sondeo() {
   sondeos += 1;
   try {
-    await fetch(`/images/icon.svg?espera=${Math.random()}`, { cache: "no-store" });
+    await fetch(`/tests/index.html?espera=${Math.random()}`, { cache: "no-store" });
   } catch {
     rechazados += 1;
     await esperar(20);
@@ -146,7 +150,7 @@ export function leerJson(clave) {
   }
 }
 
-// --- Cargar la beta o la normal en un iframe ---
+// --- Cargar la app en un iframe ---
 
 export async function esperarListo(f, ms = 10000) {
   for (let t = 0; t < ms; t += 25) {
@@ -160,14 +164,14 @@ export function urlBeta({ ahora = "2026-11-03T18:00:00", sinsw = true } = {}) {
   const partes = [];
   if (sinsw) partes.push("sinsw");
   if (ahora) partes.push(`ahora=${ahora}`);
-  return `/beta/${partes.length ? `?${partes.join("&")}` : ""}`;
+  return `/${partes.length ? `?${partes.join("&")}` : ""}`;
 }
 
 function recursosBeta(f) {
   try {
     return f.contentWindow.performance.getEntriesByType("resource")
-      .filter((e) => new URL(e.name).pathname.startsWith("/beta/"))
-      .map((e) => `${new URL(e.name).pathname.replace("/beta/", "")}:${e.responseStatus ?? "?"}`);
+      .filter((e) => new URL(e.name).origin === location.origin && !new URL(e.name).pathname.startsWith("/tests/"))
+      .map((e) => `${new URL(e.name).pathname.replace(/^\//, "")}:${e.responseStatus ?? "?"}`);
   } catch {
     return [];
   }
@@ -224,20 +228,6 @@ export async function recargar(b, { ahora = null } = {}) {
 
 export function quitar(b) {
   b?.f?.remove();
-}
-
-export async function cargarNormal({ ancho = 412, alto = 915 } = {}) {
-  const f = document.createElement("iframe");
-  f.style.width = `${ancho}px`;
-  f.style.height = `${alto}px`;
-  document.body.append(f);
-  await new Promise((resolver) => { f.onload = resolver; f.src = "/index.html"; });
-  for (let i = 0; i < 160; i += 1) {
-    if (f.contentDocument?.querySelector(".exercise-card, .empty-state, .editor-shell, .day-section")) break;
-    await esperar(50);
-  }
-  await esperar(200);
-  return f;
 }
 
 // --- Manejar la beta desde fuera ---

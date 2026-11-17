@@ -74,12 +74,12 @@ export async function ejecutar(c) {
 
   // C1 El recordatorio de copia, con la del PC
   {
-    const { necesitaCopia } = await import("/beta/js/copias.js");
+    const { necesitaCopia } = await import("/js/copias.js");
     const datos = { actualizado: 1000, sesiones: [{}], copia: null, ajustes: {} };
     const sin = necesitaCopia(datos, 5000, null, null);
     const alDia = necesitaCopia(datos, 5000, null, 1000);
     const vieja = necesitaCopia(datos, 5000, null, 999);
-    caso(sin === "Aún no has guardado ninguna copia de la beta." && alDia === null && vieja === sin,
+    caso(sin === "Aún no has guardado ninguna copia." && alDia === null && vieja === sin,
       `C1 con una copia en el PC que trae lo último, no hace falta guardar otra (sin: «${sin}», al día: ${alDia}, vieja: «${vieja}»)`);
   }
 
@@ -197,7 +197,7 @@ export async function ejecutar(c) {
     await hastaQueVirtual(() => textos.some((t) => t.startsWith("No se ha podido guardar la copia en el PC")), 3000);
     caso(estadoPc()?.estado === "sin-respuesta" && estadoPc()?.texto.startsWith("El PC no responde") && estadoPc()?.sesiones === 1,
       `C6 sin respuesta del PC, queda apuntado (${estadoPc()?.estado}) y la última buena sigue (${estadoPc()?.sesiones} sesión)`);
-    caso(textos.includes("No se ha podido guardar la copia en el PC: no responde. Se intentará otra vez al abrir la beta."),
+    caso(textos.includes("No se ha podido guardar la copia en el PC: no responde. Se intentará otra vez al abrir la app."),
       `C6 …y se dice: «${textos.find((t) => t.startsWith("No se ha podido")) || "nada"}»`);
     await esperar(5000);
     await entrenarYTerminar(b);
@@ -273,7 +273,7 @@ export async function ejecutar(c) {
     await irAjustes(b);
     caso(interruptor(b)?.disabled === true, "C9 sin dirección, apagada");
     // Como el enlace de la página del PC (o «Activar»): la dirección queda en gym-beta-avisos-pc.
-    const avisosPc = await import("/beta/js/avisos-pc.js");
+    const avisosPc = await import("/js/avisos-pc.js");
     avisosPc.leerEnlace(`#avisos-pc=${DIRECCION}`);
     pulsar(b.d, "ir-entreno");
     await esperar(50);

@@ -4,13 +4,14 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex">
-  <title>Pruebas de Gym Beta</title>
+  <title>Pruebas de Gym</title>
 </head>
 <body>
   <pre id="resultado">Cargando las pruebas…</pre>
   <script type="module">
     // Primero, la dirección: estas pruebas solo corren en 127.0.0.1 o localhost (tests/ se publica y comparte
-    // dirección con los datos reales). Las suites se cargan después con import() dinámico.
+    // dirección con los datos reales). Las suites se cargan después con import() dinámico. La app se carga siempre
+    // con «?sinsw»: su service worker se prueba aparte, en tests/sw.html.
     const local = ["127.0.0.1", "localhost"].includes(location.hostname);
     if (!local) {
       document.getElementById("resultado").textContent = "Estas pruebas solo se ejecutan en 127.0.0.1 o localhost.";
@@ -18,8 +19,7 @@
       const comun = await import("./comun.js");
       document.getElementById("resultado").textContent = "";
       const pedidas = new URLSearchParams(location.search).get("solo");
-      // normal.js va la última: la normal registra su service worker (alcance /) y desde entonces controla también /beta/.
-      const todas = ["logica", "datos-rotos", "seguridad", "interfaz", "descanso", "avisos-pc", "copia-pc", "sonido", "extras", "correcciones", "normal"];
+      const todas = ["logica", "datos-rotos", "seguridad", "interfaz", "descanso", "avisos-pc", "copia-pc", "sonido", "extras", "correcciones"];
       const suites = pedidas ? pedidas.split(",").filter((s) => todas.includes(s)) : todas;
       comun.guardarNormal();
       for (const nombre of suites) {

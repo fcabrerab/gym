@@ -33,7 +33,7 @@ export async function ejecutar(c) {
     const antes = leerNormal();
     const b = await cargarBeta();
     const texto = textoDe(b.d, "[data-resumen]");
-    caso(b.listo === "1" && texto.includes("5 días") && texto.includes("versión normal"), `I1 la pantalla de la primera vez: «${texto.slice(0, 90)}…»`);
+    caso(b.listo === "1" && texto.includes("5 días") && texto.includes("versión vieja"), `I1 la pantalla de la primera vez: «${texto.slice(0, 90)}…»`);
     pulsar(b.d, "empezar");
     await esperar(150);
     const pestanas = b.d.querySelectorAll('[data-accion="elegir-dia"]').length;
@@ -329,7 +329,7 @@ export async function ejecutar(c) {
 
   // I11, I12 y I15 Copias: exportar, importar con vista previa y copias automáticas
   {
-    const copias = await import("/beta/js/copias.js");
+    const copias = await import("/js/copias.js");
     const datos = await datosBeta();
     await preparar(datos);
     const b = await cargarBeta();
@@ -344,7 +344,7 @@ export async function ejecutar(c) {
     caso(b.espia.compartidos.length === 1 && tras1.copia.metodo === "compartida" && tras1.copia.ultima > ms("2026-11-03T00:00:00") && avisoActual(b.d) === "Copia guardada",
       `I12 con compartir que va bien: se marca la copia y sale «${avisoActual(b.d)}»`);
     const archivo = b.espia.compartidos[0]?.files?.[0];
-    caso(archivo?.name === "gym-beta-copia-2026-11-03-1800.json" && archivo.type === "application/json", `I12 el archivo compartido: ${archivo?.name}`);
+    caso(archivo?.name === "gym-copia-2026-11-03-1800.json" && archivo.type === "application/json", `I12 el archivo compartido: ${archivo?.name}`);
     b.espia.compartir = "abortar";
     const ultima = tras1.copia.ultima;
     pulsar(b.d, "guardar-copia");
@@ -354,7 +354,7 @@ export async function ejecutar(c) {
     pulsar(b.d, "guardar-copia");
     await hastaQueVirtual(() => avisoActual(b.d).startsWith("Copia descargada"), 2000);
     const exp = b.espia.blobs.length ? JSON.parse(await real(b.espia.blobs[b.espia.blobs.length - 1].text())) : null;
-    caso(b.espia.descargas.length === 1 && b.espia.descargas[0].nombre.startsWith("gym-beta-copia-") && datosGuardados().copia.metodo === "descargada",
+    caso(b.espia.descargas.length === 1 && b.espia.descargas[0].nombre.startsWith("gym-copia-") && datosGuardados().copia.metodo === "descargada",
       `I12 sin compartir, se descarga: ${b.espia.descargas[0]?.nombre}`);
     caso(exp && Object.keys(exp.settings).sort().join() === "timerAlert,timerNotification,timerSound,transitionMinutes"
       && exp.days.flatMap((d) => d.exercises).every((e) => (e.pr === null || typeof e.pr === "number") && /^\d+:\d{2}$/.test(e.rest)),
@@ -375,7 +375,7 @@ export async function ejecutar(c) {
     meter(JSON.stringify(copiaBase), "copia.json");
     await hastaQue(() => hojaAbierta(b.d), 200);
     const previa = textoHoja(b.d);
-    caso(previa.includes("5 días · 38 ejercicios (22 distintos) · 17 marcas") && previa.includes("hecha con la versión normal") && previa.includes("Sin historial: se conserva el tuyo"),
+    caso(previa.includes("5 días · 38 ejercicios (22 distintos) · 17 marcas") && previa.includes("hecha con la versión vieja") && previa.includes("Sin historial: se conserva el tuyo"),
       `I11 la vista previa: «${previa.slice(0, 170)}»`);
     caso(datosGuardados().ejercicios["pec-deck"].pr === 47, "I11 la vista previa no cambia nada");
     pulsar(b.d, "confirmar");
@@ -405,7 +405,7 @@ export async function ejecutar(c) {
     datos.actualizado = ms("2026-10-30T10:00:00");
     await preparar(datos);
     const b = await cargarBeta();
-    caso(textoDe(b.d, ".banners").includes("Hace 8 días que no guardas una copia de la beta."), `I13 sale el banner: «${textoDe(b.d, ".banners")}»`);
+    caso(textoDe(b.d, ".banners").includes("Hace 8 días que no guardas una copia."), `I13 sale el banner: «${textoDe(b.d, ".banners")}»`);
     pulsar(b.d, "posponer-copia");
     await esperar(50);
     caso(!textoDe(b.d, ".banners").includes("Hace 8 días"), "I13 con «Más tarde» desaparece");

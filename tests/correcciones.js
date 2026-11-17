@@ -12,7 +12,7 @@ export async function ejecutar(c) {
   const barraVisible = (d) => !d.getElementById("barra-descanso").hidden;
   const estadoDe = (d, id) => textoDe(d, `li[data-ej="${id}"] .ej-estado`);
   const textoHoja = (d) => textoDe(d, ".capa-hoja:last-of-type .hoja");
-  const { VERSION } = await import("/beta/js/version.js");
+  const { VERSION } = await import("/js/version.js");
   const preparar = async (datos, extra = {}) => {
     await limpiarBeta();
     guardar("gym-beta-datos", datos);
@@ -244,7 +244,8 @@ export async function ejecutar(c) {
     quitar(b);
   }
 
-  // «BETA» apunta un fallo o una idea con dónde se estaba; Intro pasa de Peso a Repeticiones; 0 kg y fuera de rango.
+  // El lápiz de arriba (antes, «BETA») apunta un fallo o una idea con dónde se estaba; Intro pasa de Peso a
+  // Repeticiones; 0 kg y fuera de rango.
   {
     await preparar(await datosBeta({ cambios: (d) => { d.ejercicios["pec-deck"].pr = null; } }));
     const b = await cargarBeta();
@@ -256,8 +257,10 @@ export async function ejecutar(c) {
     hoja.querySelector('[data-accion="guardar-apunte"]').click();
     await esperar(30);
     const a = datosGuardados().apuntes[0];
-    caso(a?.pantalla === "entreno" && a.contexto?.includes("Press de pecho") && a.contexto.includes("serie 1 de 3"),
-      `«BETA» abre los apuntes desde cualquier pantalla y guarda dónde se estaba («${a?.contexto}»)`);
+    const lapiz = b.d.getElementById("boton-beta");
+    caso(a?.pantalla === "entreno" && a.contexto?.includes("Press de pecho") && a.contexto.includes("serie 1 de 3")
+      && lapiz.getAttribute("aria-label") === "Apuntar un fallo o una idea" && !lapiz.textContent.includes("BETA"),
+      `el lápiz (sin «BETA») abre los apuntes desde cualquier pantalla y guarda dónde se estaba («${a?.contexto}»)`);
     pulsar(b.d, "cerrar-hoja");
     await hastaQueVirtual(() => !hojaAbierta(b.d), 2000);
     const kg = b.d.querySelector('li[data-ej="machine-chest-press"] [data-campo="kg"]');
@@ -281,7 +284,7 @@ export async function ejecutar(c) {
     await esperar(30);
     caso(texto === "Pon el peso" && !leerJson("gym-beta-sesion") && textoDe(b.d, 'li[data-ej="pec-deck"] [data-control="kg"] .control-error').startsWith("Pon el peso."),
       "con peso y sin peso puesto (0 kg), el ✓ dice «Pon el peso» y no apunta nada");
-    sinErrores(b, "BETA, Intro y 0 kg");
+    sinErrores(b, "lápiz, Intro y 0 kg");
     quitar(b);
   }
 
@@ -329,31 +332,22 @@ export async function ejecutar(c) {
     quitar(b);
   }
 
-  // Las dos versiones a la vez: aviso de que la normal ha cambiado, qué cambia y volver a copiar quedándose con la marca más alta.
+  // La versión vieja ya no se compara (D-121): con sus datos en el móvil y una copia de antes apuntada (como en un
+  // móvil que venga de la beta), ni aviso en Entreno ni nada de ella en Ajustes; y sus claves siguen sin tocar.
   {
     for (const k of CLAVES_NORMAL) localStorage.removeItem(k);
     guardar("gym-routine-data-v1", await conImagenesLocales({ exercises: { "pec-deck": { pr: 50 } } }));
-    await preparar(await datosBeta({ cambios: (d) => {
-      d.ejercicios["pec-deck"].pr = 60;
-      d.marcas.push({ exerciseId: "pec-deck", kg: 60, fecha: ms("2026-11-02T18:00:00"), motivo: "sesion" });
-    } }), { "gym-beta-ui": { normalCopiada: { huella: "0-otra", fecha: ms("2026-11-01T10:00:00") } } });
+    const antes = c.leerNormal();
+    await preparar(await datosBeta(), { "gym-beta-ui": { normalCopiada: { huella: "0-otra", fecha: ms("2026-11-01T10:00:00") } } });
     const b = await cargarBeta();
-    const banner = textoDe(b.d, ".banners");
-    pulsar(b.d, "ver-cambios-normal");
-    await hastaQue(() => textoHoja(b.d).includes("Marcas distintas"), 300);
-    const cambios = textoHoja(b.d);
-    caso(banner.includes("La versión normal ha cambiado desde que la copiaste (1 nov).") && cambios.includes("Pec deck / chest fly: aquí 60 kg · en la normal 50 kg"),
-      `si la normal ha cambiado, Entreno lo dice y «Ver qué cambia» lo enseña («${cambios.slice(0, 90)}…»)`);
-    pulsar(b.d, "copiar-normal");
-    await hastaQue(() => textoHoja(b.d).includes("bajarían"), 300);
-    const hoja = textoHoja(b.d);
-    const casilla = b.d.querySelector("#quedarse-maxima");
-    pulsar(b.d, "confirmar");
-    await hastaQue(() => avisoActual(b.d).startsWith("Rutina copiada"), 300);
-    caso(hoja.includes("Pec deck / chest fly: 60 kg → 50 kg") && casilla?.checked && datosGuardados().ejercicios["pec-deck"].pr === 60
-      && leerJson("gym-beta-ui").normalCopiada?.huella !== "0-otra" && !textoDe(b.d, ".banners").includes("ha cambiado"),
-    "«Volver a copiar» enseña qué marcas bajarían y, con la casilla marcada, se queda con la más alta");
-    sinErrores(b, "la normal ha cambiado");
+    const banners = textoDe(b.d, ".banners");
+    await ir(b, "ajustes");
+    const ajustes = textoDe(b.d, ".pantalla-ajustes");
+    const restos = b.d.querySelectorAll('[data-accion="ver-cambios-normal"], [data-accion="copiar-normal"], a[href*="normal"], .enlace-normal');
+    caso(!banners.includes("ha cambiado") && restos.length === 0 && !ajustes.includes("versión normal") && ajustes.includes("Volver a la rutina publicada")
+      && JSON.stringify(c.leerNormal()) === JSON.stringify(antes),
+    `sin la versión vieja: ni aviso en Entreno ni nada suyo en Ajustes (${restos.length} restos), y sus claves sin tocar`);
+    sinErrores(b, "sin la versión vieja");
     quitar(b);
     c.restaurarNormal();
   }
@@ -361,7 +355,7 @@ export async function ejecutar(c) {
   // Ajustes: «Guardar copia» dice lo que de verdad hace en el móvil, y el permiso de notificaciones que falta se ve.
   // Cargar una copia con datos raros lo dice en la vista previa; una copia antigua sin cambios no se deja cargar.
   {
-    const copias = await import("/beta/js/copias.js");
+    const copias = await import("/js/copias.js");
     await preparar(await datosBeta());
     const b = await cargarBeta();
     b.espia.compartir = "no";

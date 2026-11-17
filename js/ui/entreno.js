@@ -11,7 +11,7 @@ import {
   pasoEn, leerCamposEn,
 } from "./piezas.js";
 import { abrirHojaEjercicio } from "./rutina.js";
-import { accionGuardarCopia, hojaCambiosNormal, normalHaCambiado, ocultarAvisoNormal } from "./ajustes.js";
+import { accionGuardarCopia } from "./ajustes.js";
 import * as almacen from "../almacen.js";
 import * as S from "../sesion.js";
 import * as descanso from "../descanso.js";
@@ -19,7 +19,7 @@ import * as copiaPc from "../copia-pc.js";
 import { estimarTiempo, tiempoRestante, diaPorId, agruparEjercicios, DESCANSO_SUPERSET_DEFECTO, LIMITES } from "../modelo.js";
 import { necesitaCopia, guardarCopiaAuto } from "../copias.js";
 import {
-  ahora, fechaLocal, fechaCorta, diaMes, hora, haceDias, formatoKg, formatoNumero, formatoMinutos, formatoDuracion, formatoCuenta,
+  ahora, fechaLocal, fechaCorta, hora, haceDias, formatoKg, formatoNumero, formatoMinutos, formatoDuracion, formatoCuenta,
   formatoDescanso, leerNumero, leerDescanso, NOMBRES_DIA, abreviaturaDia, limitar, diasEntre, plural,
 } from "../util.js";
 
@@ -194,9 +194,9 @@ function pintarBanners() {
     }));
   }
   if (ctx.version.nueva) {
-    lista.push(banner({ texto: "Hay una versión nueva de la beta.", botones: [boton("Recargar", "recargar-version", { clase: "boton-principal" })], icono: "descargar" }));
+    lista.push(banner({ texto: "Hay una versión nueva de la app.", botones: [boton("Recargar", "recargar-version", { clase: "boton-principal" })], icono: "descargar" }));
   }
-  // Durante una sesión no se enseña nada que empuje la lista hacia abajo (la copia y la normal pueden esperar).
+  // Durante una sesión no se enseña nada que empuje la lista hacia abajo (la copia puede esperar).
   if (!sesionActiva(datos, sesion, t)) {
     const textoCopia = necesitaCopia(datos, t, ui.posponerCopiaHasta, copiaPc.ultimaEnPc());
     if (textoCopia) {
@@ -204,14 +204,6 @@ function pintarBanners() {
         texto: textoCopia,
         botones: [boton("Guardar copia", "guardar-copia", { clase: "boton-principal" }), boton("Más tarde", "posponer-copia")],
         clase: "banner-aviso",
-        icono: "copia",
-      }));
-    }
-    const normal = normalHaCambiado(ui);
-    if (normal) {
-      lista.push(banner({
-        texto: `La versión normal ha cambiado desde que la copiaste${normal.fecha ? ` (${diaMes(normal.fecha)})` : ""}.`,
-        botones: [boton("Ver qué cambia", "ver-cambios-normal", { clase: "boton-principal" }), boton("Ahora no", "ocultar-aviso-normal")],
         icono: "copia",
       }));
     }
@@ -634,11 +626,6 @@ export function alAccionEntreno(accion, el) {
       almacen.cambiarUi((u) => { u.posponerCopiaHasta = ahora() + 2 * 86400000; });
       pintarBanners();
       return avisar({ texto: "Te lo recuerdo dentro de 2 días." });
-    case "ver-cambios-normal": return hojaCambiosNormal({ alTerminar: () => pintarBanners() });
-    case "ocultar-aviso-normal":
-      ocultarAvisoNormal();
-      pintarBanners();
-      return avisar({ texto: "Hecho. Te avisaré si la versión normal vuelve a cambiar." });
     case "ver-sesion": return ctx.irA(`#/historial/sesion/${encodeURIComponent(id)}`, "push");
     case "anadir-ejercicios": return ctx.irA(`#/rutina/dia/${encodeURIComponent(est.diaId)}`, "push");
     default: return undefined;
@@ -1003,7 +990,7 @@ function hojaTiempo() {
 export function terminarYGuardar(sesion, { fin } = {}) {
   cerrarAviso(); // el «Deshacer» de la última serie ya no vale: la sesión se va al historial
   if (almacen.bloqueado()) {
-    avisar({ texto: "No se ha guardado la sesión: hay datos de una versión más nueva de la beta. Recarga para actualizar; la sesión sigue abierta.", fijo: true, tipo: "error" });
+    avisar({ texto: "No se ha guardado la sesión: hay datos de una versión más nueva de la app. Recarga para actualizar; la sesión sigue abierta.", fijo: true, tipo: "error" });
     return null;
   }
   let resultado = null;
@@ -1089,7 +1076,7 @@ function mostrarResumen({ guardada }) {
   const textoCopia = necesitaCopia(datos, ahora(), almacen.leerUi().posponerCopiaHasta, copiaPc.ultimaEnPc());
   if (textoCopia) {
     // «Guardar copia» como secundario: el único botón verde de la hoja es «Hecho».
-    cuerpo.push(banner({ texto: textoCopia.replace(" de la beta", ""), botones: [boton("Guardar copia", "guardar-copia", { clase: "boton-secundario" })], clase: "banner-aviso", icono: "copia" }));
+    cuerpo.push(banner({ texto: textoCopia, botones: [boton("Guardar copia", "guardar-copia", { clase: "boton-secundario" })], clase: "banner-aviso", icono: "copia" }));
   }
   const hoja = abrirHoja({
     titulo: "Sesión guardada",

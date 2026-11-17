@@ -1,7 +1,7 @@
 // Pantalla Ajustes: aspecto, descanso (avisos, permiso de notificaciones, descanso con sonido, avisos desde el PC,
-// pantalla encendida, probar aviso y qué hacer si el aviso no llega con el móvil bloqueado), tiempo estimado, copia de seguridad (guardar, copia en el PC, cargar con vista previa, copias automáticas), datos de la versión
-// normal (qué ha cambiado, volver a copiar), la beta (versión, sin conexión, novedades, apuntes) y la zona peligrosa.
-// Los cambios valen al momento.
+// pantalla encendida, probar aviso y qué hacer si el aviso no llega con el móvil bloqueado), tiempo estimado, copia de
+// seguridad (guardar, copia en el PC, cargar con vista previa, copias automáticas), la app (versión, sin conexión,
+// novedades, apuntes) y la zona peligrosa. Los cambios valen al momento.
 
 import { h, icono, vaciar } from "./dom.js";
 import { avisar, avisarDeshacer, cerrarAviso, confirmar, abrirHoja } from "./avisos.js";
@@ -18,12 +18,9 @@ import { ESQUEMA, LIMITES, validarDatos, reparar, migrar, diaPorId } from "../mo
 import {
   guardarCopia, leerCopia, aplicarCopia, guardarCopiaAuto, listarCopiasAuto, leerCopiaAuto, copiasAutoFuncionan, puedeCompartirCopias,
 } from "../copias.js";
+import { cargarBase, aplicarRutinaPublicada } from "../normal.js";
 import {
-  copiarDesdeNormal, aplicarRecopia, cargarBase, cargarBaseGuardada, aplicarRutinaPublicada, marcasQueBajan, compararConNormal,
-  efectoEnLaNormal, huellaNormal,
-} from "../normal.js";
-import {
-  ahora, haceDias, diaMes, hora, fechaConAnio, formatoNumero, formatoKg, formatoTamano, leerNumero, limitar, idApunte, recortar, plural,
+  ahora, haceDias, diaMes, hora, fechaConAnio, formatoNumero, formatoTamano, leerNumero, limitar, idApunte, recortar, plural,
 } from "../util.js";
 
 const TEMAS = [["auto", "Automático (como el móvil)"], ["claro", "Claro"], ["oscuro", "Oscuro"]];
@@ -58,106 +55,6 @@ function lineaCopia() {
 function actualizarLineaCopia() {
   const p = document.getElementById("linea-copia");
   if (p) p.textContent = lineaCopia();
-}
-
-// --- La versión normal: ¿ha cambiado desde la última copia? ---
-
-// Si la normal ha cambiado desde que se copió (y no se ha dicho ya «Ahora no» a ese cambio), devuelve {fecha}; si no, null.
-export function normalHaCambiado(ui = almacen.leerUi()) {
-  const copiada = ui.normalCopiada;
-  if (!copiada?.huella) return null;
-  const actual = huellaNormal();
-  if (actual === copiada.huella || actual === ui.normalAvisoOculto) return null;
-  return { fecha: Number.isFinite(copiada.fecha) ? copiada.fecha : null, huella: actual };
-}
-
-export function ocultarAvisoNormal() {
-  almacen.cambiarUi((u) => { u.normalAvisoOculto = huellaNormal(); });
-}
-
-export function apuntarCopiaNormal(huella, fecha) {
-  almacen.cambiarUi((u) => {
-    u.normalCopiada = { huella, fecha };
-    u.normalAvisoOculto = null;
-  });
-}
-
-const textoMarca = (kg) => (kg == null ? "sin marca" : formatoKg(kg));
-
-// Hoja «Qué cambia» entre la beta y la normal: marcas, días, ejercicios y planes distintos.
-export async function hojaCambiosNormal({ alTerminar = null } = {}) {
-  const r = await copiarDesdeNormal({ ahoraMs: ahora(), cargar: cargarBaseGuardada });
-  if (!r.ok) {
-    avisar({ texto: r.error, tipo: "error" });
-    return;
-  }
-  const datos = almacen.datos();
-  const c = compararConNormal(datos, r.datos);
-  ocultarAvisoNormal();
-  if (c.total === 0) {
-    almacen.cambiarUi((u) => { u.normalCopiada = { huella: r.huella, fecha: u.normalCopiada?.fecha ?? ahora() }; });
-    avisar({ texto: "La versión normal no tiene cambios que afecten a la beta." });
-    alTerminar?.();
-    return;
-  }
-  const bloque = (titulo, lineas) => (lineas.length
-    ? h("section", { class: "cambios-bloque" }, h("h3", { class: "tarjeta-titulo" }, titulo), h("ul", { class: "lista-avisos" }, lineas.map((l) => h("li", null, l))))
-    : null);
-  const cuerpo = [
-    bloque(`Marcas distintas (${c.marcas.length})`, c.marcas.map((m) => `${m.nombre}: aquí ${textoMarca(m.beta)} · en la normal ${textoMarca(m.normal)}`)),
-    bloque("Días que solo están en la normal", c.soloNormal),
-    bloque("Días que solo están en la beta", c.soloBeta),
-    bloque("Ejercicios distintos", c.ejercicios.map((e) => [
-      e.soloNormal.length ? `${e.dia}: en la normal hay ${e.soloNormal.join(", ")}` : null,
-      e.soloBeta.length ? `${e.dia}: aquí hay ${e.soloBeta.join(", ")}` : null,
-    ].filter(Boolean).join(" · "))),
-    bloque("Series, repeticiones o descanso distintos", c.plan.map((p) => `${p.dia} · ${p.nombre}: aquí ${p.beta} · en la normal ${p.normal}`)),
-    ayuda("Para traer lo de la normal: «Volver a copiar» (puedes quedarte con la marca más alta de las dos). Para llevar lo de la beta a la normal: «Guardar copia» aquí e «Importar datos» allí."),
-  ];
-  const hoja = abrirHoja({
-    titulo: "Qué cambia con la versión normal",
-    cuerpo,
-    clase: "hoja-alta",
-    pie: [boton("Volver a copiar", "copiar-normal"), boton("Cerrar", "cerrar-hoja", { clase: "boton-principal" })],
-    alAccion: (accion) => {
-      if (accion === "copiar-normal") hoja.cerrar().then(() => recopiar());
-    },
-    alCerrar: () => alTerminar?.(),
-  });
-}
-
-// Debajo de «Guardar copia»: qué pasaría en la normal si se carga allí esta copia (marcas que bajarían y ejercicios
-// sin marca que saldrían con la publicada). Se calcula aparte, sin frenar el pintado.
-function pintarEfectoNormal() {
-  const zona = document.getElementById("efecto-normal");
-  if (!zona) return;
-  copiarDesdeNormal({ ahoraMs: ahora(), cargar: cargarBaseGuardada }).then((r) => {
-    if (!r.ok || !zona.isConnected) return;
-    const efecto = efectoEnLaNormal(almacen.datos(), r.datos, r.base.ejercicios);
-    const lista = (items, texto) => items.slice(0, 4).map(texto).join(", ") + (items.length > 4 ? "…" : "");
-    const lineas = [];
-    if (efecto.bajan.length) {
-      lineas.push(`bajarían ${plural(efecto.bajan.length, "marca", "marcas")} de la normal: ${lista(efecto.bajan, (m) => `${m.nombre} (${formatoKg(m.de)} → ${textoMarca(m.a)})`)}`);
-    }
-    if (efecto.publicadas.length) {
-      lineas.push(`sin marca aquí, allí saldrán con la publicada: ${lista(efecto.publicadas, (m) => `${m.nombre} (${formatoKg(m.kg)})`)}`);
-    }
-    if (!lineas.length) return;
-    vaciar(zona).append(h("div", { class: "aviso-texto-fuerte" },
-      h("p", { class: "aviso-titulo" }, "Ojo, si cargas esta copia en la versión normal:"),
-      h("ul", { class: "lista-avisos" }, lineas.map((l) => h("li", null, l)))));
-  }).catch(() => {});
-}
-
-function lineaEstadoNormal() {
-  const ui = almacen.leerUi();
-  const fecha = Number.isFinite(ui.normalCopiada?.fecha) ? ` (${diaMes(ui.normalCopiada.fecha)})` : "";
-  if (!ui.normalCopiada?.huella) return [h("p", { class: "linea-dato" }, "Copiada al empezar la beta.")];
-  if (huellaNormal() === ui.normalCopiada.huella) return [h("p", { class: "linea-dato" }, `La versión normal no ha cambiado desde que la copiaste${fecha}.`)];
-  return [
-    h("p", { class: "linea-dato aviso-texto-fuerte" }, `La versión normal ha cambiado desde que la copiaste${fecha}.`),
-    boton("Ver qué cambia", "ver-cambios-normal", { clase: "boton-secundario boton-ancho" }),
-  ];
 }
 
 // --- Pintado ---
@@ -243,7 +140,7 @@ function pintarAvisosPc() {
         enterkeyhint: "done", placeholder: "https://tu-pc.tu-red.ts.net", value: e.direccion || "", "data-campo": "direccion-pc", "aria-describedby": "error-pc ayuda-pc",
       }),
       h("p", { class: "campo-error", id: "error-pc" }, e.estado === "sin-respuesta" || e.estado === "error" ? e.texto : ""),
-      h("p", { class: "ayuda", id: "ayuda-pc" }, "Es la de la página de tu PC. Si abres la beta con el enlace de su página «Avisos del gimnasio», se pone sola."),
+      h("p", { class: "ayuda", id: "ayuda-pc" }, "Es la de la página de tu PC. Si abres la app con el enlace de su página «Gimnasio», se pone sola."),
       boton("Activar", "activar-avisos-pc", { clase: "boton-principal boton-ancho", ico: "campana" }));
   }
   vaciar(zona).append(...partes);
@@ -279,7 +176,7 @@ function pintarCopiaPc() {
   vaciar(zona).append(
     interruptor({
       ajuste: "copia-pc", rotulo: "Copia en el PC", marcado: e.activo && Boolean(e.direccion), desactivado: !e.direccion,
-      ayuda: "Al acabar cada entreno, la beta manda una copia de tus datos a tu PC de casa. Hace falta Tailscale activo en el móvil y el PC encendido; si no puede, lo intenta otra vez al abrir la beta.",
+      ayuda: "Al acabar cada entreno, la app manda una copia de tus datos a tu PC de casa. Hace falta Tailscale activo en el móvil y el PC encendido; si no puede, lo intenta otra vez al abrir la app.",
     }),
     h("p", { class: ["ayuda", linea.clase], id: "estado-copia-pc" }, linea.bien ? icono("check", { tamano: 18 }) : null, h("span", null, linea.texto)),
     boton("Mandar una copia ahora", "mandar-copia-pc", {
@@ -313,8 +210,7 @@ export function pintarAjustes(contenedor) {
 
   // En Chrome de Android no se puede compartir un .json: allí el botón dice lo que de verdad hace (descargar).
   const comparte = puedeCompartirCopias();
-  const enLaNormal = "Al cargarla en la versión normal se sustituyen su rutina y sus marcas.";
-  const controlaBeta = ctx.version.controlaLaBeta();
+  const sinConexion = ctx.version.controlaElSw();
   vaciar(contenedor).append(h("div", { class: "pantalla-ajustes" },
     h("h1", { class: "titulo-pantalla" }, "Ajustes"),
     seccion("Aspecto", h("p", { class: "campo-rotulo" }, "Tema"), temas),
@@ -344,14 +240,13 @@ export function pintarAjustes(contenedor) {
         ? boton("Guardar copia", "guardar-copia", { clase: "boton-principal boton-ancho", ico: "compartir" })
         : boton("Descargar copia", "guardar-copia", { clase: "boton-principal boton-ancho", ico: "descargar" }),
       ayuda(comparte
-        ? `Se abre el menú de compartir para mandarla a Drive, Telegram o tu correo. ${enLaNormal}`
-        : `Se guarda en la carpeta Descargas del móvil; desde allí puedes mandarla a Drive, Telegram o tu correo. ${enLaNormal}`),
+        ? "Se abre el menú de compartir para mandarla a Drive, Telegram o tu correo."
+        : "Se guarda en la carpeta Descargas del móvil; desde allí puedes mandarla a Drive, Telegram o tu correo."),
       comparte ? h("button", { class: "enlace-boton", type: "button", "data-accion": "descargar-copia" }, icono("descargar", { tamano: 20 }), "Descargar el archivo") : null,
-      h("div", { id: "efecto-normal", class: "efecto-normal" }),
       h("div", { class: "copia-pc", id: "copia-pc" }),
       boton("Cargar una copia", "cargar-copia", { clase: "boton-secundario boton-ancho", ico: "copia" }),
       h("input", { type: "file", accept: ".json,application/json", class: "oculto", "data-campo": "archivo", tabindex: "-1", "aria-hidden": "true" }),
-      ayuda("Acepta copias de la beta y de la versión normal. Antes de cambiar nada verás qué trae."),
+      ayuda("Acepta copias de esta app (también de cuando era la beta) y de la versión vieja. Antes de cambiar nada verás qué trae."),
       h("p", { class: "campo-error", id: "error-carga" }),
       h("div", { class: "separador" }),
       boton("Ver copias automáticas", "ver-copias-auto", { clase: "boton-secundario boton-ancho" }),
@@ -359,31 +254,25 @@ export function pintarAjustes(contenedor) {
       h("p", { class: "linea-dato", id: "proteccion" }, "Protección de los datos: comprobando…"),
       tamano,
       avisoTamano),
-    seccion("Datos de la versión normal",
-      h("div", { id: "estado-normal", class: "estado-normal" }, lineaEstadoNormal()),
-      boton("Volver a copiar desde la versión normal", "copiar-normal", { clase: "boton-secundario boton-ancho" }),
-      ayuda("Cambia tu rutina, tus marcas y tus ajustes de la beta por los de la versión normal. Tu historial de la beta se queda. Antes se guarda una copia automática."),
+    seccion("Rutina publicada",
       boton("Volver a la rutina publicada", "rutina-publicada", { clase: "boton-secundario boton-ancho" }),
       ayuda("Deja los días y ejercicios como en la rutina publicada. Conserva tus marcas y tu historial.")),
-    seccion("Beta",
-      h("p", { class: "linea-dato" }, `Estás en la beta, versión ${VERSION} (${fechaConAnio(new Date(`${FECHA_VERSION}T12:00:00`).getTime())}). La versión normal sigue igual y no ve estos datos.`),
-      h("p", { class: "linea-dato", id: "sin-conexion" }, `Funciona sin conexión: ${controlaBeta ? "sí" : "todavía no"}`),
-      controlaBeta ? null : ayuda("Se prepara sola la primera vez que la beta se abre con conexión: ciérrala y vuelve a abrirla con conexión, y ya funcionará sin ella."),
+    seccion("La app",
+      h("p", { class: "linea-dato" }, `Versión ${VERSION} (${fechaConAnio(new Date(`${FECHA_VERSION}T12:00:00`).getTime())}).`),
+      h("p", { class: "linea-dato", id: "sin-conexion" }, `Funciona sin conexión: ${sinConexion ? "sí" : "todavía no"}`),
+      sinConexion ? null : ayuda("Se prepara sola la primera vez que la app se abre con conexión: ciérrala y vuelve a abrirla con conexión, y ya funcionará sin ella."),
       boton("Buscar actualización", "buscar-actualizacion", { clase: "boton-secundario boton-ancho" }),
       boton("Novedades", "novedades", { clase: "boton-secundario boton-ancho" }),
       boton("Apuntar un fallo o una idea", "apuntes", { clase: "boton-secundario boton-ancho", ico: "lapiz" }),
-      ayuda("También desde cualquier pantalla: toca «BETA» arriba."),
-      h("a", { class: "enlace-boton", href: "../?normal" }, icono("volver", { tamano: 20 }), "Ir a la versión normal"),
-      ayuda("La app se abre en la última versión que elegiste: si vuelves a la normal con este enlace o con el de arriba, la próxima vez se abrirá la normal.")),
+      ayuda("También desde cualquier pantalla: toca el lápiz de arriba.")),
     h("section", { class: "seccion zona-peligrosa" },
       h("h2", { class: "seccion-titulo" }, "Zona peligrosa"),
-      h("button", { class: "boton boton-peligro-suave boton-ancho", type: "button", "data-accion": "borrar-todo" }, icono("papelera", { tamano: 20 }), h("span", null, "Borrar todos los datos de la beta")),
-      ayuda("Borra la rutina, el historial y los ajustes de la beta en este móvil. La versión normal no se toca. Las copias automáticas se conservan."))));
+      h("button", { class: "boton boton-peligro-suave boton-ancho", type: "button", "data-accion": "borrar-todo" }, icono("papelera", { tamano: 20 }), h("span", null, "Borrar todos los datos")),
+      ayuda("Borra la rutina, el historial y los ajustes en este móvil. Las copias automáticas se conservan."))));
 
   pintarPermiso();
   pintarAvisosPc();
   pintarCopiaPc();
-  pintarEfectoNormal();
   // Lo que tarda (no bloquea el pintado).
   if (navigator.storage?.persisted) {
     navigator.storage.persisted().then((si) => pintarProteccion(si)).catch(() => pintarProteccion(null));
@@ -548,12 +437,6 @@ export function alAccionAjustes(accion, el) {
         pintarProteccion(si);
         if (!si) avisar({ texto: "El navegador no la ha concedido. Suele darla a las apps instaladas que se usan a menudo." });
       }).catch(() => pintarProteccion(null));
-    case "ver-cambios-normal":
-      return hojaCambiosNormal({ alTerminar: () => {
-        const zona = document.getElementById("estado-normal");
-        if (zona) vaciar(zona).append(...lineaEstadoNormal());
-      } });
-    case "copiar-normal": return recopiar();
     case "rutina-publicada": return rutinaPublicada();
     case "buscar-actualizacion": return buscarActualizacion();
     case "novedades": return hojaNovedades();
@@ -610,7 +493,8 @@ async function leerYPrevisualizar(archivo) {
   }
   const r = leida.resumen;
   const fecha = r.fecha && Number.isFinite(Date.parse(r.fecha)) ? `${fechaConAnio(Date.parse(r.fecha))}, ${hora(Date.parse(r.fecha))}` : null;
-  const origen = r.de === "beta" ? "hecha con la beta" : r.de === "versión normal" ? "hecha con la versión normal" : "copia antigua de la versión normal";
+  // «de» es interno: «beta» (esta app, desde cuando era la beta) o «versión normal» (la versión vieja).
+  const origen = r.de === "beta" ? "hecha con esta app" : r.de === "versión normal" ? "hecha con la versión vieja" : "copia antigua de la versión vieja";
   const lineas = [
     h("p", { class: "vista-previa-linea" }, fecha ? `Copia del ${fecha} · ${origen}` : `Copia · ${origen}`),
     h("p", { class: "vista-previa-linea fuerte" }, `${contar(r.dias, "día", "días")} · ${contar(r.entradas, "ejercicio", "ejercicios")} (${formatoNumero(r.distintos)} distintos) · ${contar(r.marcas, "marca", "marcas")}`),
@@ -637,8 +521,8 @@ async function leerYPrevisualizar(archivo) {
     return;
   }
   lineas.push(h("p", { class: "ayuda" }, leida.traeHistorial
-    ? "Se sustituyen tu rutina, tu historial, tus marcas y tus ajustes de la beta. Antes se guarda una copia automática."
-    : "Se sustituyen tu rutina, tus marcas y tus ajustes de la beta. Antes se guarda una copia automática."));
+    ? "Se sustituyen tu rutina, tu historial, tus marcas y tus ajustes. Antes se guarda una copia automática."
+    : "Se sustituyen tu rutina, tus marcas y tus ajustes. Antes se guarda una copia automática."));
   const ok = await confirmar({ titulo: "Cargar una copia", contenido: h("div", { class: "vista-previa" }, lineas), aceptar: "Cargar esta copia" });
   if (!ok) return;
   await cargarLeida(leida);
@@ -708,7 +592,7 @@ async function recuperarCopia(id) {
   const { registro, datos } = leida;
   const ok = await confirmar({
     titulo: "Recuperar una copia automática",
-    texto: `¿Recuperar la copia del ${diaMes(registro.fecha)}, ${hora(registro.fecha)} (${registro.motivo})? Se sustituyen tus datos de la beta. Antes se guarda una copia automática.`,
+    texto: `¿Recuperar la copia del ${diaMes(registro.fecha)}, ${hora(registro.fecha)} (${registro.motivo})? Se sustituyen tus datos. Antes se guarda una copia automática.`,
     aceptar: "Recuperar",
   });
   if (!ok) return;
@@ -723,40 +607,7 @@ async function recuperarCopia(id) {
   });
 }
 
-// --- Datos de la versión normal ---
-
-// «Volver a copiar»: primero se lee la normal, para enseñar en la confirmación qué marcas bajarían y dejar elegir
-// quedarse con la más alta de las dos (marcado de serie).
-async function recopiar() {
-  const t = ahora();
-  const r = await copiarDesdeNormal({ ahoraMs: t });
-  if (!r.ok) {
-    avisar({ texto: r.error, tipo: "error" });
-    return;
-  }
-  const bajan = marcasQueBajan(almacen.datos(), r.datos);
-  const casilla = bajan.length ? h("input", { type: "checkbox", class: "casilla-caja", id: "quedarse-maxima", checked: true }) : null;
-  const contenido = bajan.length
-    ? h("div", { class: "marcas-bajan" },
-      h("p", { class: "hoja-texto" }, `Con la copia bajarían ${plural(bajan.length, "marca", "marcas")} de la beta:`),
-      h("ul", { class: "lista-avisos" }, bajan.map((m) => h("li", null, `${m.nombre}: ${formatoKg(m.de)} → ${textoMarca(m.a)}`))),
-      h("label", { class: "casilla", for: "quedarse-maxima" }, casilla, h("span", null, "Quedarme con la marca más alta de las dos")))
-    : null;
-  const ok = await confirmar({
-    titulo: "Volver a copiar desde la versión normal",
-    texto: "Cambia tu rutina, tus marcas y tus ajustes de la beta por los de la versión normal. Tu historial de la beta se queda. Antes se guarda una copia automática.",
-    contenido,
-    aceptar: "Copiar",
-  });
-  if (!ok) return;
-  const quedarseMaxima = Boolean(casilla?.checked);
-  if (!(await antesDeQuitarDias(r.datos.dias, "volver a copiar"))) return;
-  const copiaHecha = await guardarCopiaAuto(almacen.datos(), "antes de volver a copiar desde la versión normal", t);
-  const deshacer = almacen.mutar((d) => aplicarRecopia(d, r.datos, t, { quedarseMaxima }));
-  apuntarCopiaNormal(r.huella, t);
-  ctx.repintar();
-  avisarDeshacer(copiaHecha ? "Rutina copiada de la versión normal" : "Rutina copiada de la versión normal (sin copia automática previa)", deshacer, () => ctx.repintar());
-}
+// --- La rutina publicada ---
 
 async function rutinaPublicada() {
   const ok = await confirmar({
@@ -780,7 +631,7 @@ async function rutinaPublicada() {
   avisarDeshacer(copiaHecha ? "Rutina publicada puesta" : "Rutina publicada puesta (sin copia automática previa)", deshacer, () => ctx.repintar());
 }
 
-// --- Beta ---
+// --- La app: versión, novedades y apuntes ---
 
 async function buscarActualizacion() {
   if (!ctx.version.buscar) {
@@ -789,7 +640,7 @@ async function buscarActualizacion() {
   }
   avisar({ texto: "Buscando…" });
   const r = await ctx.version.buscar();
-  if (r === "nueva") avisar({ texto: "Hay una versión nueva de la beta.", accion: "Recargar", alPulsar: () => ctx.version.recargar?.() });
+  if (r === "nueva") avisar({ texto: "Hay una versión nueva de la app.", accion: "Recargar", alPulsar: () => ctx.version.recargar?.() });
   else if (r === "error") avisar({ texto: "No se ha podido buscar: comprueba la conexión." });
   else avisar({ texto: "Ya tienes la última versión" });
 }
@@ -798,10 +649,10 @@ export function hojaNovedades() {
   const cuerpo = NOVEDADES.map((n) => h("section", { class: "novedad" },
     h("h3", { class: "tarjeta-titulo" }, `Versión ${n.version} · ${fechaConAnio(new Date(`${n.fecha}T12:00:00`).getTime())}`),
     h("ul", { class: "lista-novedades" }, n.cambios.map((c) => h("li", null, c)))));
-  abrirHoja({ titulo: "Novedades de la beta", cuerpo, pie: [boton("Cerrar", "cerrar-hoja", { clase: "boton-principal boton-ancho" })] });
+  abrirHoja({ titulo: "Novedades", cuerpo, pie: [boton("Cerrar", "cerrar-hoja", { clase: "boton-principal boton-ancho" })] });
 }
 
-// Hoja de apuntes: se abre desde Ajustes y tocando «BETA» arriba, en cualquier pantalla. Cada apunte guarda la
+// Hoja de apuntes: se abre desde Ajustes y tocando el lápiz de arriba, en cualquier pantalla. Cada apunte guarda la
 // pantalla y, en Entreno, el día, el ejercicio abierto y la serie.
 export function hojaApuntes() {
   if (!almacen.datos()) return;
@@ -888,8 +739,8 @@ export function hojaApuntes() {
 // «Cancelar». Además, una hoja recién abierta no hace caso a los toques de los primeros 400 ms (avisos.js).
 async function borrarTodo() {
   const seguir = await confirmar({
-    titulo: "Borrar todos los datos de la beta",
-    texto: "Borra la rutina, el historial y los ajustes de la beta en este móvil. La versión normal no se toca. Las copias automáticas se conservan.",
+    titulo: "Borrar todos los datos",
+    texto: "Borra la rutina, el historial y los ajustes en este móvil. Las copias automáticas se conservan.",
     aceptar: "Seguir",
     peligro: true,
   });

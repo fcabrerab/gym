@@ -1,16 +1,18 @@
-// Copia de los datos de la versión normal. La normal guarda en «gym-routine-data-v1» un diff contra
-// data/*.json; aquí se reproduce su fusión (getMergedRoutine + buildSnapshot de app.js) como una
-// función pura y se pasa al modelo de la beta. La clave de la normal solo se LEE: nunca se escribe.
+// La versión vieja de la app (la «normal», retirada en la 1.0.0: D-121) y la rutina publicada (data/*.json).
+// La normal guardaba en «gym-routine-data-v1» un diff contra data/*.json; aquí se reproduce su fusión
+// (getMergedRoutine + buildSnapshot de su app.js) como una función pura y se pasa al modelo de la app. Sirve para la
+// copia de la primera vez (si el móvil no tiene datos de la app) y para cargar sus copias antiguas. La clave de la
+// normal solo se LEE: nunca se escribe ni se borra (sus datos se quedan en el móvil, sin tocar).
 
-import { ESQUEMA, AJUSTES_POR_DEFECTO, AJUSTES_NORMAL, LIMITES, normalizarImagen, normalizarMarca, normalizarSeries,
-  deducirTipo, deducirDiasSemana, leerMinutosCambio, normalizarEjercicio, nombreDia, TIPOS } from "./modelo.js";
+import { ESQUEMA, AJUSTES_POR_DEFECTO, LIMITES, normalizarImagen, normalizarMarca, normalizarSeries,
+  deducirTipo, deducirDiasSemana, leerMinutosCambio, normalizarEjercicio, TIPOS } from "./modelo.js";
 import { leerDescanso, leerSegundos, leerNumero, formatoDescanso, recortar, formatoNumero } from "./util.js";
 
 export const CLAVE_NORMAL = "gym-routine-data-v1";
 export const CLAVE_TEMA_NORMAL = "gym-theme-v1";
 
 export const TEXTO_SIN_RED = "No se ha podido leer la rutina publicada. Comprueba la conexión y vuelve a intentarlo.";
-export const TEXTO_NORMAL_ILEGIBLE = "No se han podido leer los datos de la versión normal; se usa la rutina publicada.";
+export const TEXTO_NORMAL_ILEGIBLE = "No se han podido leer los datos de la versión vieja; se usa la rutina publicada.";
 
 const esObjeto = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
 
@@ -118,7 +120,7 @@ export function fusionarComoLaNormal(customEntrada, base, ejerciciosBase) {
 
 // Deja como vacío lo que tenga un tipo que haría fallar la fusión, con su aviso. Sirve para la clave de la normal
 // y para las copias antiguas (diff) que se cargan en Ajustes.
-export function sanear(v, avisos, de = "de la versión normal") {
+export function sanear(v, avisos, de = "de la versión vieja") {
   const c = structuredClone(v);
   const forma = [["exercises", esObjeto], ["days", esObjeto], ["settings", esObjeto],
     ["daysAdded", Array.isArray], ["daysRemoved", Array.isArray], ["dayOrder", Array.isArray]];
@@ -157,24 +159,6 @@ export function leerTemaNormal() {
   return t === "light" ? "claro" : "oscuro";
 }
 
-// Huella del texto de la clave de la normal (FNV-1a de 32 bits y la longitud). Sirve para notar que la normal ha
-// cambiado desde la última copia sin guardar sus datos en la beta. La clave solo se lee.
-export function huellaTexto(texto) {
-  if (texto == null) return "vacia";
-  let h = 0x811c9dc5;
-  for (let i = 0; i < texto.length; i += 1) {
-    h ^= texto.charCodeAt(i);
-    h = Math.imul(h, 0x01000193) >>> 0;
-  }
-  return `${texto.length}-${h.toString(16)}`;
-}
-
-export function huellaNormal() {
-  let texto = null;
-  try { texto = localStorage.getItem(CLAVE_NORMAL); } catch { /* sin acceso: como vacía */ }
-  return huellaTexto(texto);
-}
-
 // Lee la clave de la normal. Devuelve {custom, tipo: "normal" | "base", avisos, tema}.
 export function leerNormal() {
   const avisos = [];
@@ -205,7 +189,7 @@ export async function cargarBase() {
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     return r.json();
   };
-  const [rutina, ejercicios] = await Promise.all([leer("../../data/routine.json"), leer("../../data/exercises.json")]);
+  const [rutina, ejercicios] = await Promise.all([leer("../data/routine.json"), leer("../data/exercises.json")]);
   if (!esObjeto(rutina) || !Array.isArray(rutina.days) || !Array.isArray(ejercicios)) throw new Error("La rutina publicada tiene una forma rara.");
   return { rutina, ejercicios };
 }
@@ -330,7 +314,7 @@ export function datosDesdeSnapshot(snap, opciones = {}) {
   if (dias.length === 0) {
     if (modo === "importar") throw Object.assign(new Error("La copia no trae ningún día."), { paraLaPersona: true });
     if (diasBase) {
-      avisos.push("La versión normal no tenía ningún día: se usa la rutina publicada.");
+      avisos.push("La versión vieja no tenía ningún día: se usa la rutina publicada.");
       ({ dias, acumulado } = construir(diasBase));
     }
   }
@@ -448,91 +432,7 @@ export async function copiarDesdeNormal({ ahoraMs = Date.now(), cargar = cargarB
     origen: tipo, ahoraMs, ejerciciosBase: base.ejercicios, tema: normal.tema, modo: "copia",
     diasBase, extras: extrasDeLaNormal(normal.custom, base.ejercicios, snap), avisosPrevios: avisos,
   });
-  return { ok: true, ...r, origen: tipo, base, huella: huellaNormal() };
-}
-
-// «Volver a copiar desde la versión normal»: cambia la rutina, las marcas y los cuatro ajustes de la normal,
-// y conserva el historial, los apuntes, la copia y lo propio de la beta (tipo, incremento, notas, tema…).
-// Con {quedarseMaxima: true}, cada marca se queda con la más alta de las dos (la de la beta o la de la normal).
-export function aplicarRecopia(actuales, nuevos, ahoraMs, { quedarseMaxima = false } = {}) {
-  const d = structuredClone(actuales);
-  d.dias = structuredClone(nuevos.dias);
-  for (const [id, x] of Object.entries(nuevos.ejercicios)) {
-    const previo = d.ejercicios[id];
-    const antes = previo?.pr ?? null;
-    let pr = x.pr ?? null;
-    if (quedarseMaxima && antes != null && (pr == null || antes > pr)) pr = antes;
-    d.ejercicios[id] = previo
-      ? { ...previo, name: x.name, image: x.image, muscleGroup: x.muscleGroup, pr }
-      : { ...structuredClone(x), pr };
-    if (pr !== antes) d.marcas.push({ exerciseId: id, kg: pr, fecha: ahoraMs, motivo: "copia" });
-  }
-  for (const k of AJUSTES_NORMAL) d.ajustes[k] = nuevos.ajustes[k];
-  d.origen = { tipo: nuevos.origen.tipo, fecha: ahoraMs, avisos: nuevos.origen.avisos };
-  return d;
-}
-
-// Las marcas que bajarían en la beta al volver a copiar desde la normal (la de la normal es menor o no hay).
-export function marcasQueBajan(actuales, nuevos) {
-  const lista = [];
-  for (const [id, x] of Object.entries(nuevos.ejercicios)) {
-    const antes = actuales.ejercicios[id]?.pr ?? null;
-    const despues = x.pr ?? null;
-    if (antes != null && (despues == null || despues < antes)) lista.push({ id, nombre: x.name, de: antes, a: despues });
-  }
-  return lista;
-}
-
-const planTexto = (e) => `${e.series} × ${e.reps} · ${e.rest}`;
-
-// Qué cambia entre la beta y la normal: marcas, días que solo están en una, ejercicios añadidos o quitados de
-// cada día y series, repeticiones o descanso distintos. Sirve para «Ver qué cambia».
-export function compararConNormal(beta, normal) {
-  const r = { marcas: [], soloNormal: [], soloBeta: [], ejercicios: [], plan: [] };
-  const ids = new Set([...beta.dias, ...normal.dias].flatMap((d) => d.ejercicios.map((e) => e.exerciseId)));
-  for (const id of ids) {
-    const a = beta.ejercicios[id]?.pr ?? null;
-    const b = normal.ejercicios[id]?.pr ?? null;
-    if (a !== b && (beta.ejercicios[id] || normal.ejercicios[id])) {
-      r.marcas.push({ id, nombre: (beta.ejercicios[id] || normal.ejercicios[id]).name, beta: a, normal: b });
-    }
-  }
-  for (const d of normal.dias) if (!beta.dias.some((x) => x.id === d.id)) r.soloNormal.push(nombreDia(d));
-  for (const d of beta.dias) if (!normal.dias.some((x) => x.id === d.id)) r.soloBeta.push(nombreDia(d));
-  for (const dn of normal.dias) {
-    const db = beta.dias.find((x) => x.id === dn.id);
-    if (!db) continue;
-    const nombre = (id) => (normal.ejercicios[id] || beta.ejercicios[id])?.name || id;
-    const enB = new Set(db.ejercicios.map((e) => e.exerciseId));
-    const enN = new Set(dn.ejercicios.map((e) => e.exerciseId));
-    const soloN = [...enN].filter((id) => !enB.has(id)).map(nombre);
-    const soloB = [...enB].filter((id) => !enN.has(id)).map(nombre);
-    if (soloN.length || soloB.length) r.ejercicios.push({ dia: dn.label, soloNormal: soloN, soloBeta: soloB });
-    for (const en of dn.ejercicios) {
-      const eb = db.ejercicios.find((e) => e.exerciseId === en.exerciseId);
-      if (eb && planTexto(eb) !== planTexto(en)) r.plan.push({ dia: dn.label, nombre: nombre(en.exerciseId), beta: planTexto(eb), normal: planTexto(en) });
-    }
-  }
-  r.total = r.marcas.length + r.soloNormal.length + r.soloBeta.length + r.ejercicios.length + r.plan.length;
-  return r;
-}
-
-// Qué pasaría en la normal si se carga en ella una copia de la beta: las marcas de la normal que bajarían y los
-// ejercicios sin marca en la beta que en la normal saldrían con la marca publicada (la normal no guarda «sin marca»).
-export function efectoEnLaNormal(beta, normal, ejerciciosBase) {
-  const publicada = new Map((ejerciciosBase || []).map((e) => [e.id, normalizarMarca(e.pr)]));
-  const bajan = [];
-  const publicadas = [];
-  const ids = new Set(beta.dias.flatMap((d) => d.ejercicios.map((e) => e.exerciseId)));
-  for (const id of ids) {
-    const x = beta.ejercicios[id];
-    if (!x || x.tipo !== "peso") continue;
-    const resultado = x.pr ?? publicada.get(id) ?? null;
-    const actual = normal?.ejercicios?.[id]?.pr ?? null;
-    if (x.pr == null && publicada.get(id) != null) publicadas.push({ id, nombre: x.name, kg: publicada.get(id) });
-    if (actual != null && (resultado == null || resultado < actual)) bajan.push({ id, nombre: x.name, de: actual, a: resultado });
-  }
-  return { bajan, publicadas };
+  return { ok: true, ...r, origen: tipo, base };
 }
 
 // «Volver a la rutina publicada»: los días y ejercicios de data/*.json, conservando las marcas, el historial

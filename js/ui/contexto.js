@@ -7,5 +7,5 @@ export const ctx = {
   aplicarTema: () => {},
   pantalla: () => "entreno",
   contextoApunte: () => "",
-  version: { nueva: false, recargar: null, controlaLaBeta: () => false, buscar: null },
+  version: { nueva: false, recargar: null, controlaElSw: () => false, buscar: null },
 };

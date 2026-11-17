@@ -1,13 +1,14 @@
-// Arranque de la beta: lee los datos (o los copia de la normal la primera vez), rescata los dañados, monta la
+// Arranque de la app: lee los datos (o los copia de la versión vieja la primera vez), rescata los dañados, monta la
 // barra de descanso, los avisos y la navegación inferior, lleva las rutas por hash y el botón Atrás, el tema y el
-// service worker. Es el ÚNICO módulo que hace algo al importarse: los demás solo declaran funciones.
+// service worker (con la mudanza desde la beta: D-121). Es el ÚNICO módulo que hace algo al importarse: los demás
+// solo declaran funciones.
 
 import { VERSION } from "./version.js";
 import * as almacen from "./almacen.js";
 import * as descanso from "./descanso.js";
 import * as avisosPc from "./avisos-pc.js";
 import * as copiaPc from "./copia-pc.js";
-import { copiarDesdeNormal, leerTemaNormal, huellaNormal } from "./normal.js";
+import { copiarDesdeNormal, leerTemaNormal } from "./normal.js";
 import { guardarCopiaAuto, listarCopiasAuto } from "./copias.js";
 import { diaPorId } from "./modelo.js";
 import { abandonada } from "./sesion.js";
@@ -25,14 +26,14 @@ import {
 import { pintarHistorial, alAccionHistorial, vistaHistorialGuardada } from "./ui/historial.js";
 import { pintarRutina, alAccionRutina, alCampoRutina } from "./ui/rutina.js";
 import {
-  pintarAjustes, alAccionAjustes, alCampoAjustes, hojaNovedades, hojaApuntes, datosDeCopiaAuto, pedirPermisoNotificaciones, apuntarCopiaNormal,
+  pintarAjustes, alAccionAjustes, alCampoAjustes, hojaNovedades, hojaApuntes, datosDeCopiaAuto, pedirPermisoNotificaciones,
   repintarAvisosPc, repintarCopiaPc,
 } from "./ui/ajustes.js";
 import * as arranque from "./ui/arranque.js";
 import { montarBrillo } from "./ui/brillo.js";
 
 const raiz = document.documentElement;
-// Para js/vigia.js: los módulos han llegado (si no llegan, el vigía lo dice en vez de dejar «Cargando la beta…»).
+// Para js/vigia.js: los módulos han llegado (si no llegan, el vigía lo dice en vez de dejar «Cargando…»).
 raiz.dataset.modulos = "1";
 
 const pantalla = document.getElementById("pantalla");
@@ -266,10 +267,10 @@ function conectarEventos() {
     const el = ev.target.closest("[data-accion^='ir-']");
     if (el && modo === "app") irAPestana(el.dataset.accion.slice(3));
   });
-  // «BETA», arriba en todas las pantallas: apuntar un fallo o una idea al momento, con dónde se estaba.
+  // El lápiz (antes, «BETA»), arriba en todas las pantallas: apuntar un fallo o una idea al momento, con dónde se estaba.
   document.getElementById("boton-beta")?.addEventListener("click", () => {
     if (modo === "app" && almacen.datos()) hojaApuntes();
-    else avisar({ texto: "Para apuntar un fallo o una idea, entra antes en la beta." });
+    else avisar({ texto: "Para apuntar un fallo o una idea, espera a que se abra la app." });
   });
   window.addEventListener("popstate", () => {
     if (alVolverAtras()) return;
@@ -287,7 +288,7 @@ function conectarEventos() {
   document.addEventListener("visibilitychange", () => {
     descanso.alCambiarVisibilidad();
     if (document.visibilityState === "visible" && modo === "app" && rutaActual?.tab === "entreno") actualizarEntreno();
-    // Al volver a la beta: si el PC no tiene lo último (p. ej., no respondía al acabar el entreno), se le manda.
+    // Al volver a la app: si el PC no tiene lo último (p. ej., no respondía al acabar el entreno), se le manda.
     if (document.visibilityState === "visible" && modo === "app") copiaPc.alAbrir();
   });
   mqOscuro.addEventListener?.("change", () => aplicarTema(raiz.dataset.temaElegido || "auto"));
@@ -316,7 +317,7 @@ function alCambioAlmacen(e) {
     return;
   }
   if (e.tipo === "nuevo") {
-    avisar({ texto: "Hay datos de una versión más nueva de la beta (de otra ventana). Recarga para actualizar.", accion: "Recargar", alPulsar: () => location.reload(), fijo: true });
+    avisar({ texto: "Hay datos de una versión más nueva de la app (de otra ventana). Recarga para actualizar.", accion: "Recargar", alPulsar: () => location.reload(), fijo: true });
     return;
   }
   // Un «Deshacer» a la vista ya no se refiere a lo último que ha cambiado: se quita (y si se pulsara, no restauraría
@@ -343,7 +344,7 @@ function montar() {
   ctx.aplicarTema = aplicarTema;
   ctx.pantalla = () => rutaActual?.tab ?? "entreno";
   ctx.contextoApunte = contextoApunte;
-  ctx.version.controlaLaBeta = () => Boolean(navigator.serviceWorker?.controller?.scriptURL?.endsWith("/beta/sw.js"));
+  ctx.version.controlaElSw = () => navigator.serviceWorker?.controller?.scriptURL === new URL("./sw.js", location.href).href;
   montarAvisos(document.getElementById("avisos"), document.getElementById("anuncios"));
   descanso.configurarDescanso({
     ajustes: () => almacen.datos()?.ajustes || {},
@@ -400,8 +401,6 @@ function iniciarApp(avisos = []) {
   // Si la sesión en curso ya está en el historial (se cortó entre los dos pasos de terminar), se quita.
   const s = almacen.leerSesion();
   if (s && almacen.datos().sesiones.some((x) => x.id === s.id)) almacen.borrarSesion();
-  // Punto de partida para notar los cambios de la normal (por si estos datos son de antes de que existiera).
-  if (!almacen.leerUi().normalCopiada) apuntarCopiaNormal(huellaNormal(), almacen.datos().origen?.fecha ?? ahora());
   descanso.restaurarDescanso();
   descanso.actualizarPantalla();
   reiniciarEntreno();
@@ -426,15 +425,20 @@ function iniciarApp(avisos = []) {
   }
 }
 
+// La versión que se había visto antes de este arranque (para la mudanza: si la página se recarga enseguida, el aviso de
+// «App actualizada» sale después de recargar, no justo antes).
+let versionVistaAntes = null;
+
 function avisoVersion() {
   const ui = almacen.leerUi();
+  versionVistaAntes = ui.versionVista;
   if (!ui.versionVista) {
     almacen.cambiarUi((u) => { u.versionVista = VERSION; });
     return;
   }
   if (ui.versionVista !== VERSION) {
     almacen.cambiarUi((u) => { u.versionVista = VERSION; });
-    avisar({ texto: `Beta actualizada a la ${VERSION}`, accion: "Novedades", alPulsar: () => hojaNovedades() });
+    avisar({ texto: `App actualizada a la ${VERSION}`, accion: "Novedades", alPulsar: () => hojaNovedades() });
   }
 }
 
@@ -466,8 +470,6 @@ async function primeraVez() {
   }
   almacen.cambiarUi((u) => {
     u.versionVista = VERSION;
-    u.normalCopiada = { huella: r.huella, fecha: t };
-    u.normalAvisoOculto = null;
     delete u.borradoEn;
   });
   aplicarTema(r.datos.ajustes.tema);
@@ -512,12 +514,12 @@ async function accionArranque(accion, el) {
       }
       const copia = lista.find((c) => c.motivo === "antes de borrar todo");
       if (!copia) return avisar({ texto: "No hay ninguna copia automática de antes de borrar." });
-      return recuperarCopiaAuto(copia.id, `¿Recuperar los datos de antes de borrar (${diaMes(copia.fecha)}, ${hora(copia.fecha)})? Se sustituye la copia que se acaba de hacer de la versión normal.`);
+      return recuperarCopiaAuto(copia.id, `¿Recuperar los datos de antes de borrar (${diaMes(copia.fecha)}, ${hora(copia.fecha)})? Se sustituye la rutina con la que se acaba de empezar.`);
     }
     case "descargar-danados": {
       const d = new Date(ahora());
       const dos = (n) => String(n).padStart(2, "0");
-      const nombre = `gym-beta-datos-danados-${fechaLocal(d.getTime())}-${dos(d.getHours())}${dos(d.getMinutes())}.json`;
+      const nombre = `gym-datos-danados-${fechaLocal(d.getTime())}-${dos(d.getHours())}${dos(d.getMinutes())}.json`;
       const url = URL.createObjectURL(new Blob([textoDanado ?? ""], { type: "application/json" }));
       const a = h("a", { href: url, download: nombre, hidden: true });
       document.body.append(a);
@@ -545,7 +547,7 @@ async function accionArranque(accion, el) {
     case "empezar-de-nuevo": {
       const ok = await confirmar({
         titulo: "Empezar de nuevo",
-        texto: "Se copia otra vez la rutina de la versión normal. Tus datos dañados ya están guardados aparte.",
+        texto: "Se empieza otra vez con la rutina de la versión vieja (o la publicada, si no hay). Tus datos dañados ya están guardados aparte.",
         aceptar: "Empezar de nuevo",
         peligro: true,
       });
@@ -554,6 +556,37 @@ async function accionArranque(accion, el) {
     }
     default: return undefined;
   }
+}
+
+// --- La mudanza de la beta a la dirección de siempre (D-121) ---
+
+// La primera vez que se abre la app aquí puede mandar todavía el service worker de la app vieja (si quedan sus
+// cachés gym-pwa-…): ha dado el HTML nuevo, pero el resto lo da de su caché. sw.js lo sustituye sin esperar.
+async function hayAppVieja() {
+  try {
+    return (await caches.keys()).some((n) => n.startsWith("gym-pwa-"));
+  } catch {
+    return false;
+  }
+}
+
+// El service worker de la beta vieja (alcance …/beta/) ya no hace falta: se le quita su suscripción de avisos (los
+// avisos desde el PC se piden ya con el de aquí: avisos-pc.js la crea sola en el próximo descanso) y se da de baja.
+// Sus cachés las borra sw.js al activarse. Devuelve cuántos ha quitado.
+async function quitarBetaVieja() {
+  let quitados = 0;
+  try {
+    const alcance = new URL("./beta/", location.href).href;
+    for (const reg of await navigator.serviceWorker.getRegistrations()) {
+      if (reg.scope !== alcance) continue;
+      const suscripcion = await Promise.resolve(reg.pushManager?.getSubscription()).catch(() => null);
+      await suscripcion?.unsubscribe().catch(() => {});
+      if (await reg.unregister().catch(() => false)) quitados += 1;
+    }
+  } catch {
+    // Sin service workers no hay nada que quitar.
+  }
+  return quitados;
 }
 
 // --- Service worker y aviso de versión nueva ---
@@ -568,11 +601,25 @@ function registrarSW() {
   });
   navigator.serviceWorker.startMessages?.();
   let pedidoRecargar = false;
+  let mudanza = false;
   let recargando = false;
+  // En la mudanza (quedan cachés de la app vieja), al tomar el control el service worker nuevo se recarga una vez,
+  // para tener la app entera con él.
+  hayAppVieja().then((vieja) => {
+    if (vieja) {
+      mudanza = true;
+      pedidoRecargar = true;
+    }
+  });
+  quitarBetaVieja();
   navigator.serviceWorker.addEventListener("controllerchange", () => {
-    // Solo se recarga tras pulsar «Recargar»; el cambio de la primera visita (de la normal a la beta) no recarga.
+    // Solo se recarga tras pulsar «Recargar» o en la mudanza; el cambio de la primera visita no recarga.
     if (pedidoRecargar && !recargando) {
       recargando = true;
+      // En la mudanza, el aviso de «App actualizada» (con sus novedades) se deja para después de recargar.
+      if (mudanza && versionVistaAntes && versionVistaAntes !== VERSION) {
+        almacen.cambiarUi((u) => { u.versionVista = versionVistaAntes; });
+      }
       location.reload();
     }
   });
