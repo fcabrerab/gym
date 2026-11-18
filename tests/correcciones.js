@@ -192,8 +192,12 @@ export async function ejecutar(c) {
     await ir(b, "rutina");
     pulsar(b.d, "bajar-dia", "tuesday-push");
     await esperar(50);
+    // Desde la 1.2.0 el orden va a los cambios sin guardar (D-123): ya ese cambio quita el «Deshacer»; luego se guarda.
+    const sinDeshacer = !existe(b.d, "deshacer");
+    pulsar(b.d, "guardar-rutina");
+    await esperar(50);
     const g = datosGuardados();
-    caso(!existe(b.d, "deshacer") && g.dias[1].id === "tuesday-push" && g.sesiones.some((s) => s.id === "s-casi") && !g.sesiones.some((s) => s.id === "s-vieja"),
+    caso(sinDeshacer && g.dias[1].id === "tuesday-push" && g.sesiones.some((s) => s.id === "s-casi") && !g.sesiones.some((s) => s.id === "s-vieja"),
       "tras borrar una sesión, otro cambio (el orden de los días) quita su «Deshacer»: no se lleva por delante lo de después");
     // Atrás tras cambiar de pestaña desde un detalle: vuelve a Entreno.
     await ir(b, "historial");

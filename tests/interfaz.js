@@ -270,7 +270,9 @@ export async function ejecutar(c) {
     quitar(b);
   }
 
-  // I10 Rutina
+  // I10 Rutina: la hoja del ejercicio (cada campo validado al salir), quitar y añadir ejercicios y los días de la
+  // semana. Desde la 1.2.0 (D-123) nada se guarda al momento: la hoja tiene «Cancelar» y «Guardar», y lo de Rutina se
+  // guarda con la barra de abajo.
   {
     await preparar(await datosBeta());
     const b = await cargarBeta();
@@ -278,27 +280,48 @@ export async function ejecutar(c) {
     await esperar(50);
     pulsar(b.d, "abrir-dia", "tuesday-push");
     await esperar(50);
+    const entrada = () => datosGuardados().dias.find((d) => d.id === "tuesday-push").ejercicios.find((e) => e.exerciseId === "machine-chest-press");
+    const barra = () => b.d.querySelector(".barra-borrador")?.hidden === false;
     pulsar(b.d, "editar-entrada", "machine-chest-press");
     await esperar(50);
     let hoja = hojaAbierta(b.d);
+    caso(existe(b.d, "cancelar-ejercicio") && existe(b.d, "guardar-ejercicio") && !existe(b.d, "hecho"), "I10 la hoja del ejercicio trae «Cancelar» y «Guardar» (ya no «Hecho»)");
     const rest = hoja.querySelector('[data-campo="rest"]');
     teclear(b.d, rest, "1,30");
-    const entrada = () => datosGuardados().dias.find((d) => d.id === "tuesday-push").ejercicios.find((e) => e.exerciseId === "machine-chest-press");
-    caso(entrada().rest === "1:30" && rest.value === "1:30", `I10 un descanso «1,30» se guarda «${entrada().rest}»`);
+    caso(rest.value === "1:30" && entrada().rest === "2:30", `I10 un descanso «1,30» se queda «${rest.value}», y aún no se guarda («${entrada().rest}»)`);
+    const nombre = hoja.querySelector('[data-campo="name"]');
+    const nombreAntes = nombre.value;
+    teclear(b.d, nombre, "");
+    caso(textoDe(hoja, "#hoja-name-error") === "El nombre no puede quedar vacío.", "I10 un nombre vacío saca su error");
     teclear(b.d, rest, "abc");
     const error = textoDe(hoja, '[data-control="rest"] .control-error');
-    caso(error === "Escribe el descanso como 1:30 (minutos:segundos)." && entrada().rest === "1:30", `I10 «abc» saca el error junto al campo y no se guarda («${error}»)`);
-    const nombre = hoja.querySelector('[data-campo="name"]');
-    teclear(b.d, nombre, "");
-    caso(textoDe(hoja, "#hoja-name-error") === "El nombre no puede quedar vacío." && datosGuardados().ejercicios["machine-chest-press"].name !== "", "I10 un nombre vacío no se guarda");
-    hoja.querySelector('[data-accion="quitar-ejercicio"]').click();
+    caso(error === "Escribe el descanso como 1:30 (minutos:segundos).", `I10 «abc» saca el error junto al campo («${error}»)`);
+    pulsar(b.d, "guardar-ejercicio");
+    await esperar(50);
+    caso(hojaAbierta(b.d) === hoja && !leerJson("gym-beta-borrador") && b.d.activeElement === nombre,
+      "I10 con algo mal escrito, «Guardar» no cierra la hoja ni cambia nada, y lleva al primer campo que falla");
+    teclear(b.d, nombre, nombreAntes);
+    teclear(b.d, rest, "1:30");
+    pulsar(b.d, "guardar-ejercicio");
     await hastaQueVirtual(() => !hojaAbierta(b.d), 2000);
     await esperar(50);
-    caso(!existe(b.d, "editar-entrada", "machine-chest-press") && !entrada(), "I10 quitar el ejercicio del día");
+    const fila = textoDe(b.d, '[data-accion="editar-entrada"][data-id="machine-chest-press"] .fila-datos');
+    caso(fila.endsWith("1:30") && entrada().rest === "2:30" && barra(), `I10 «Guardar» de la hoja lo pasa a Rutina («${fila}») y sale la barra; aún sin guardar`);
+    pulsar(b.d, "guardar-rutina");
+    await esperar(50);
+    caso(entrada().rest === "1:30" && !barra() && avisoActual(b.d) === "Cambios guardados." && !leerJson("gym-beta-borrador"),
+      "I10 «Guardar» de la barra lo guarda, y la barra se va");
+    pulsar(b.d, "editar-entrada", "machine-chest-press");
+    await esperar(50);
+    hojaAbierta(b.d).querySelector('[data-accion="quitar-ejercicio"]').click();
+    await hastaQueVirtual(() => !hojaAbierta(b.d), 2000);
+    await esperar(50);
+    caso(!existe(b.d, "editar-entrada", "machine-chest-press") && Boolean(entrada()) && barra(), "I10 quitar el ejercicio del día lo quita de Rutina (aún sin guardar)");
     pulsar(b.d, "deshacer");
     await esperar(50);
-    caso(existe(b.d, "editar-entrada", "machine-chest-press") && Boolean(entrada()), "I10 deshacer lo vuelve a poner");
+    caso(existe(b.d, "editar-entrada", "machine-chest-press") && !barra() && !leerJson("gym-beta-borrador"), "I10 deshacer lo vuelve a poner (y, sin nada más, no queda nada sin guardar)");
     const enBiblioteca = Object.keys(datosGuardados().ejercicios).length;
+    const semanaAntes = JSON.stringify(datosGuardados().dias.find((d) => d.id === "tuesday-push").diasSemana);
     pulsar(b.d, "anadir-ejercicio", "tuesday-push");
     await esperar(50);
     hoja = hojaAbierta(b.d);
@@ -307,11 +330,13 @@ export async function ejecutar(c) {
     hoja.querySelector('[data-accion="elegir-biblioteca"][data-id="leg-press"]').click();
     await hastaQueVirtual(() => !hojaAbierta(b.d), 2000);
     await esperar(50);
-    const dia = datosGuardados().dias.find((d) => d.id === "tuesday-push");
-    caso(dia.ejercicios.some((e) => e.exerciseId === "leg-press") && Object.keys(datosGuardados().ejercicios).length === enBiblioteca,
-      "I10 añadir un ejercicio de la biblioteca no crea uno nuevo");
     pulsar(b.d, "dia-semana", "tuesday-push");
-    caso(true, "I10 los días de la semana se pueden pulsar");
+    caso(existe(b.d, "editar-entrada", "leg-press") && barra(), "I10 añadir un ejercicio y pulsar los días de la semana, en Rutina");
+    pulsar(b.d, "guardar-rutina");
+    await esperar(50);
+    const dia = datosGuardados().dias.find((d) => d.id === "tuesday-push");
+    caso(dia.ejercicios.some((e) => e.exerciseId === "leg-press") && Object.keys(datosGuardados().ejercicios).length === enBiblioteca && JSON.stringify(dia.diasSemana) !== semanaAntes,
+      "I10 al guardar: añadir un ejercicio de la biblioteca no crea uno nuevo, y el día de la semana cambia");
     sinErrores(b, "I10");
     quitar(b);
     const unDia = await datosBeta({ cambios: (d) => { d.dias = d.dias.slice(0, 1); } });

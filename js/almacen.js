@@ -10,6 +10,8 @@ export const CLAVE_DATOS = "gym-beta-datos";
 export const CLAVE_SESION = "gym-beta-sesion";
 export const CLAVE_DESCANSO = "gym-beta-descanso";
 export const CLAVE_UI = "gym-beta-ui";
+// Los cambios de Rutina sin guardar (js/borrador.js, desde la 1.2.0: D-123).
+export const CLAVE_BORRADOR = "gym-beta-borrador";
 export const PREFIJO_RESCATE = "gym-beta-rescate-";
 // La última versión elegida («beta» o «normal»): la escribe la normal (su botón «Beta» y su «?normal») y la lee al
 // abrirse para ir directa a la beta. «Borrar todos los datos de la beta» no la toca.
@@ -37,8 +39,8 @@ function emitir(tipo, extra = {}) {
   }
 }
 
-// Avisa de los cambios: «datos», «otra-ventana», «sesion», «descanso», «ui», «cuota» y «nuevo» (datos de una
-// versión más nueva guardados por otra ventana).
+// Avisa de los cambios: «datos», «otra-ventana», «sesion», «descanso», «ui», «cuota», «nuevo» (datos de una
+// versión más nueva guardados por otra ventana) y «borrador» (otra ventana cambió los cambios de Rutina sin guardar).
 export function alCambiar(fn) {
   estado.oyentes.add(fn);
   return () => estado.oyentes.delete(fn);
@@ -342,5 +344,6 @@ export function escucharOtrasVentanas() {
     }
     if (ev.key === null || ev.key === CLAVE_SESION) emitir("sesion", { fuera: true });
     if (ev.key === null || ev.key === CLAVE_DESCANSO) emitir("descanso", { fuera: true });
+    if (ev.key === null || ev.key === CLAVE_BORRADOR) emitir("borrador", { fuera: true });
   });
 }

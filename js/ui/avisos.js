@@ -97,9 +97,11 @@ export function alCerrarseLasHojas(fn) {
   return () => alCerrarTodas.delete(fn);
 }
 
-// abrirHoja({titulo, cuerpo, pie, alAccion(accion, boton, ev), alCampo(ev), alCerrar, clase}).
-// Cada hoja añade una entrada al historial: Atrás la cierra sin cambiar de pantalla.
-export function abrirHoja({ titulo, cuerpo = null, pie = null, alAccion = null, alCampo = null, alCerrar = null, clase = "" }) {
+// abrirHoja({titulo, cuerpo, pie, alAccion(accion, boton, ev), alCampo(ev), alCerrar, clase, sinGuardar, alGuardar}).
+// Cada hoja añade una entrada al historial: Atrás la cierra sin cambiar de pantalla. Con sinGuardar() («¿hay cambios
+// sin guardar?», desde la 1.2.0: D-123), la X, el fondo, Esc y Atrás preguntan antes: «Guardar» (si hay alGuardar(), lo
+// que hace su botón «Guardar»), «Descartar» o «Seguir editando». cerrar() la cierra sin preguntar (lo usan sus botones).
+export function abrirHoja({ titulo, cuerpo = null, pie = null, alAccion = null, alCampo = null, alCerrar = null, clase = "", sinGuardar = null, alGuardar = null }) {
   contador += 1;
   const id = contador;
   const previo = document.activeElement;
@@ -112,7 +114,9 @@ export function abrirHoja({ titulo, cuerpo = null, pie = null, alAccion = null, 
     nodoCuerpo, nodoPie);
   const capa = h("div", { class: "capa-hoja", "data-hoja": id }, h("div", { class: "hoja-fondo", "data-accion": "cerrar-hoja" }), hoja);
   const abiertaEn = performance.now();
-  const entrada = { id, capa, hoja, cuerpo: nodoCuerpo, pie: nodoPie, alAccion, alCerrar, previo, cerrando: null, resolver: null, quitada: false };
+  const entrada = {
+    id, capa, hoja, cuerpo: nodoCuerpo, pie: nodoPie, alAccion, alCerrar, sinGuardar, alGuardar, previo, cerrando: null, resolver: null, quitada: false, preguntando: false,
+  };
   capa.addEventListener("click", (ev) => {
     const boton = ev.target.closest("[data-accion]");
     if (!boton || !capa.contains(boton) || boton.disabled) return;
@@ -120,7 +124,7 @@ export function abrirHoja({ titulo, cuerpo = null, pie = null, alAccion = null, 
     // no cuenta. Así un doble toque en «Seguir» no pasa también la confirmación siguiente.
     if (ev.isTrusted && performance.now() - abiertaEn < MS_HOJA_RECIEN) return;
     if (boton.dataset.accion === "cerrar-hoja") {
-      cerrarHoja(id);
+      pedirCerrar(entrada);
       return;
     }
     alAccion?.(boton.dataset.accion, boton, ev, entrada);
@@ -190,21 +194,59 @@ export function cerrarHoja(id = null) {
   return entrada.cerrando;
 }
 
-// En «popstate»: quita las hojas que ya no tienen su entrada del historial. Devuelve true si cerró alguna.
+// La X, el fondo, Esc y Atrás: con cambios sin guardar, primero se pregunta.
+function pedirCerrar(entrada) {
+  if (entrada.cerrando || entrada.preguntando || entrada.quitada) return;
+  if (entrada.sinGuardar?.()) preguntarYCerrar(entrada);
+  else cerrarHoja(entrada.id);
+}
+
+function preguntarYCerrar(entrada) {
+  entrada.preguntando = true;
+  elegir({
+    titulo: "Cambios sin guardar",
+    texto: "Has cambiado algo aquí y aún no lo has guardado.",
+    opciones: [
+      entrada.alGuardar ? { accion: "guardar-cambios", texto: "Guardar", clase: "boton-principal" } : null,
+      { accion: "descartar-cambios", texto: "Descartar", clase: "boton-peligro-suave" },
+      { accion: "seguir-editando", texto: "Seguir editando", clase: "boton-secundario" },
+    ].filter(Boolean),
+  }).then((r) => {
+    entrada.preguntando = false;
+    if (entrada.quitada) return;
+    if (r === "guardar-cambios") entrada.alGuardar();
+    else if (r === "descartar-cambios") cerrarHoja(entrada.id);
+  });
+}
+
+// En «popstate»: quita las hojas que ya no tienen su entrada del historial. Devuelve true si se ocupó (cerró alguna o
+// preguntó). Una hoja con cambios sin guardar no se cierra con Atrás sin preguntar: vuelve a poner su entrada del
+// historial (sigue abierta) y pregunta.
 export function alVolverAtras() {
   if (!pila.length) return false;
   const visible = history.state?.hoja ?? 0;
-  const sobran = pila.filter((e) => e.id > visible);
+  const sobran = pila.filter((e) => e.id > visible).sort((a, b) => b.id - a.id);
   if (!sobran.length) return false;
-  for (const e of sobran.reverse()) quitarHoja(e);
+  for (const e of sobran) {
+    if (!e.cerrando && (e.preguntando || e.sinGuardar?.())) {
+      try {
+        history.pushState({ ...(history.state || {}), hoja: e.id }, "");
+      } catch {
+        // Sin historial (raro): se queda abierta igual.
+      }
+      if (!e.preguntando) preguntarYCerrar(e);
+      return true;
+    }
+    quitarHoja(e);
+  }
   return true;
 }
 
-// Esc cierra la hoja de arriba.
+// Esc cierra la hoja de arriba (con cambios sin guardar, pregunta antes).
 export function alPulsarTecla(ev) {
   if (ev.key === "Escape" && pila.length) {
     ev.preventDefault();
-    cerrarHoja();
+    pedirCerrar(pila[pila.length - 1]);
   }
 }
 
@@ -232,6 +274,27 @@ export function confirmar({ titulo, texto = "", aceptar = "Aceptar", cancelar = 
         } else if (accion === "cancelar") {
           hoja.cerrar();
         }
+      },
+      alCerrar: () => setTimeout(() => resolver(respuesta), 0),
+    });
+  });
+}
+
+// elegir({titulo, texto, opciones: [{accion, texto, clase}]}) → Promise con la «accion» del botón elegido, o null si se
+// cierra sin elegir (la X, el fondo, Esc o Atrás). Los botones van uno debajo de otro (caben textos largos). La usa, por
+// ejemplo, «Guardar · Descartar · Seguir editando» al salir de Rutina con cambios sin guardar (D-123).
+export function elegir({ titulo, texto = "", opciones = [] }) {
+  return new Promise((resolver) => {
+    let respuesta = null;
+    const hoja = abrirHoja({
+      titulo,
+      clase: "hoja-confirmar hoja-elegir",
+      cuerpo: texto ? h("p", { class: "hoja-texto" }, texto) : null,
+      pie: opciones.map((o) => h("button", { class: ["boton", o.clase || "boton-secundario"], type: "button", "data-accion": o.accion }, o.texto)),
+      alAccion: (accion) => {
+        if (!opciones.some((o) => o.accion === accion)) return;
+        respuesta = accion;
+        hoja.cerrar();
       },
       alCerrar: () => setTimeout(() => resolver(respuesta), 0),
     });

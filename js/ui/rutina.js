@@ -1,22 +1,29 @@
 // Pantalla Rutina (el editor): lista de días (orden y añadir), cada día (nombre, título, nota, días de la
-// semana, ejercicios en orden, añadir de la biblioteca o crear uno, eliminar con deshacer) y la hoja de cada
-// ejercicio, con etiquetas visibles y cada campo validado al salir. Los campos guardan al cambiar y nunca se
-// repinta la lista mientras se escribe. El orden (de los días y de los ejercicios) se cambia con las flechas o
-// arrastrando una fila (D-122), y las filas se deslizan a su sitio nuevo en vez de saltar.
+// semana, ejercicios en orden, añadir de la biblioteca o crear uno, quitar con deshacer) y la hoja de cada
+// ejercicio, con etiquetas visibles y cada campo validado al salir. Nunca se repinta la lista mientras se escribe. El
+// orden (de los días y de los ejercicios) se cambia con las flechas o arrastrando una fila (D-122), y las filas se
+// deslizan a su sitio nuevo en vez de saltar.
+// Desde la 1.2.0 (D-123), nada de esto se guarda al momento: va al borrador (js/borrador.js) y abajo sale una barra con
+// «Cancelar» y «Guardar». Al momento siguen añadir, duplicar y eliminar un día (con cambios sin guardar, antes se
+// pregunta qué hacer con ellos) y la hoja de un ejercicio abierta desde Entreno (su «Guardar» guarda ya).
 
 import { h, icono, vaciar } from "./dom.js";
-import { avisar, avisarDeshacer, confirmar, abrirHoja } from "./avisos.js";
+import { avisar, avisarDeshacer, confirmar, elegir, abrirHoja } from "./avisos.js";
 import { ctx } from "./contexto.js";
 import { miniatura, control, ponerErrorControl, boton, botonIcono, vacio, ayuda } from "./piezas.js";
 import { hacerArrastrable } from "./arrastre.js";
 import { foto, animar } from "./movimiento.js";
 import * as almacen from "../almacen.js";
+import * as borrador from "../borrador.js";
 import * as S from "../sesion.js";
 import { LIMITES, TIPOS, NOMBRE_TIPO, DESCANSO_SUPERSET_DEFECTO, diaPorId, nombreDia, normalizarImagen, normalizarIncremento, parejaSuperset, agruparEjercicios } from "../modelo.js";
 import {
   ahora, idCorto, leerNumero, leerDescanso, formatoDescanso, formatoNumero, recortar, sinTildes, plural, limitar, redondear,
   NOMBRES_DIA, INICIALES_DIA, ORDEN_SEMANA,
 } from "../util.js";
+
+// Lo que se ve y se cambia en Rutina: la rutina guardada con los cambios sin guardar encima.
+const datosRutina = () => borrador.vista();
 
 function textoSemana(lista = []) {
   const nombres = ORDEN_SEMANA.filter((w) => lista.includes(w)).map((w) => NOMBRES_DIA[w]);
@@ -59,13 +66,27 @@ function moverGrupoA(dia, clave, hasta) {
   return true;
 }
 
+// Quita un ejercicio del día; si iba en un superset, su pareja se queda suelta (un superset es siempre de dos).
+function quitarDelDia(dia, exerciseId) {
+  const propio = dia.ejercicios.find((e) => e.exerciseId === exerciseId);
+  if (propio?.supersetId) {
+    for (const e of dia.ejercicios) {
+      if (e !== propio && e.supersetId === propio.supersetId) {
+        delete e.supersetId;
+        delete e.restSuperset;
+      }
+    }
+  }
+  dia.ejercicios = dia.ejercicios.filter((e) => e.exerciseId !== exerciseId);
+}
+
 // --- Orden con transición y arrastrando (D-122) ---
 
 // Las filas que se ordenan en pantalla (días o grupos de ejercicios), cada una con su clave: data-orden.
 const piezasOrden = (contenedor) => [...contenedor.querySelectorAll("[data-orden]")].map((li) => [li.dataset.orden, li]);
 
-// Cambia el orden (con «cambiar», que guarda), repinta y desliza cada fila desde donde estaba (también la que se
-// soltaba, desde donde la dejó el dedo). Devuelve false si no había nada que cambiar.
+// Cambia el orden (con «cambiar», que lo pone en el borrador), repinta y desliza cada fila desde donde estaba (también
+// la que se soltaba, desde donde la dejó el dedo). Devuelve false si no había nada que cambiar.
 function reordenar(contenedor, cambiar) {
   const antes = foto(piezasOrden(contenedor));
   if (!cambiar()) return false;
@@ -81,10 +102,10 @@ function vibrarAlLevantar() {
 
 function soltarDia(contenedor, clave, hasta) {
   return reordenar(contenedor, () => {
-    const dias = almacen.datos().dias;
+    const dias = datosRutina().dias;
     const i = dias.findIndex((x) => x.id === clave);
     if (i < 0 || !Number.isInteger(hasta) || hasta < 0 || hasta >= dias.length || i === hasta) return false;
-    almacen.mutar((d) => {
+    borrador.cambiar((d) => {
       const j = d.dias.findIndex((x) => x.id === clave);
       if (j < 0) return;
       const [x] = d.dias.splice(j, 1);
@@ -96,9 +117,9 @@ function soltarDia(contenedor, clave, hasta) {
 
 function soltarEjercicio(contenedor, diaId, clave, hasta) {
   return reordenar(contenedor, () => {
-    const dia = diaPorId(almacen.datos(), diaId);
+    const dia = diaPorId(datosRutina(), diaId);
     if (!dia || !moverGrupoA(structuredClone(dia), clave, hasta)) return false;
-    almacen.mutar((d) => {
+    borrador.cambiar((d) => {
       const dd = diaPorId(d, diaId);
       if (dd) moverGrupoA(dd, clave, hasta);
     });
@@ -106,15 +127,114 @@ function soltarEjercicio(contenedor, diaId, clave, hasta) {
   });
 }
 
+// --- La barra «Cancelar · Guardar» (D-123) ---
+
+// Fija sobre la navegación, en la lista de días y en cada día; solo se ve con cambios sin guardar.
+function barraBorrador() {
+  return h("div", { class: "barra-borrador", role: "region", "aria-label": "Cambios sin guardar", hidden: !borrador.hay() },
+    h("div", { class: "barra-borrador-fila" },
+      h("p", { class: "barra-borrador-texto" }, "Cambios sin guardar"),
+      boton("Cancelar", "cancelar-rutina", { clase: "boton-secundario" }),
+      boton("Guardar", "guardar-rutina", { clase: "boton-principal" })));
+}
+
+// Enseña u oculta la barra según haya cambios sin guardar; con {ya: true}, la enseña ya (se está escribiendo un cambio
+// que llega al borrador al salir del campo). app.js la llama al pintar cada pantalla y con cada cambio del borrador.
+export function actualizarBarra({ ya = false } = {}) {
+  const barra = document.querySelector("#pantalla .barra-borrador");
+  const ver = Boolean(barra) && (ya || borrador.hay());
+  if (barra) barra.hidden = !ver;
+  document.body.classList.toggle("con-borrador", ver);
+}
+
+// «Guardar»: pasa los cambios a tus datos. Si la rutina guardada ha cambiado mientras tanto, pregunta antes de pisarla.
+// Devuelve true si se ha guardado.
+export async function guardarBorrador() {
+  let r = borrador.guardar();
+  if (!r.ok && r.motivo === "cambiada") {
+    const pisar = await confirmar({
+      titulo: "La rutina ha cambiado",
+      texto: "Mientras tenías estos cambios sin guardar, la rutina guardada cambió (en otra ventana, al cargar una copia o desde Entreno). Si guardas los tuyos, los días quedan como los tienes aquí.",
+      aceptar: "Guardar los míos",
+      cancelar: "Seguir editando",
+    });
+    if (!pisar) return false;
+    r = borrador.guardar({ pisar: true });
+  }
+  if (!r.ok && r.motivo === "bloqueado") {
+    avisar({ texto: "Hay datos de una versión más nueva de la app (de otra ventana). Recarga para actualizar.", accion: "Recargar", alPulsar: () => location.reload(), fijo: true });
+  }
+  return r.ok;
+}
+
+// Qué hacer con los cambios sin guardar antes de irse de Rutina (o de algo que va al momento): «Guardar», «Descartar» o
+// seguir como se estaba. Devuelve true si ya no quedan (guardados o descartados) y se puede seguir.
+export async function resolverBorrador({ texto = "Tienes cambios sin guardar en la rutina.", seguir = "Seguir editando", conDeshacer = true } = {}) {
+  if (!borrador.hay()) return true;
+  const r = await elegir({
+    titulo: "Cambios sin guardar",
+    texto,
+    opciones: [
+      { accion: "guardar-cambios", texto: "Guardar", clase: "boton-principal" },
+      { accion: "descartar-cambios", texto: "Descartar", clase: "boton-peligro-suave" },
+      { accion: "seguir-editando", texto: seguir, clase: "boton-secundario" },
+    ],
+  });
+  if (r === "guardar-cambios") {
+    const ok = await guardarBorrador();
+    if (ok) avisar({ texto: "Cambios guardados." });
+    return ok;
+  }
+  if (r === "descartar-cambios") {
+    const deshacer = borrador.descartar();
+    if (conDeshacer) avisarDeshacer("Cambios descartados.", deshacer, () => ctx.repintar());
+    return true;
+  }
+  return false;
+}
+
+// Antes de «Guardar» o «Cancelar», lo que se está escribiendo en un campo del día llega al borrador (al salir del
+// campo). Con el dedo ya pasa solo al tocar el botón; con el teclado o un lector de pantalla, no siempre. Si no, al
+// repintar, el navegador lo mandaría después y volvería a empezar un borrador recién guardado o tirado.
+function soltarFoco() {
+  const activo = document.activeElement;
+  if (activo && activo !== document.body && document.getElementById("pantalla")?.contains(activo)) activo.blur?.();
+}
+
+// Añadir, duplicar y eliminar un día van al momento: con cambios sin guardar, antes se pregunta qué hacer con ellos.
+async function conCambiosResueltos(texto) {
+  if (!borrador.hay()) return true;
+  const ok = await resolverBorrador({ texto, seguir: "Cancelar", conDeshacer: false });
+  ctx.repintar();
+  return ok;
+}
+
+function cancelarBorrador() {
+  const deshacer = borrador.descartar();
+  ctx.repintar();
+  avisarDeshacer("Cambios descartados.", deshacer, () => ctx.repintar());
+}
+
+// «Revisar» (el aviso de Entreno al volver con cambios sin guardar): al día cambiado, si es uno solo; si no, a la lista.
+export function revisarBorrador() {
+  const { dias, orden } = borrador.cambios();
+  const id = !orden && dias.length === 1 ? dias[0] : null;
+  ctx.irA(id ? `#/rutina/dia/${encodeURIComponent(id)}` : "#/rutina", "push");
+}
+
+// --- Pintado ---
+
 export function pintarRutina(contenedor, ruta) {
   if (ruta.nombre === "dia") return pintarDia(contenedor, ruta.param);
-  const datos = almacen.datos();
+  const datos = datosRutina();
+  const sinGuardar = new Set(borrador.cambios().dias);
   const n = datos.dias.length;
   const filas = datos.dias.map((d, i) => h("li", { class: "fila-con-orden", "data-orden": d.id },
     h("button", { class: "fila", type: "button", "data-accion": "abrir-dia", "data-id": d.id },
       h("span", { class: "fila-textos" },
         h("span", { class: "fila-titulo" }, nombreDia(d)),
-        h("span", { class: "fila-datos" }, `${plural(d.ejercicios.length, "ejercicio", "ejercicios")} · ${textoSemana(d.diasSemana)}`)),
+        h("span", { class: "fila-datos" }, `${plural(d.ejercicios.length, "ejercicio", "ejercicios")} · ${textoSemana(d.diasSemana)}`,
+          sinGuardar.has(d.id) ? h("span", { class: "marca-sin-guardar" }, " · sin guardar") : null)),
       icono("siguiente", { tamano: 20, clase: "fila-flecha" })),
     h("div", { class: "botones-orden" },
       botonIcono("arriba", "subir-dia", `Subir ${d.label}`, { id: d.id, extra: { disabled: i === 0 } }),
@@ -129,7 +249,8 @@ export function pintarRutina(contenedor, ruta) {
     lista,
     n < LIMITES.dias
       ? boton("Añadir día", "anadir-dia", { clase: "boton-secundario boton-ancho", ico: "mas" })
-      : ayuda(`Caben ${LIMITES.dias} días como mucho.`)));
+      : ayuda(`Caben ${LIMITES.dias} días como mucho.`),
+    barraBorrador()));
   return undefined;
 }
 
@@ -143,10 +264,10 @@ function campoTexto({ campo, rotulo, valor, ayudaTexto = "", max, id }) {
 }
 
 function pintarDia(contenedor, id) {
-  const datos = almacen.datos();
+  const datos = datosRutina();
   const dia = diaPorId(datos, id);
   if (!dia) {
-    vaciar(contenedor).append(h("div", { class: "pantalla-rutina" }, botonVolver(), vacio("Este día ya no existe.")));
+    vaciar(contenedor).append(h("div", { class: "pantalla-rutina" }, botonVolver(), vacio("Este día ya no existe."), barraBorrador()));
     return;
   }
   const n = dia.ejercicios.length;
@@ -208,7 +329,8 @@ function pintarDia(contenedor, id) {
       boton("Duplicar este día", "duplicar-dia", { clase: "boton-secundario boton-ancho", ico: "copia", id: dia.id, extra: { disabled: datos.dias.length >= LIMITES.dias } }),
       h("button", { class: "boton boton-peligro-suave boton-ancho", type: "button", "data-accion": "eliminar-dia", "data-id": dia.id, disabled: unico, "aria-describedby": unico ? "ayuda-eliminar" : null },
         icono("papelera", { tamano: 20 }), h("span", null, "Eliminar este día")),
-      unico ? h("p", { class: "ayuda", id: "ayuda-eliminar" }, "Tiene que quedar al menos un día.") : null)));
+      unico ? h("p", { class: "ayuda", id: "ayuda-eliminar" }, "Tiene que quedar al menos un día.") : null),
+    barraBorrador()));
 }
 
 function botonVolver() {
@@ -227,7 +349,7 @@ export function alAccionRutina(accion, el) {
       return ctx.irA("#/rutina", "replace");
     case "subir-dia": case "bajar-dia": {
       reordenar(contenedor, () => {
-        almacen.mutar((d) => {
+        borrador.cambiar((d) => {
           const i = d.dias.findIndex((x) => x.id === id);
           const j = i + (accion === "subir-dia" ? -1 : 1);
           if (i < 0 || j < 0 || j >= d.dias.length) return;
@@ -237,11 +359,12 @@ export function alAccionRutina(accion, el) {
       });
       return enfocar(contenedor, accion, id);
     }
-    case "anadir-dia": return anadirDia();
+    case "anadir-dia":
+      return conCambiosResueltos("Añadir un día se guarda al momento: antes, guarda o descarta lo que tienes sin guardar.").then((ok) => ok && anadirDia());
     case "dia-semana": {
       const w = Number(el.dataset.dia);
-      let activo = false;
-      almacen.mutar((d) => {
+      let activo = el.classList.contains("activo");
+      borrador.cambiar((d) => {
         const dia = diaPorId(d, id);
         if (!dia) return;
         dia.diasSemana = dia.diasSemana.includes(w) ? dia.diasSemana.filter((x) => x !== w) : [...dia.diasSemana, w].sort();
@@ -254,7 +377,7 @@ export function alAccionRutina(accion, el) {
     case "subir-ejercicio": case "bajar-ejercicio": {
       const diaId = el.closest("[data-dia]")?.dataset.dia;
       reordenar(contenedor, () => {
-        almacen.mutar((d) => {
+        borrador.cambiar((d) => {
           const dia = diaPorId(d, diaId);
           if (!dia) return;
           moverGrupo(dia, id, accion === "subir-ejercicio" ? -1 : 1);
@@ -265,37 +388,56 @@ export function alAccionRutina(accion, el) {
     }
     case "editar-entrada": {
       const diaId = el.closest("[data-dia]")?.dataset.dia;
-      return abrirHojaEjercicio(diaId, id, { alCerrar: () => ctx.repintar() });
+      return abrirHojaEjercicio(diaId, id, { enBorrador: true, alCerrar: () => ctx.repintar() });
     }
     case "anadir-ejercicio": return hojaAnadir(id);
-    case "eliminar-dia": return eliminarDia(id);
-    case "duplicar-dia": return duplicarDia(id);
+    case "eliminar-dia":
+      return conCambiosResueltos("Eliminar un día se guarda al momento: antes, guarda o descarta lo que tienes sin guardar.").then((ok) => ok && eliminarDia(id));
+    case "duplicar-dia":
+      return conCambiosResueltos("Duplicar un día se guarda al momento: antes, guarda o descarta lo que tienes sin guardar.").then((ok) => ok && duplicarDia(id));
+    case "guardar-rutina":
+      soltarFoco();
+      return guardarBorrador().then((ok) => {
+        if (!ok) return;
+        ctx.repintar();
+        avisar({ texto: "Cambios guardados." });
+      });
+    case "cancelar-rutina":
+      soltarFoco();
+      return cancelarBorrador();
     default: return undefined;
   }
 }
 
-// Los campos del día guardan al cambiar (al salir del campo), sin repintar.
+// Los campos del día van al borrador al salir del campo, sin repintar; mientras se escribe, la barra ya se ve.
 export function alCampoRutina(ev) {
-  if (ev.type !== "change") return;
   const campo = ev.target?.dataset?.campo;
   const id = ev.target?.dataset?.id;
   if (!["label", "title", "subtitle"].includes(campo) || !id) return;
+  if (ev.type === "input") {
+    actualizarBarra({ ya: true });
+    return;
+  }
+  if (ev.type !== "change") return;
   const error = ev.target.closest(".campo")?.querySelector(".campo-error");
   const valor = recortar(ev.target.value, LIMITES[campo]);
   if (campo === "label" && !valor) {
     if (error) error.textContent = "El nombre del día no puede quedar vacío.";
     ev.target.setAttribute("aria-invalid", "true");
+    actualizarBarra();
     return;
   }
   if (error) error.textContent = "";
   ev.target.removeAttribute("aria-invalid");
   ev.target.value = valor;
-  almacen.mutar((d) => {
+  borrador.cambiar((d) => {
     const dia = diaPorId(d, id);
     if (dia) dia[campo] = valor;
   });
+  // Por si no cambia nada (se ha vuelto a escribir lo de antes): la barra que salió al escribir se va.
+  actualizarBarra();
   const titulo = ev.target.closest(".pantalla-rutina")?.querySelector(".titulo-pantalla");
-  const dia = diaPorId(almacen.datos(), id);
+  const dia = diaPorId(datosRutina(), id);
   if (titulo && dia) titulo.textContent = nombreDia(dia);
 }
 
@@ -347,10 +489,10 @@ async function eliminarDia(id) {
   avisarDeshacer(`Día eliminado: ${nombreDia(dia)}`, deshacer, () => ctx.repintar());
 }
 
-// --- Hoja «Añadir ejercicio» ---
+// --- Hoja «Añadir ejercicio» (al borrador) ---
 
 function hojaAnadir(diaId) {
-  const datos = almacen.datos();
+  const datos = datosRutina();
   const dia = diaPorId(datos, diaId);
   if (!dia) return;
   const enDia = new Set(dia.ejercicios.map((e) => e.exerciseId));
@@ -385,8 +527,8 @@ function hojaAnadir(diaId) {
       boton("Crear y añadir", "crear-ejercicio", { clase: "boton-secundario boton-ancho", ico: "mas" })),
   ];
   const anadir = (exerciseId, nuevoEjercicio = null) => {
-    const x = nuevoEjercicio || almacen.datos().ejercicios[exerciseId];
-    const deshacer = almacen.mutar((d) => {
+    const x = nuevoEjercicio || datosRutina().ejercicios[exerciseId];
+    const deshacer = borrador.cambiar((d) => {
       if (nuevoEjercicio) d.ejercicios[exerciseId] = nuevoEjercicio;
       const dd = diaPorId(d, diaId);
       if (!dd || dd.ejercicios.some((e) => e.exerciseId === exerciseId) || dd.ejercicios.length >= LIMITES.ejerciciosPorDia) return;
@@ -441,11 +583,10 @@ function datalistGrupos(datos) {
   return h("datalist", { id: "grupos-existentes" }, grupos.map((g) => h("option", { value: g })));
 }
 
-// Elige otro día para mover o copiar un ejercicio (F35). Devuelve el id del día o null.
-function elegirOtroDia({ titulo, diaId, exerciseId }) {
+// Elige otro día de «datos» para mover o copiar un ejercicio (F35). Devuelve el id del día o null.
+function elegirOtroDia({ titulo, diaId, exerciseId, datos }) {
   return new Promise((resolver) => {
     let elegido = null;
-    const datos = almacen.datos();
     const filas = datos.dias.filter((d) => d.id !== diaId).map((d) => {
       const ya = d.ejercicios.some((e) => e.exerciseId === exerciseId);
       const lleno = d.ejercicios.length >= LIMITES.ejerciciosPorDia;
@@ -468,12 +609,11 @@ function elegirOtroDia({ titulo, diaId, exerciseId }) {
   });
 }
 
-// Elige con qué otro ejercicio del mismo día formar un superset (D-120). Devuelve el exerciseId o null. Solo
-// enseña los que todavía no están en un superset (uno ya emparejado habría que separarlo antes).
-function elegirParaSuperset({ diaId, exerciseId }) {
+// Elige con qué otro ejercicio del mismo día (en «datos») formar un superset (D-120). Devuelve el exerciseId o null.
+// Solo enseña los que todavía no están en un superset (uno ya emparejado habría que separarlo antes).
+function elegirParaSuperset({ diaId, exerciseId, datos }) {
   return new Promise((resolver) => {
     let elegido = null;
-    const datos = almacen.datos();
     const dia = diaPorId(datos, diaId);
     const candidatos = (dia?.ejercicios || []).filter((e) => e.exerciseId !== exerciseId && !e.supersetId);
     const filas = candidatos.map((e) => {
@@ -496,20 +636,83 @@ function elegirParaSuperset({ diaId, exerciseId }) {
 }
 
 // --- Hoja del ejercicio (también se abre desde Entreno con «Editar») ---
+// Con su propia copia (D-123): lo que se toca no cambia nada hasta «Guardar»; «Cancelar» la cierra sin más, y la X, el
+// fondo, Esc o Atrás, con cambios, preguntan antes («Guardar», «Descartar» o «Seguir editando»). Abierta desde Rutina,
+// «Guardar» lo pasa al borrador (lo guarda la
+// barra); desde Entreno, a tus datos, al momento. Lo que la cierra (unir o separar el superset, mover a otro día,
+// quitar) aplica antes lo tocado, junto con lo suyo (un solo «Deshacer»); con algo mal escrito, no sigue y lo señala
+// (salvo «Quitar», que deja fuera lo que no vale). Copiar a otro día se lleva las series, repeticiones y descanso que
+// pone la hoja y no la cierra.
 
 const ATAJOS_REPS = ["8-12", "10-15", "12-15", "12-20"];
 const ATAJOS_DESCANSO = ["1:00", "1:30", "2:00", "2:30", "3:00"];
 const ATAJOS_DESCANSO_SUPERSET = ["0:15", "0:20", "0:30", "0:40", "1:00"];
 const ATAJOS_INCREMENTO = [1, 2, 2.5, 5];
 
-export function abrirHojaEjercicio(diaId, exerciseId, { alCerrar = null } = {}) {
-  const datos = almacen.datos();
+// Lo de este día (la entrada) y lo de la biblioteca (igual en todos los días con este ejercicio).
+const DE_LA_ENTRADA = ["series", "reps", "rest"];
+const DEL_EJERCICIO = ["name", "tipo", "pr", "incremento", "muscleGroup", "notas", "image"];
+// Los campos cuyo error va en su control −/+ (los demás, debajo del campo).
+const EN_CONTROL = new Set(["series", "rest", "restSuperset", "pr"]);
+// Cómo queda escrito un campo que vale (p. ej. «1,30» → «1:30»); los que no están aquí se dejan como se escribieron.
+const TEXTO_CAMPO = {
+  name: (v) => v, series: (v) => String(v), reps: (v) => v, rest: (v) => v, restSuperset: (v) => v, incremento: (v) => formatoNumero(v), muscleGroup: (v) => v,
+};
+
+// Lee un campo de la hoja: {valor} (ya normalizado) si vale, o {error}.
+function leerCampoHoja(nombre, texto) {
+  switch (nombre) {
+    case "name": {
+      const v = recortar(texto, LIMITES.nombre);
+      return v ? { valor: v } : { error: "El nombre no puede quedar vacío." };
+    }
+    case "series": {
+      const n = leerNumero(texto);
+      return n == null || !Number.isInteger(n) || n < LIMITES.seriesMin || n > LIMITES.seriesMax ? { error: "Pon entre 1 y 10 series." } : { valor: n };
+    }
+    case "reps": {
+      const v = recortar(texto, LIMITES.reps);
+      return v ? { valor: v } : { error: "Escribe las repeticiones, por ejemplo 8-12." };
+    }
+    case "rest": {
+      const s = leerDescanso(texto);
+      return s == null ? { error: "Escribe el descanso como 1:30 (minutos:segundos)." } : { valor: formatoDescanso(s) };
+    }
+    case "restSuperset": {
+      const s = leerDescanso(texto);
+      return s == null ? { error: "Escribe el descanso como 0:30 (minutos:segundos)." } : { valor: formatoDescanso(limitar(s, 0, LIMITES.descansoMax)) };
+    }
+    case "pr": {
+      const t = texto.trim();
+      const kg = t ? leerNumero(t) : null;
+      if (t && (kg == null || kg <= 0 || kg > LIMITES.kgMax)) return { error: "Escribe un número, por ejemplo 82,5, o déjalo vacío." };
+      return { valor: kg == null ? null : redondear(kg, 0.01) };
+    }
+    case "incremento": {
+      const n = leerNumero(texto);
+      return n == null || n < LIMITES.incrementoMin || n > LIMITES.incrementoMax ? { error: "Pon un número entre 0,25 y 20." } : { valor: normalizarIncremento(n) };
+    }
+    case "muscleGroup": return { valor: recortar(texto, LIMITES.grupo) };
+    case "notas": return { valor: recortar(texto, LIMITES.notas) };
+    case "image": {
+      const t = texto.trim();
+      const v = normalizarImagen(t);
+      return t && !v ? { error: "Pon una dirección que empiece por https://." } : { valor: v };
+    }
+    default: return { valor: texto };
+  }
+}
+
+export function abrirHojaEjercicio(diaId, exerciseId, { enBorrador = false, alCerrar = null } = {}) {
+  // Desde Rutina, sobre lo que se ve allí (con los cambios sin guardar); desde Entreno, sobre lo guardado.
+  const datosAhora = () => (enBorrador ? borrador.vista() : almacen.datos());
+  const cambiarEn = (fn) => (enBorrador ? borrador.cambiar(fn) : almacen.mutar(fn));
+  const datos = datosAhora();
   const dia = diaPorId(datos, diaId);
   const entrada = dia?.ejercicios.find((e) => e.exerciseId === exerciseId);
   const x = datos.ejercicios[exerciseId];
   if (!dia || !entrada || !x) return;
   let tipo = x.tipo;
-  let prPendiente = null; // la marca se guarda al salir del campo o al cerrar la hoja (no en cada toque de −/+)
 
   const chips = (accion, valores, formato = (v) => v) => h("div", { class: "chips" },
     valores.map((v) => h("button", { class: "chip", type: "button", "data-accion": accion, "data-valor": String(v) }, formato(v))));
@@ -566,13 +769,29 @@ export function abrirHojaEjercicio(diaId, exerciseId, { alCerrar = null } = {}) 
       boton("Mover a otro día…", "mover-a-dia", { clase: "boton-secundario" }),
       boton("Copiar a otro día…", "copiar-a-dia", { clase: "boton-secundario", ico: "copia" })) : null,
     h("p", { class: "ayuda nota-pie" }, "El nombre, el tipo, la marca, el grupo, las notas y la imagen son los mismos en todos los días con este ejercicio. Series, repeticiones y descanso son de este día."),
-    // Quitar va aparte, al final y lejos de «Hecho»: un toque con el pulgar no se va al botón de al lado.
+    // Quitar va aparte, al final y lejos de «Guardar»: un toque con el pulgar no se va al botón de al lado.
     h("div", { class: "zona-borrar-hoja" },
       h("button", { class: "enlace-boton enlace-peligro", type: "button", "data-accion": "quitar-ejercicio" }, icono("papelera", { tamano: 20 }), h("span", null, "Quitar de este día"))));
 
+  // --- La copia de la hoja: lo escrito en sus campos, comparado con lo que había al abrirla ---
+
+  const nombres = ["name", "series", "reps", "rest", ...(parSuperset ? ["restSuperset"] : []), "pr", "incremento", "muscleGroup", "notas", "image"];
+  const nodoDe = (nombre) => cuerpo.querySelector(`[data-campo="${nombre}"]`);
+  // La huella de un campo: su valor normalizado o, si no vale, su texto (un campo sin tocar nunca cuenta como cambio).
+  const huella = (nombre) => {
+    const t = nodoDe(nombre)?.value ?? "";
+    const r = leerCampoHoja(nombre, t);
+    return r.error ? `!${t}` : JSON.stringify(r.valor);
+  };
+  const originales = Object.fromEntries(nombres.map((n) => [n, huella(n)]));
+  const tipoOriginal = tipo;
+  // La marca y lo que sube solo cuentan con peso: con otro tipo se dejan como estaban.
+  const tocados = () => nombres.filter((n) => (tipo === "peso" || !["pr", "incremento"].includes(n)) && huella(n) !== originales[n]);
+  const hayCambios = () => tipo !== tipoOriginal || tocados().length > 0;
+
   const error = (nombre, mensaje) => {
     const p = cuerpo.querySelector(`#hoja-${nombre}-error`);
-    const nodo = cuerpo.querySelector(`[data-campo="${nombre}"]`);
+    const nodo = nodoDe(nombre);
     if (p) {
       p.textContent = mensaje || "";
       if (mensaje) p.setAttribute("role", "alert");
@@ -583,115 +802,80 @@ export function abrirHojaEjercicio(diaId, exerciseId, { alCerrar = null } = {}) 
       else nodo.removeAttribute("aria-invalid");
     }
   };
-  const guardarEntrada = (cambios) => almacen.mutar((d) => {
-    const e = diaPorId(d, diaId)?.ejercicios.find((y) => y.exerciseId === exerciseId);
-    if (e) Object.assign(e, cambios);
-  });
-  const guardarEjercicio = (cambios) => almacen.mutar((d) => {
-    if (d.ejercicios[exerciseId]) Object.assign(d.ejercicios[exerciseId], cambios);
-  });
-
-  const validarYGuardar = (nombre, nodo) => {
-    const valor = nodo.value;
-    switch (nombre) {
-      case "name": {
-        const v = recortar(valor, LIMITES.nombre);
-        if (!v) return error("name", "El nombre no puede quedar vacío.");
-        error("name", "");
-        nodo.value = v;
-        guardarEjercicio({ name: v });
-        hoja.nodo.querySelector(".hoja-titulo").textContent = v;
-        return undefined;
-      }
-      case "series": {
-        const n = leerNumero(valor);
-        const ctrl = nodo.closest(".control");
-        if (n == null || !Number.isInteger(n) || n < LIMITES.seriesMin || n > LIMITES.seriesMax) return ponerErrorControl(ctrl, "Pon entre 1 y 10 series.");
-        ponerErrorControl(ctrl, "");
-        return guardarEntrada({ series: n });
-      }
-      case "reps": {
-        const v = recortar(valor, LIMITES.reps);
-        if (!v) return error("reps", "Escribe las repeticiones, por ejemplo 8-12.");
-        error("reps", "");
-        nodo.value = v;
-        return guardarEntrada({ reps: v });
-      }
-      case "rest": {
-        const s = leerDescanso(valor);
-        const ctrl = nodo.closest(".control");
-        if (s == null) return ponerErrorControl(ctrl, "Escribe el descanso como 1:30 (minutos:segundos).");
-        ponerErrorControl(ctrl, "");
-        nodo.value = formatoDescanso(s);
-        return guardarEntrada({ rest: formatoDescanso(s) });
-      }
-      case "restSuperset": {
-        const s = leerDescanso(valor);
-        const ctrl = nodo.closest(".control");
-        if (s == null) return ponerErrorControl(ctrl, "Escribe el descanso como 0:30 (minutos:segundos).");
-        ponerErrorControl(ctrl, "");
-        const formateado = formatoDescanso(limitar(s, 0, LIMITES.descansoMax));
-        nodo.value = formateado;
-        return almacen.mutar((d) => {
-          const dd = diaPorId(d, diaId);
-          const propio = dd?.ejercicios.find((e) => e.exerciseId === exerciseId);
-          if (!propio?.supersetId) return;
-          for (const e of dd.ejercicios) if (e.supersetId === propio.supersetId) e.restSuperset = formateado;
-        });
-      }
-      case "pr": {
-        const ctrl = nodo.closest(".control");
-        const t = valor.trim();
-        const kg = t ? leerNumero(t) : null;
-        if (t && (kg == null || kg <= 0 || kg > LIMITES.kgMax)) return ponerErrorControl(ctrl, "Escribe un número, por ejemplo 82,5, o déjalo vacío.");
-        ponerErrorControl(ctrl, "");
-        prPendiente = null;
-        const nuevo = kg == null ? null : redondear(kg, 0.01);
-        if ((almacen.datos().ejercicios[exerciseId]?.pr ?? null) !== nuevo) {
-          almacen.mutar((d) => S.cambiarMarca(d, exerciseId, nuevo, ahora(), "a-mano"));
-        }
-        return undefined;
-      }
-      case "incremento": {
-        const n = leerNumero(valor);
-        if (n == null || n < LIMITES.incrementoMin || n > LIMITES.incrementoMax) return error("incremento", "Pon un número entre 0,25 y 20.");
-        error("incremento", "");
-        nodo.value = formatoNumero(n);
-        return guardarEjercicio({ incremento: normalizarIncremento(n) });
-      }
-      case "muscleGroup": {
-        const v = recortar(valor, LIMITES.grupo);
-        nodo.value = v;
-        return guardarEjercicio({ muscleGroup: v });
-      }
-      case "notas": {
-        const v = recortar(valor, LIMITES.notas);
-        return guardarEjercicio({ notas: v });
-      }
-      case "image": {
-        const t = valor.trim();
-        const v = normalizarImagen(t);
-        if (t && !v) return error("image", "Pon una dirección que empiece por https://.");
-        error("image", "");
-        return guardarEjercicio({ image: v });
-      }
-      default: return undefined;
+  // Valida un campo y enseña su error (o lo quita); si vale, lo deja bien escrito (1,30 → 1:30). Devuelve lo leído.
+  const validar = (nombre) => {
+    const nodo = nodoDe(nombre);
+    if (!nodo) return { valor: undefined };
+    const r = leerCampoHoja(nombre, nodo.value);
+    if (EN_CONTROL.has(nombre)) ponerErrorControl(nodo.closest(".control"), r.error || "");
+    else error(nombre, r.error || "");
+    if (!r.error && TEXTO_CAMPO[nombre]) nodo.value = TEXTO_CAMPO[nombre](r.valor);
+    if (nombre === "name" && !r.error) hoja.nodo.querySelector(".hoja-titulo").textContent = r.valor;
+    return r;
+  };
+  // Lo tocado: {cambios: {campo: valor}, errores: [campo]}, enseñando los errores. Con {soloValidos: true}, lo que no
+  // vale se deja fuera sin decir nada (para «Quitar de este día»).
+  const recoger = ({ soloValidos = false } = {}) => {
+    const cambios = {};
+    const errores = [];
+    for (const nombre of tocados()) {
+      const r = soloValidos ? leerCampoHoja(nombre, nodoDe(nombre).value) : validar(nombre);
+      if (r.error) errores.push(nombre);
+      else cambios[nombre] = r.valor;
     }
+    if (tipo !== tipoOriginal) cambios.tipo = tipo;
+    return { cambios, errores };
+  };
+  // Con algo mal escrito, no se sigue: se va a lo primero que falla (el error ya se ve junto al campo).
+  const hayErrores = (errores) => {
+    if (!errores.length) return false;
+    const nodo = nodoDe(errores[0]);
+    nodo?.closest("details")?.setAttribute("open", "");
+    nodo?.focus();
+    return true;
+  };
+  // Pone lo tocado en d (el borrador o tus datos): lo de este día, en su entrada; el descanso corto, en los dos del
+  // superset; lo de la biblioteca, en el ejercicio. La marca, en tus datos, con su entrada en el historial de marcas (en
+  // el borrador, eso lo hace «Guardar» de la barra). Devuelve d (o los datos nuevos, con la marca).
+  const ponerCambios = (d, cambios) => {
+    const dd = diaPorId(d, diaId);
+    const e = dd?.ejercicios.find((y) => y.exerciseId === exerciseId);
+    if (e) for (const c of DE_LA_ENTRADA) if (c in cambios) e[c] = cambios[c];
+    if ("restSuperset" in cambios && e?.supersetId) {
+      for (const y of dd.ejercicios) if (y.supersetId === e.supersetId) y.restSuperset = cambios.restSuperset;
+    }
+    const ej = d.ejercicios[exerciseId];
+    if (!ej) return d;
+    for (const c of DEL_EJERCICIO) if (c !== "pr" && c in cambios) ej[c] = cambios[c];
+    if ("pr" in cambios && (ej.pr ?? null) !== cambios.pr) {
+      if (!enBorrador) return S.cambiarMarca(d, exerciseId, cambios.pr, ahora(), "a-mano");
+      ej.pr = cambios.pr;
+    }
+    return d;
+  };
+  const nombreAhora = () => recortar(nodoDe("name")?.value, LIMITES.nombre) || x.name;
+  // «Guardar» (su botón, o al cerrarla con cambios): con algo mal escrito, no sigue y lo señala; si no, lo tocado va al
+  // borrador (desde Rutina) o a tus datos (desde Entreno), y la hoja se cierra.
+  const guardarHoja = () => {
+    const { cambios, errores } = recoger();
+    if (hayErrores(errores)) return;
+    if (Object.keys(cambios).length) cambiarEn((d) => ponerCambios(d, cambios));
+    hoja.cerrar();
   };
 
   const hoja = abrirHoja({
     titulo: x.name,
     cuerpo,
     clase: "hoja-alta",
-    pie: [boton("Hecho", "hecho", { clase: "boton-principal boton-ancho" })],
+    pie: [boton("Cancelar", "cancelar-ejercicio", { clase: "boton-secundario" }), boton("Guardar", "guardar-ejercicio", { clase: "boton-principal" })],
+    sinGuardar: hayCambios,
+    alGuardar: guardarHoja,
     alCampo: (ev) => {
       const nombre = ev.target?.dataset?.campo;
-      if (!nombre) return;
-      if (ev.type === "change") validarYGuardar(nombre, ev.target);
-      else if (nombre === "pr") prPendiente = ev.target;
+      if (nombre && ev.type === "change") validar(nombre);
     },
     alAccion: (accion, el) => {
-      const valorDe = (nombre) => cuerpo.querySelector(`[data-campo="${nombre}"]`);
+      const valorDe = (nombre) => nodoDe(nombre);
       switch (accion) {
         case "tipo": {
           tipo = el.dataset.valor;
@@ -700,168 +884,158 @@ export function abrirHojaEjercicio(diaId, exerciseId, { alCerrar = null } = {}) 
             b.setAttribute("aria-pressed", String(b === el));
           }
           bloqueMarca.hidden = tipo !== "peso";
-          guardarEjercicio({ tipo });
           return;
         }
         case "series-menos": case "series-mas": {
           const c = valorDe("series");
           const n = limitar((leerNumero(c.value) ?? 3) + (accion === "series-mas" ? 1 : -1), LIMITES.seriesMin, LIMITES.seriesMax);
           c.value = String(Math.round(n));
-          validarYGuardar("series", c);
+          validar("series");
           return;
         }
         case "rest-menos": case "rest-mas": {
           const c = valorDe("rest");
           const s = limitar((leerDescanso(c.value) ?? 90) + (accion === "rest-mas" ? 15 : -15), 0, LIMITES.descansoMax);
           c.value = formatoDescanso(s);
-          validarYGuardar("rest", c);
+          validar("rest");
           return;
         }
         case "pr-menos": case "pr-mas": {
           const c = valorDe("pr");
-          const inc = almacen.datos().ejercicios[exerciseId]?.incremento || 2.5;
+          const inc = leerCampoHoja("incremento", valorDe("incremento")?.value ?? "").valor ?? (x.incremento || 2.5);
           const n = limitar(redondear((leerNumero(c.value) ?? 0) + (accion === "pr-mas" ? inc : -inc), 0.25), 0, LIMITES.kgMax);
           c.value = n > 0 ? formatoNumero(n) : "";
           ponerErrorControl(c.closest(".control"), "");
-          prPendiente = c;
           return;
         }
         case "reps-atajo": {
-          const c = valorDe("reps");
-          c.value = el.dataset.valor;
-          validarYGuardar("reps", c);
+          valorDe("reps").value = el.dataset.valor;
+          validar("reps");
           return;
         }
         case "rest-atajo": {
-          const c = valorDe("rest");
-          c.value = el.dataset.valor;
-          validarYGuardar("rest", c);
+          valorDe("rest").value = el.dataset.valor;
+          validar("rest");
           return;
         }
         case "restSuperset-menos": case "restSuperset-mas": {
           const c = valorDe("restSuperset");
           const s = limitar((leerDescanso(c.value) ?? DESCANSO_SUPERSET_DEFECTO) + (accion === "restSuperset-mas" ? 5 : -5), 0, LIMITES.descansoMax);
           c.value = formatoDescanso(s);
-          validarYGuardar("restSuperset", c);
+          validar("restSuperset");
           return;
         }
         case "restSuperset-atajo": {
-          const c = valorDe("restSuperset");
-          c.value = el.dataset.valor;
-          validarYGuardar("restSuperset", c);
+          valorDe("restSuperset").value = el.dataset.valor;
+          validar("restSuperset");
           return;
         }
+        case "incremento-atajo": {
+          valorDe("incremento").value = formatoNumero(Number(el.dataset.valor));
+          validar("incremento");
+          return;
+        }
+        case "cancelar-ejercicio":
+          hoja.cerrar();
+          return;
+        case "guardar-ejercicio":
+          guardarHoja();
+          return;
         case "unir-superset": {
-          elegirParaSuperset({ diaId, exerciseId }).then((parejaId) => {
+          const { cambios, errores } = recoger();
+          if (hayErrores(errores)) return;
+          elegirParaSuperset({ diaId, exerciseId, datos: datosAhora() }).then((parejaId) => {
             if (!parejaId) return;
-            almacen.mutar((d) => {
-              const dd = diaPorId(d, diaId);
+            cambiarEn((d) => {
+              const r = ponerCambios(d, cambios);
+              const dd = diaPorId(r, diaId);
               const propio = dd?.ejercicios.find((e) => e.exerciseId === exerciseId);
               const otro = dd?.ejercicios.find((e) => e.exerciseId === parejaId);
-              if (!propio || !otro || propio.supersetId || otro.supersetId) return;
+              if (!propio || !otro || propio.supersetId || otro.supersetId) return r;
               const id = `ss-${crypto.randomUUID()}`;
-              const texto = formatoDescanso(DESCANSO_SUPERSET_DEFECTO);
+              const descanso = formatoDescanso(DESCANSO_SUPERSET_DEFECTO);
               propio.supersetId = id;
-              propio.restSuperset = texto;
+              propio.restSuperset = descanso;
               otro.supersetId = id;
-              otro.restSuperset = texto;
+              otro.restSuperset = descanso;
               // Los deja seguidos, justo donde estaba el propio (así se mueven juntos al reordenar).
-              const iOtro = dd.ejercicios.findIndex((e) => e.exerciseId === parejaId);
-              const [sacado] = dd.ejercicios.splice(iOtro, 1);
-              const iPropio = dd.ejercicios.findIndex((e) => e.exerciseId === exerciseId);
-              dd.ejercicios.splice(iPropio + 1, 0, sacado);
+              const [sacado] = dd.ejercicios.splice(dd.ejercicios.indexOf(otro), 1);
+              dd.ejercicios.splice(dd.ejercicios.indexOf(propio) + 1, 0, sacado);
+              return r;
             });
-            hoja.cerrar().then(() => {
-              ctx.repintar();
-              avisar({ texto: "Superset creado." });
-            });
+            hoja.cerrar().then(() => avisar({ texto: "Superset creado." }));
           });
           return;
         }
         case "separar-superset": {
-          almacen.mutar((d) => {
-            const dd = diaPorId(d, diaId);
+          const { cambios, errores } = recoger();
+          if (hayErrores(errores)) return;
+          cambiarEn((d) => {
+            const r = ponerCambios(d, cambios);
+            const dd = diaPorId(r, diaId);
             const propio = dd?.ejercicios.find((e) => e.exerciseId === exerciseId);
-            if (!propio?.supersetId) return;
-            const otro = dd.ejercicios.find((e) => e.supersetId === propio.supersetId && e.exerciseId !== exerciseId);
+            if (!propio?.supersetId) return r;
+            for (const e of dd.ejercicios) {
+              if (e !== propio && e.supersetId === propio.supersetId) {
+                delete e.supersetId;
+                delete e.restSuperset;
+              }
+            }
             delete propio.supersetId;
             delete propio.restSuperset;
-            if (otro) {
-              delete otro.supersetId;
-              delete otro.restSuperset;
-            }
+            return r;
           });
-          hoja.cerrar().then(() => {
-            ctx.repintar();
-            avisar({ texto: "Superset deshecho." });
-          });
+          hoja.cerrar().then(() => avisar({ texto: "Superset deshecho." }));
           return;
         }
-        case "incremento-atajo": {
-          const c = valorDe("incremento");
-          c.value = formatoNumero(Number(el.dataset.valor));
-          validarYGuardar("incremento", c);
-          return;
-        }
-        case "hecho":
-          hoja.cerrar();
-          return;
         case "mover-a-dia": case "copiar-a-dia": {
           const mover = accion === "mover-a-dia";
-          const nombre = almacen.datos().ejercicios[exerciseId]?.name || x.name;
-          elegirOtroDia({ titulo: mover ? `Mover a otro día: ${nombre}` : `Copiar a otro día: ${nombre}`, diaId, exerciseId }).then((destino) => {
+          const { cambios, errores } = recoger();
+          // Copiar solo se lleva lo de este día (series, repeticiones y descanso); mover aplica todo lo tocado.
+          if (hayErrores(mover ? errores : errores.filter((n) => DE_LA_ENTRADA.includes(n)))) return;
+          const nombre = nombreAhora();
+          elegirOtroDia({ titulo: mover ? `Mover a otro día: ${nombre}` : `Copiar a otro día: ${nombre}`, diaId, exerciseId, datos: datosAhora() }).then((destino) => {
             if (!destino) return;
-            const deshacer = almacen.mutar((d) => {
-              const origen = diaPorId(d, diaId);
-              const dest = diaPorId(d, destino);
-              const entradaActual = origen?.ejercicios.find((e) => e.exerciseId === exerciseId);
-              if (!entradaActual || !dest || dest.ejercicios.some((e) => e.exerciseId === exerciseId) || dest.ejercicios.length >= LIMITES.ejerciciosPorDia) return;
+            const deshacer = cambiarEn((d) => {
+              const r = mover ? ponerCambios(d, cambios) : d;
+              const origen = diaPorId(r, diaId);
+              const dest = diaPorId(r, destino);
+              const actual = origen?.ejercicios.find((e) => e.exerciseId === exerciseId);
+              if (!actual || !dest || dest.ejercicios.some((e) => e.exerciseId === exerciseId) || dest.ejercicios.length >= LIMITES.ejerciciosPorDia) return r;
               // La copia, suelta en el otro día (D-120): un superset necesita a los dos en el mismo día.
-              const copia = structuredClone(entradaActual);
+              const copia = structuredClone(actual);
               delete copia.supersetId;
               delete copia.restSuperset;
+              if (!mover) for (const c of DE_LA_ENTRADA) if (c in cambios) copia[c] = cambios[c];
               dest.ejercicios.push(copia);
-              if (mover) {
-                if (entradaActual.supersetId) {
-                  const otro = origen.ejercicios.find((e) => e.supersetId === entradaActual.supersetId && e.exerciseId !== exerciseId);
-                  if (otro) {
-                    delete otro.supersetId;
-                    delete otro.restSuperset;
-                  }
-                }
-                origen.ejercicios = origen.ejercicios.filter((e) => e.exerciseId !== exerciseId);
-              }
+              if (mover) quitarDelDia(origen, exerciseId);
+              return r;
             });
-            const destinoDia = diaPorId(almacen.datos(), destino);
-            const texto = `${mover ? "Movido" : "Copiado"} a ${destinoDia?.label || "otro día"}: ${nombre}`;
-            const avisarHecho = () => avisarDeshacer(texto, deshacer, () => ctx.repintar());
-            if (mover) {
-              prPendiente = null;
-              hoja.cerrar().then(avisarHecho);
-            } else {
-              avisarHecho();
-            }
+            const destinoDia = diaPorId(datosAhora(), destino);
+            const aviso = `${mover ? "Movido" : "Copiado"} a ${destinoDia?.label || "otro día"}: ${nombre}`;
+            const avisarHecho = () => avisarDeshacer(aviso, deshacer, () => ctx.repintar());
+            if (mover) hoja.cerrar().then(avisarHecho);
+            else avisarHecho();
           });
           return;
         }
         case "quitar-ejercicio": {
-          prPendiente = null;
-          const deshacer = almacen.mutar((d) => {
-            const dd = diaPorId(d, diaId);
-            if (dd) dd.ejercicios = dd.ejercicios.filter((e) => e.exerciseId !== exerciseId);
+          const { cambios } = recoger({ soloValidos: true });
+          const nombre = cambios.name || x.name;
+          const deshacer = cambiarEn((d) => {
+            const r = ponerCambios(d, cambios);
+            const dd = diaPorId(r, diaId);
+            if (dd) quitarDelDia(dd, exerciseId);
+            return r;
           });
           hoja.cerrar().then(() => {
-            avisarDeshacer(`Quitado de ${dia.label}: ${x.name}`, deshacer, () => ctx.repintar());
+            avisarDeshacer(`Quitado de ${dia.label}: ${nombre}`, deshacer, () => ctx.repintar());
           });
           return;
         }
         default:
       }
     },
-    alCerrar: () => {
-      // La marca tocada con −/+ (sin salir del campo) se guarda al cerrar.
-      if (prPendiente && prPendiente.isConnected !== undefined) validarYGuardar("pr", prPendiente);
-      alCerrar?.();
-    },
+    alCerrar: () => alCerrar?.(),
   });
 }
