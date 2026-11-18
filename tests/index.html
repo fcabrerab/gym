@@ -19,7 +19,7 @@
       const comun = await import("./comun.js");
       document.getElementById("resultado").textContent = "";
       const pedidas = new URLSearchParams(location.search).get("solo");
-      const todas = ["logica", "datos-rotos", "seguridad", "interfaz", "descanso", "avisos-pc", "copia-pc", "sonido", "extras", "correcciones", "movimiento", "borrador"];
+      const todas = ["logica", "datos-rotos", "seguridad", "interfaz", "descanso", "avisos-pc", "copia-pc", "sonido", "extras", "correcciones", "movimiento", "borrador", "beta"];
       const suites = pedidas ? pedidas.split(",").filter((s) => todas.includes(s)) : todas;
       comun.guardarNormal();
       for (const nombre of suites) {

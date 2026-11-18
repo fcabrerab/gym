@@ -20,7 +20,7 @@ import {
 } from "../copias.js";
 import { cargarBase, aplicarRutinaPublicada } from "../normal.js";
 import {
-  ahora, haceDias, diaMes, hora, fechaConAnio, formatoNumero, formatoTamano, leerNumero, limitar, idApunte, recortar, plural,
+  ahora, haceDias, diaMes, hora, fechaConAnio, formatoNumero, formatoTamano, leerNumero, limitar, idApunte, recortar, plural, esBeta,
 } from "../util.js";
 
 const TEMAS = [["auto", "Automático (como el móvil)"], ["claro", "Claro"], ["oscuro", "Oscuro"]];
@@ -258,10 +258,19 @@ export function pintarAjustes(contenedor) {
       boton("Volver a la rutina publicada", "rutina-publicada", { clase: "boton-secundario boton-ancho" }),
       ayuda("Deja los días y ejercicios como en la rutina publicada. Conserva tus marcas y tu historial.")),
     seccion("La app",
-      h("p", { class: "linea-dato" }, `Versión ${VERSION} (${fechaConAnio(new Date(`${FECHA_VERSION}T12:00:00`).getTime())}).`),
-      h("p", { class: "linea-dato", id: "sin-conexion" }, `Funciona sin conexión: ${sinConexion ? "sí" : "todavía no"}`),
-      sinConexion ? null : ayuda("Se prepara sola la primera vez que la app se abre con conexión: ciérrala y vuelve a abrirla con conexión, y ya funcionará sin ella."),
-      boton("Buscar actualización", "buscar-actualizacion", { clase: "boton-secundario boton-ancho" }),
+      h("p", { class: "linea-dato" }, `Versión ${VERSION}${esBeta() ? " (beta)" : ""} (${fechaConAnio(new Date(`${FECHA_VERSION}T12:00:00`).getTime())}).`),
+      // La beta (D-124): sin service worker propio, así que ni funciona sin conexión ni hay nada que buscar (cada vez que
+      // se abre con conexión, trae lo último).
+      esBeta()
+        ? [
+          ayuda("Es la beta: lo nuevo, para probarlo antes de que llegue a la app normal. Usa tus mismos datos (lo que guardes aquí también está allí) y solo se abre con conexión."),
+          h("a", { class: "boton boton-secundario boton-ancho", href: "../" }, "Ir a la app normal"),
+        ]
+        : [
+          h("p", { class: "linea-dato", id: "sin-conexion" }, `Funciona sin conexión: ${sinConexion ? "sí" : "todavía no"}`),
+          sinConexion ? null : ayuda("Se prepara sola la primera vez que la app se abre con conexión: ciérrala y vuelve a abrirla con conexión, y ya funcionará sin ella."),
+          boton("Buscar actualización", "buscar-actualizacion", { clase: "boton-secundario boton-ancho" }),
+        ],
       boton("Novedades", "novedades", { clase: "boton-secundario boton-ancho" }),
       boton("Apuntar un fallo o una idea", "apuntes", { clase: "boton-secundario boton-ancho", ico: "lapiz" }),
       ayuda("También desde cualquier pantalla: toca el lápiz de arriba.")),

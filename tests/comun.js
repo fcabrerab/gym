@@ -160,10 +160,12 @@ export async function esperarListo(f, ms = 10000) {
   return null;
 }
 
-export function urlBeta({ ahora = "2026-11-03T18:00:00", sinsw = true } = {}) {
+// Con canal: "beta", la app se abre como la beta (D-124: «?canal=beta», que solo vale en local).
+export function urlBeta({ ahora = "2026-11-03T18:00:00", sinsw = true, canal = null } = {}) {
   const partes = [];
   if (sinsw) partes.push("sinsw");
   if (ahora) partes.push(`ahora=${ahora}`);
+  if (canal) partes.push(`canal=${canal}`);
   return `/${partes.length ? `?${partes.join("&")}` : ""}`;
 }
 
@@ -182,12 +184,12 @@ function arranco(f, listo) {
   return Boolean(listo) && !(listo === "error" && !f.contentDocument?.documentElement?.dataset?.modulos);
 }
 
-export async function cargarBeta({ ahora = "2026-11-03T18:00:00", ancho = 412, alto = 915, sinsw = true, espiar: conEspias = true } = {}) {
+export async function cargarBeta({ ahora = "2026-11-03T18:00:00", ancho = 412, alto = 915, sinsw = true, canal = null, espiar: conEspias = true } = {}) {
   const f = document.createElement("iframe");
   f.style.width = `${ancho}px`;
   f.style.height = `${alto}px`;
   document.body.append(f);
-  await new Promise((resolver) => { f.onload = resolver; f.src = urlBeta({ ahora, sinsw }); });
+  await new Promise((resolver) => { f.onload = resolver; f.src = urlBeta({ ahora, sinsw, canal }); });
   let listo = await esperarListo(f);
   if (!arranco(f, listo)) {
     // La app no llegó a arrancar: casi siempre es que el servidor local de pruebas cortó la descarga de algún

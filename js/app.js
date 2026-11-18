@@ -13,7 +13,7 @@ import { copiarDesdeNormal, leerTemaNormal } from "./normal.js";
 import { guardarCopiaAuto, listarCopiasAuto } from "./copias.js";
 import { diaPorId } from "./modelo.js";
 import { abandonada } from "./sesion.js";
-import { ahora, parametroLocal, esLocal, fechaLocal, diaMes, hora } from "./util.js";
+import { ahora, parametroLocal, esLocal, esBeta, fechaLocal, diaMes, hora } from "./util.js";
 import { h, vaciar } from "./ui/dom.js";
 import {
   montarAvisos, avisar, cerrarAvisoDeshacer, confirmar, anunciar, alVolverAtras, alPulsarTecla, hojaAbierta, alCerrarseLasHojas, hayAvisoDeshacer,
@@ -376,7 +376,18 @@ function alCambioAlmacen(e) {
 
 // --- Arranque ---
 
+// La beta (D-124) lo dice arriba, junto al nombre, con un enlace a la app normal (la carpeta de arriba).
+function marcarBeta() {
+  if (!esBeta()) return;
+  document.title = "Gym Beta";
+  document.documentElement.dataset.canal = "beta";
+  document.querySelector(".marca")?.append(h("a", {
+    class: "marca-beta", href: "../", title: "Estás en la beta: toca para ir a la app normal", "aria-label": "Beta. Ir a la app normal",
+  }, "BETA"));
+}
+
 function montar() {
+  marcarBeta();
   ctx.irA = irA;
   ctx.repintar = repintar;
   ctx.aplicarTema = aplicarTema;
@@ -472,16 +483,21 @@ function iniciarApp(avisos = []) {
 // «App actualizada» sale después de recargar, no justo antes).
 let versionVistaAntes = null;
 
+// La versión vista se apunta en gym-beta-ui; la beta, aparte (versionVistaBeta), para que al ir de una a otra no salga
+// cada vez «actualizada» (D-124).
+const CAMPO_VERSION = () => (esBeta() ? "versionVistaBeta" : "versionVista");
+
 function avisoVersion() {
   const ui = almacen.leerUi();
-  versionVistaAntes = ui.versionVista;
-  if (!ui.versionVista) {
-    almacen.cambiarUi((u) => { u.versionVista = VERSION; });
+  const campo = CAMPO_VERSION();
+  versionVistaAntes = ui[campo];
+  if (!ui[campo]) {
+    almacen.cambiarUi((u) => { u[campo] = VERSION; });
     return;
   }
-  if (ui.versionVista !== VERSION) {
-    almacen.cambiarUi((u) => { u.versionVista = VERSION; });
-    avisar({ texto: `App actualizada a la ${VERSION}`, accion: "Novedades", alPulsar: () => hojaNovedades() });
+  if (ui[campo] !== VERSION) {
+    almacen.cambiarUi((u) => { u[campo] = VERSION; });
+    avisar({ texto: `${esBeta() ? "Beta" : "App"} actualizada a la ${VERSION}`, accion: "Novedades", alPulsar: () => hojaNovedades() });
   }
 }
 
@@ -512,7 +528,7 @@ async function primeraVez() {
     // Sin almacenamiento persistente: los datos siguen guardados igual.
   }
   almacen.cambiarUi((u) => {
-    u.versionVista = VERSION;
+    u[CAMPO_VERSION()] = VERSION;
     delete u.borradoEn;
   });
   aplicarTema(r.datos.ajustes.tema);
@@ -643,6 +659,10 @@ function registrarSW() {
     if (ev.data?.tipo === "aviso-pc") descanso.ponerAlDia();
   });
   navigator.serviceWorker.startMessages?.();
+  // La beta (D-124) no registra service worker: la lleva el de la app normal (su alcance, la carpeta de arriba, la cubre), que deja
+  // pasar sus archivos a la red sin guardarlos. Uno propio borraría las cachés de la normal al activarse (y la normal
+  // quita los de beta/). Sus avisos y notificaciones van por el registro de la normal.
+  if (esBeta()) return;
   let pedidoRecargar = false;
   let mudanza = false;
   let recargando = false;

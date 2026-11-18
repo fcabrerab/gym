@@ -856,3 +856,8 @@ body.con-borrador:not(.con-descanso):not(.con-hoja) .avisos { bottom: calc(var(-
 /* «Guardar · Descartar · Seguir editando»: los botones, uno debajo de otro. */
 .hoja-elegir .hoja-pie { flex-direction: column; }
 .hoja-elegir .hoja-pie .boton { flex: none; width: 100%; }
+/* La beta (D-124): «BETA» junto al nombre, en el color de los avisos; es un enlace a la app normal. */
+.marca-beta {
+  display: inline-flex; align-items: center; flex: none; min-height: 36px; padding: 0 12px; border-radius: 999px;
+  background: var(--aviso-fondo); color: var(--aviso-texto); font-size: 13px; font-weight: 800; letter-spacing: .06em; text-decoration: none;
+}
