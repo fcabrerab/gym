@@ -1,0 +1,774 @@
+// Pantalla Ajustes: aspecto, descanso (avisos, permiso de notificaciones, descanso con sonido, avisos desde el PC,
+// pantalla encendida, probar aviso y qué hacer si el aviso no llega con el móvil bloqueado), tiempo estimado, copia de
+// seguridad (guardar, copia en el PC, cargar con vista previa, copias automáticas), la app (versión, sin conexión,
+// novedades, apuntes) y la zona peligrosa. Los cambios valen al momento.
+
+import { h, icono, vaciar } from "./dom.js";
+import { avisar, avisarDeshacer, cerrarAviso, confirmar, abrirHoja } from "./avisos.js";
+import { ctx } from "./contexto.js";
+import { boton, control, ponerErrorControl, interruptor, seccion, ayuda } from "./piezas.js";
+import { terminarYGuardar } from "./entreno.js";
+import * as almacen from "../almacen.js";
+import * as descanso from "../descanso.js";
+import * as avisosPc from "../avisos-pc.js";
+import * as copiaPc from "../copia-pc.js";
+import * as S from "../sesion.js";
+import { VERSION, FECHA_VERSION, NOVEDADES } from "../version.js";
+import { ESQUEMA, LIMITES, validarDatos, reparar, migrar, diaPorId } from "../modelo.js";
+import {
+  guardarCopia, leerCopia, aplicarCopia, guardarCopiaAuto, listarCopiasAuto, leerCopiaAuto, copiasAutoFuncionan, puedeCompartirCopias,
+} from "../copias.js";
+import { cargarBase, aplicarRutinaPublicada } from "../normal.js";
+import {
+  ahora, haceDias, diaMes, hora, fechaConAnio, formatoNumero, formatoTamano, leerNumero, limitar, idApunte, recortar, plural, esBeta,
+} from "../util.js";
+
+const TEMAS = [["auto", "Automático (como el móvil)"], ["claro", "Claro"], ["oscuro", "Oscuro"]];
+const NOMBRES_PANTALLA = { entreno: "Entreno", historial: "Historial", rutina: "Rutina", ajustes: "Ajustes" };
+
+// --- Guardar copia (también desde los banners de Entreno y el resumen de la sesión) ---
+
+// Se llama dentro del clic, sin esperar nada antes: así el menú de compartir puede abrirse.
+export function accionGuardarCopia({ forzarDescarga = false, alTerminar = null } = {}) {
+  const datos = almacen.datos();
+  const t = ahora();
+  return guardarCopia(datos, t, { forzarDescarga }).then((r) => {
+    if (r.metodo) {
+      almacen.mutar((d) => { d.copia = { ultima: t, metodo: r.metodo }; }, { tocarActualizado: false });
+      avisar({ texto: r.metodo === "compartida" ? "Copia guardada" : `Copia descargada en la carpeta Descargas: ${r.nombre}` });
+    } else {
+      avisar({ texto: "No se ha guardado la copia" });
+    }
+    if (ctx.pantalla() === "ajustes") actualizarLineaCopia();
+    alTerminar?.(r);
+    return r;
+  });
+}
+
+function lineaCopia() {
+  const c = almacen.datos().copia;
+  const t = ahora();
+  if (!c?.ultima) return "Aún no has guardado ninguna copia.";
+  return `Última copia: ${haceDias(c.ultima, t)} (${diaMes(c.ultima)}, ${hora(c.ultima)})`;
+}
+
+function actualizarLineaCopia() {
+  const p = document.getElementById("linea-copia");
+  if (p) p.textContent = lineaCopia();
+}
+
+// --- Pintado ---
+
+// La ayuda del interruptor «Notificación»: si falta el permiso se dice claro (no llegarán) y se ofrece pedirlo.
+function ayudaNotificacion() {
+  const p = descanso.permisoNotificaciones();
+  if (p === "no-existe") return [ayuda("Este navegador no permite notificaciones.")];
+  if (p === "granted") return [h("p", { class: "ayuda estado-bien" }, icono("check", { tamano: 18 }), h("span", null, "Permiso concedido. Avisan con el móvil bloqueado o con otra app delante."))];
+  if (p === "denied") return [ayuda(`Permiso denegado: actívalo en los ajustes de Chrome para ${location.hostname}. Hasta entonces no llegarán.`)];
+  return [
+    h("p", { class: "ayuda aviso-permiso" }, "Falta el permiso: las notificaciones no llegarán hasta que lo des."),
+    boton("Permitir notificaciones", "pedir-permiso", { clase: "boton-secundario", ico: "campana" }),
+  ];
+}
+
+function pintarPermiso() {
+  const zona = document.getElementById("estado-permiso");
+  if (zona) vaciar(zona).append(...ayudaNotificacion());
+  const fila = document.querySelector('[data-ajuste="timerNotification"]')?.closest(".fila-interruptor");
+  fila?.classList.toggle("sin-permiso", descanso.permisoNotificaciones() !== "granted");
+}
+
+// «Si el aviso no llega con el móvil bloqueado»: plegado de serie, al final de la sección Descanso.
+function consejosAviso() {
+  const consejos = [
+    "Android para la app cuando lleva más de un minuto sin estar a la vista (con el móvil bloqueado u otra app delante), y entonces el aviso puede no llegar, sobre todo en descansos de 2 o 3 minutos. No pasa si dejas puesto «Mantener la pantalla encendida durante la sesión» y no bloqueas el móvil.",
+    "La notificación del descanso dice a qué hora acaba: aunque el aviso no suene, puedes mirarla en la pantalla de bloqueo.",
+    "Si la notificación llega sin sonido o no se ve, mantén pulsada una notificación de la app (o búscala en los ajustes de Android) y revisa el sonido, el mensaje emergente y la pantalla de bloqueo. Mira también que No molestar esté apagado. La vibración la decide Android: la app no puede cambiarla.",
+    "Para que el aviso llegue siempre a su hora, enciende «Descanso con sonido» o «Avisos desde el PC» (aquí arriba).",
+  ];
+  return h("details", { class: "detalles consejos-aviso" },
+    h("summary", null, icono("info", { tamano: 20 }), h("span", null, "Si el aviso no llega con el móvil bloqueado"),
+      h("span", { class: "consejos-flecha" }, icono("siguiente", { tamano: 20 }))),
+    h("ul", { class: "lista-consejos" }, consejos.map((t) => h("li", null, t))));
+}
+
+// «Avisos desde el PC» (avisos-pc.js): sin activar, la dirección y «Activar»; activos, su estado, «Probar desde el PC» y
+// «Desactivar». Se repinta solo al cambiar su estado (app.js), salvo mientras uno de sus botones está trabajando.
+let ocupadoPc = false;
+
+export function repintarAvisosPc() {
+  if (!ocupadoPc) pintarAvisosPc();
+}
+
+// Lo que hace un botón de «Avisos desde el PC», sin repintar a medias; al acabar, se repinta y se dice cómo ha ido.
+function botonPc(el, trabajo, alAcabar) {
+  if (ocupadoPc) return undefined;
+  ocupadoPc = true;
+  el.disabled = true;
+  return trabajo().catch(() => ({ ok: false, texto: "Algo ha fallado: vuelve a intentarlo." })).then((r) => {
+    ocupadoPc = false;
+    pintarAvisosPc();
+    alAcabar(r || { ok: true });
+  });
+}
+
+function pintarAvisosPc() {
+  const zona = document.getElementById("avisos-pc");
+  if (!zona) return;
+  const e = avisosPc.estado();
+  const partes = [
+    h("p", { class: "interruptor-rotulo" }, "Avisos desde el PC (sin sonido de fondo)"),
+    ayuda("Tu PC de casa lleva la cuenta del descanso y, a su hora, te manda el aviso: llega aunque bloquees el móvil y sin pausar tu música. Hace falta Tailscale activo en el móvil y el PC encendido. Si el PC no responde, el aviso va como siempre."),
+  ];
+  const cuando = Number.isFinite(e.cuando) ? ` (${hora(e.cuando)})` : "";
+  if (!e.soportado) {
+    partes.push(ayuda("Este navegador no admite avisos desde el PC."));
+  } else if (e.activo) {
+    const pc = e.direccion.replace(/^https:\/\//, "");
+    partes.push(e.estado === "sin-respuesta" || e.estado === "error"
+      ? h("p", { class: "ayuda aviso-permiso", id: "estado-pc" }, `Activos con ${pc}, pero la última vez falló${cuando}: ${e.texto}`)
+      : h("p", { class: "ayuda estado-bien", id: "estado-pc" }, icono("check", { tamano: 18 }), h("span", null, `Activos con ${pc}${cuando ? `: el PC contestó bien${cuando}` : ""}`)),
+    h("div", { class: "botones-pc" },
+      boton("Probar desde el PC", "probar-avisos-pc", { clase: "boton-secundario", ico: "campana" }),
+      boton("Desactivar", "desactivar-avisos-pc", { clase: "boton-secundario" })),
+    ayuda("«Probar desde el PC» manda uno de prueba a los 10 s: bloquea el móvil y espera."));
+  } else {
+    partes.push(
+      h("label", { class: "campo-rotulo", for: "direccion-pc" }, "Dirección de tu PC en Tailscale"),
+      h("input", {
+        class: "campo-texto", id: "direccion-pc", type: "url", inputmode: "url", autocomplete: "off", autocapitalize: "off", spellcheck: "false",
+        enterkeyhint: "done", placeholder: "https://tu-pc.tu-red.ts.net", value: e.direccion || "", "data-campo": "direccion-pc", "aria-describedby": "error-pc ayuda-pc",
+      }),
+      h("p", { class: "campo-error", id: "error-pc" }, e.estado === "sin-respuesta" || e.estado === "error" ? e.texto : ""),
+      h("p", { class: "ayuda", id: "ayuda-pc" }, "Es la de la página de tu PC. Si abres la app con el enlace de su página «Gimnasio», se pone sola."),
+      boton("Activar", "activar-avisos-pc", { clase: "boton-principal boton-ancho", ico: "campana" }));
+  }
+  vaciar(zona).append(...partes);
+}
+
+// «Copia en el PC» (copia-pc.js): el interruptor, cómo fue la última y «Mandar una copia ahora». Se repinta al cambiar
+// su estado (app.js); mientras su botón trabaja, el botón sigue apagado.
+let ocupadoCopiaPc = false;
+
+export function repintarCopiaPc() {
+  pintarCopiaPc();
+}
+
+function lineaCopiaPc(e, t) {
+  if (!e.direccion) return { texto: "Para usarla, pon antes la dirección de tu PC en «Avisos desde el PC» (arriba, en Descanso)." };
+  if (!e.activo) return { texto: "Apagada: el PC no recibe copias." };
+  if (e.enviando) return { texto: "Mandando una copia al PC…" };
+  const ultima = Number.isFinite(e.ultima)
+    ? `La última llegó ${haceDias(e.ultima, t)} (${diaMes(e.ultima)}, ${hora(e.ultima)})${Number.isFinite(e.sesiones) ? `, con ${plural(e.sesiones, "sesión", "sesiones")}` : ""}.`
+    : "";
+  if (e.estado === "sin-respuesta" || e.estado === "error") {
+    return { texto: `La última vez falló${Number.isFinite(e.cuando) ? ` (${hora(e.cuando)})` : ""}: ${e.texto}${ultima ? ` ${ultima}` : ""}`, clase: "aviso-permiso" };
+  }
+  if (ultima) return { texto: ultima, clase: "estado-bien", bien: true };
+  return { texto: "Aún no ha llegado ninguna al PC: llegará al acabar tu próximo entreno." };
+}
+
+function pintarCopiaPc() {
+  const zona = document.getElementById("copia-pc");
+  if (!zona) return;
+  const e = copiaPc.estado();
+  const linea = lineaCopiaPc(e, ahora());
+  vaciar(zona).append(
+    interruptor({
+      ajuste: "copia-pc", rotulo: "Copia en el PC", marcado: e.activo && Boolean(e.direccion), desactivado: !e.direccion,
+      ayuda: "Al acabar cada entreno, la app manda una copia de tus datos a tu PC de casa. Hace falta Tailscale activo en el móvil y el PC encendido; si no puede, lo intenta otra vez al abrir la app.",
+    }),
+    h("p", { class: ["ayuda", linea.clase], id: "estado-copia-pc" }, linea.bien ? icono("check", { tamano: 18 }) : null, h("span", null, linea.texto)),
+    boton("Mandar una copia ahora", "mandar-copia-pc", {
+      clase: "boton-secundario boton-ancho", ico: "copia", extra: { disabled: !e.activo || !e.direccion || e.enviando || ocupadoCopiaPc },
+    }));
+}
+
+function accionMandarCopiaPc(el) {
+  if (ocupadoCopiaPc) return undefined;
+  ocupadoCopiaPc = true;
+  el.disabled = true;
+  return copiaPc.mandar("mano").catch(() => ({ ok: false, texto: "Algo ha fallado: vuelve a intentarlo." })).then((r) => {
+    ocupadoCopiaPc = false;
+    pintarCopiaPc();
+    avisar({ texto: r.ok ? (r.guardada ? "Copia guardada en el PC" : "El PC ya tenía esta copia") : r.texto, tipo: r.ok ? "normal" : "error" });
+  });
+}
+
+export function pintarAjustes(contenedor) {
+  const datos = almacen.datos();
+  const a = datos.ajustes;
+  const temas = h("div", { class: "opciones", role: "radiogroup", "aria-label": "Tema" },
+    TEMAS.map(([valor, texto]) => h("button", {
+      class: ["opcion", a.tema === valor && "activa"], type: "button", role: "radio", "aria-checked": String(a.tema === valor), "data-accion": "tema", "data-valor": valor,
+    }, h("span", { class: "opcion-marca" }), h("span", null, texto))));
+
+  const bytes = almacen.tamanoDatos();
+  const tamano = h("p", { class: "ayuda" }, `Ocupan ${formatoTamano(bytes)}`);
+  const avisoTamano = bytes > LIMITES.avisoTamano
+    ? h("p", { class: "ayuda aviso-texto-fuerte" }, `Tus datos ocupan ${formatoTamano(bytes)}. Guarda una copia de vez en cuando.`) : null;
+
+  // En Chrome de Android no se puede compartir un .json: allí el botón dice lo que de verdad hace (descargar).
+  const comparte = puedeCompartirCopias();
+  const sinConexion = ctx.version.controlaElSw();
+  vaciar(contenedor).append(h("div", { class: "pantalla-ajustes" },
+    h("h1", { class: "titulo-pantalla" }, "Ajustes"),
+    seccion("Aspecto", h("p", { class: "campo-rotulo" }, "Tema"), temas),
+    seccion("Descanso",
+      interruptor({ ajuste: "timerAlert", rotulo: "Aviso a pantalla completa", marcado: a.timerAlert }),
+      interruptor({ ajuste: "timerSound", rotulo: "Sonido", marcado: a.timerSound }),
+      interruptor({ ajuste: "vibracion", rotulo: "Vibración", marcado: a.vibracion }),
+      interruptor({ ajuste: "timerNotification", rotulo: "Notificación", ayuda: "Solo si la app no está a la vista.", marcado: a.timerNotification }),
+      h("div", { class: "estado-permiso", id: "estado-permiso" }),
+      interruptor({ ajuste: "descansoConSonido", rotulo: "Descanso con sonido (aviso más fiable)", marcado: a.descansoConSonido,
+        ayuda: "Durante el descanso suena un tic-tac muy suave y el aviso va dentro del propio sonido: así llega a su hora aunque bloquees el móvil. En la pantalla de bloqueo se ve el descanso con su barra de progreso. Ojo: mientras suena, Android pausa la música de otras apps." }),
+      h("div", { class: "avisos-pc", id: "avisos-pc" }),
+      interruptor({ ajuste: "descansoAlMarcar", rotulo: "Empezar el descanso al marcar una serie", marcado: a.descansoAlMarcar,
+        ayuda: "Si lo apagas, el descanso se empieza con el botón «Descanso» de cada ejercicio." }),
+      interruptor({ ajuste: "pantallaEncendida", rotulo: "Mantener la pantalla encendida durante la sesión", marcado: a.pantallaEncendida,
+        ayuda: descanso.pantallaEncendidaExiste() ? "" : "Este navegador no deja mantener la pantalla encendida" }),
+      boton("Probar aviso", "probar-aviso", { clase: "boton-secundario boton-ancho", ico: "reloj" }),
+      ayuda("Lanza el aviso de fin de descanso: la capa, el sonido, la vibración y una notificación de prueba."),
+      consejosAviso()),
+    seccion("Tiempo estimado",
+      control({ campo: "segundosPorSerie", rotulo: "Segundos por serie", valor: String(a.segundosPorSerie), unidad: "s", inputmode: "numeric", accionMenos: "sps-menos", accionMas: "sps-mas", etiquetaMenos: "5 segundos menos por serie", etiquetaMas: "5 segundos más por serie" }),
+      control({ campo: "transitionMinutes", rotulo: "Minutos por cambio de ejercicio", valor: formatoNumero(a.transitionMinutes), unidad: "min", inputmode: "decimal", accionMenos: "cambio-menos", accionMas: "cambio-mas", etiquetaMenos: "Medio minuto menos por cambio", etiquetaMas: "Medio minuto más por cambio" }),
+      ayuda("Sirven para calcular la duración de cada día.")),
+    seccion("Copia de seguridad",
+      h("p", { class: "linea-dato", id: "linea-copia" }, lineaCopia()),
+      comparte
+        ? boton("Guardar copia", "guardar-copia", { clase: "boton-principal boton-ancho", ico: "compartir" })
+        : boton("Descargar copia", "guardar-copia", { clase: "boton-principal boton-ancho", ico: "descargar" }),
+      ayuda(comparte
+        ? "Se abre el menú de compartir para mandarla a Drive, Telegram o tu correo."
+        : "Se guarda en la carpeta Descargas del móvil; desde allí puedes mandarla a Drive, Telegram o tu correo."),
+      comparte ? h("button", { class: "enlace-boton", type: "button", "data-accion": "descargar-copia" }, icono("descargar", { tamano: 20 }), "Descargar el archivo") : null,
+      h("div", { class: "copia-pc", id: "copia-pc" }),
+      boton("Cargar una copia", "cargar-copia", { clase: "boton-secundario boton-ancho", ico: "copia" }),
+      h("input", { type: "file", accept: ".json,application/json", class: "oculto", "data-campo": "archivo", tabindex: "-1", "aria-hidden": "true" }),
+      ayuda("Acepta copias de esta app (también de cuando era la beta) y de la versión vieja. Antes de cambiar nada verás qué trae."),
+      h("p", { class: "campo-error", id: "error-carga" }),
+      h("div", { class: "separador" }),
+      boton("Ver copias automáticas", "ver-copias-auto", { clase: "boton-secundario boton-ancho" }),
+      h("div", { id: "copias-auto", class: "copias-auto" }),
+      h("p", { class: "linea-dato", id: "proteccion" }, "Protección de los datos: comprobando…"),
+      tamano,
+      avisoTamano),
+    seccion("Rutina publicada",
+      boton("Volver a la rutina publicada", "rutina-publicada", { clase: "boton-secundario boton-ancho" }),
+      ayuda("Deja los días y ejercicios como en la rutina publicada. Conserva tus marcas y tu historial.")),
+    seccion("La app",
+      h("p", { class: "linea-dato" }, `Versión ${VERSION}${esBeta() ? " (beta)" : ""} (${fechaConAnio(new Date(`${FECHA_VERSION}T12:00:00`).getTime())}).`),
+      // La beta (D-124): sin service worker propio, así que ni funciona sin conexión ni hay nada que buscar (cada vez que
+      // se abre con conexión, trae lo último).
+      esBeta()
+        ? [
+          ayuda("Es la beta: lo nuevo, para probarlo antes de que llegue a la app normal. Usa tus mismos datos (lo que guardes aquí también está allí) y solo se abre con conexión."),
+          h("a", { class: "boton boton-secundario boton-ancho", href: "../" }, "Ir a la app normal"),
+        ]
+        : [
+          h("p", { class: "linea-dato", id: "sin-conexion" }, `Funciona sin conexión: ${sinConexion ? "sí" : "todavía no"}`),
+          sinConexion ? null : ayuda("Se prepara sola la primera vez que la app se abre con conexión: ciérrala y vuelve a abrirla con conexión, y ya funcionará sin ella."),
+          boton("Buscar actualización", "buscar-actualizacion", { clase: "boton-secundario boton-ancho" }),
+        ],
+      boton("Novedades", "novedades", { clase: "boton-secundario boton-ancho" }),
+      boton("Apuntar un fallo o una idea", "apuntes", { clase: "boton-secundario boton-ancho", ico: "lapiz" }),
+      ayuda("También desde cualquier pantalla: toca el lápiz de arriba.")),
+    h("section", { class: "seccion zona-peligrosa" },
+      h("h2", { class: "seccion-titulo" }, "Zona peligrosa"),
+      h("button", { class: "boton boton-peligro-suave boton-ancho", type: "button", "data-accion": "borrar-todo" }, icono("papelera", { tamano: 20 }), h("span", null, "Borrar todos los datos")),
+      ayuda("Borra la rutina, el historial y los ajustes en este móvil. Las copias automáticas se conservan."))));
+
+  pintarPermiso();
+  pintarAvisosPc();
+  pintarCopiaPc();
+  // Lo que tarda (no bloquea el pintado).
+  if (navigator.storage?.persisted) {
+    navigator.storage.persisted().then((si) => pintarProteccion(si)).catch(() => pintarProteccion(null));
+  } else {
+    pintarProteccion(null);
+  }
+}
+
+function pintarProteccion(protegidos) {
+  const p = document.getElementById("proteccion");
+  if (!p) return;
+  vaciar(p);
+  if (protegidos === true) {
+    p.append("Protección de los datos: el navegador no los borrará solo.");
+  } else if (protegidos === false) {
+    p.append("Protección de los datos: si al móvil le falta espacio, el navegador podría borrarlos. ",
+      h("button", { class: "boton boton-secundario boton-corto", type: "button", "data-accion": "pedir-proteccion" }, "Pedir protección"));
+  } else {
+    p.append("Protección de los datos: este navegador no lo dice.");
+  }
+}
+
+// --- Cambios de campos ---
+
+function cambiarAjuste(clave, valor) {
+  almacen.mutar((d) => { d.ajustes[clave] = valor; });
+}
+
+export function alCampoAjustes(ev) {
+  const el = ev.target;
+  // «Copia en el PC» se guarda solo en este móvil (copia-pc.js), no en los ajustes de los datos.
+  if (el?.dataset?.ajuste === "copia-pc") {
+    if (ev.type === "change") {
+      copiaPc.alternar(el.checked);
+      if (el.checked) copiaPc.alAbrir(); // al encenderla, si el PC no tiene lo último, se le manda ya
+    }
+    return;
+  }
+  if (el?.dataset?.ajuste && ev.type === "change") {
+    cambiarAjuste(el.dataset.ajuste, el.checked);
+    if (el.dataset.ajuste === "pantallaEncendida") descanso.actualizarPantalla();
+    if (el.dataset.ajuste === "timerNotification") pintarPermiso();
+    // Con un descanso en marcha, el sonido de fondo se pone o se quita al momento (y «Sonido» decide si lleva el aviso).
+    if (el.dataset.ajuste === "descansoConSonido" || el.dataset.ajuste === "timerSound") descanso.alCambiarAjusteSonido();
+    return;
+  }
+  if (el?.dataset?.campo === "archivo" && ev.type === "change") {
+    const archivo = el.files?.[0];
+    el.value = "";
+    if (archivo) leerYPrevisualizar(archivo);
+    return;
+  }
+  if (ev.type !== "change") return;
+  if (el?.dataset?.campo === "segundosPorSerie") {
+    const n = leerNumero(el.value);
+    const ctrl = el.closest(".control");
+    if (n == null || n < LIMITES.segundosPorSerieMin || n > LIMITES.segundosPorSerieMax) {
+      ponerErrorControl(ctrl, "Pon entre 10 y 180 segundos.");
+      return;
+    }
+    ponerErrorControl(ctrl, "");
+    el.value = String(Math.round(n));
+    cambiarAjuste("segundosPorSerie", Math.round(n));
+  } else if (el?.dataset?.campo === "transitionMinutes") {
+    const n = leerNumero(el.value);
+    const ctrl = el.closest(".control");
+    if (n == null || n < 0 || n > LIMITES.cambioMax) {
+      ponerErrorControl(ctrl, "Pon entre 0 y 10 minutos.");
+      return;
+    }
+    ponerErrorControl(ctrl, "");
+    el.value = formatoNumero(n);
+    cambiarAjuste("transitionMinutes", n);
+  }
+}
+
+// --- Acciones ---
+
+export function pedirPermisoNotificaciones() {
+  if (typeof Notification === "undefined") return Promise.resolve("no-existe");
+  return Promise.resolve(Notification.requestPermission()).catch(() => null).then(() => descanso.permisoNotificaciones());
+}
+
+export function alAccionAjustes(accion, el) {
+  const pantalla = el.closest("#pantalla") || document;
+  switch (accion) {
+    case "tema": {
+      const tema = el.dataset.valor;
+      cambiarAjuste("tema", tema);
+      ctx.aplicarTema(tema);
+      for (const b of pantalla.querySelectorAll('[data-accion="tema"]')) {
+        b.classList.toggle("activa", b === el);
+        b.setAttribute("aria-checked", String(b === el));
+      }
+      return undefined;
+    }
+    case "pedir-permiso":
+      return pedirPermisoNotificaciones().then(() => pintarPermiso());
+    case "probar-aviso": {
+      const p = descanso.permisoNotificaciones();
+      if (p === "default" && almacen.datos().ajustes.timerNotification) {
+        return pedirPermisoNotificaciones().then(() => {
+          pintarPermiso();
+          descanso.probarAviso();
+        });
+      }
+      descanso.probarAviso();
+      return undefined;
+    }
+    case "activar-avisos-pc": {
+      const valor = pantalla.querySelector('[data-campo="direccion-pc"]')?.value ?? "";
+      return botonPc(el, () => avisosPc.activar(valor), (r) => {
+        pintarPermiso();
+        if (r.ok) {
+          avisar({ texto: r.listo ? "Avisos desde el PC activados. Prueba uno con «Probar desde el PC»." : "Activados, pero el PC aún no puede mandarlos: le falta su entorno de Python." });
+          return;
+        }
+        const error = document.getElementById("error-pc");
+        if (error) {
+          error.textContent = r.texto;
+          error.setAttribute("role", "alert");
+        }
+      });
+    }
+    case "probar-avisos-pc":
+      return botonPc(el, () => avisosPc.probar(), (r) => {
+        avisar({ texto: r.ok ? "Aviso de prueba pedido: llega en 10 s. Bloquea el móvil y espera." : r.texto, tipo: r.ok ? "normal" : "error" });
+      });
+    case "desactivar-avisos-pc":
+      return botonPc(el, () => avisosPc.desactivar(), () => {
+        avisar({ texto: "Avisos desde el PC desactivados: el aviso va como siempre." });
+      });
+    case "sps-menos": case "sps-mas": {
+      const c = pantalla.querySelector('[data-campo="segundosPorSerie"]');
+      const n = limitar((leerNumero(c.value) ?? 40) + (accion === "sps-mas" ? 5 : -5), LIMITES.segundosPorSerieMin, LIMITES.segundosPorSerieMax);
+      c.value = String(Math.round(n));
+      ponerErrorControl(c.closest(".control"), "");
+      cambiarAjuste("segundosPorSerie", Math.round(n));
+      return undefined;
+    }
+    case "cambio-menos": case "cambio-mas": {
+      const c = pantalla.querySelector('[data-campo="transitionMinutes"]');
+      const n = limitar((leerNumero(c.value) ?? 2) + (accion === "cambio-mas" ? 0.5 : -0.5), 0, LIMITES.cambioMax);
+      c.value = formatoNumero(n);
+      ponerErrorControl(c.closest(".control"), "");
+      cambiarAjuste("transitionMinutes", n);
+      return undefined;
+    }
+    case "guardar-copia": return accionGuardarCopia();
+    case "descargar-copia": return accionGuardarCopia({ forzarDescarga: true });
+    case "mandar-copia-pc": return accionMandarCopiaPc(el);
+    case "cargar-copia": {
+      const error = document.getElementById("error-carga");
+      if (error) error.textContent = "";
+      pantalla.querySelector('[data-campo="archivo"]')?.click();
+      return undefined;
+    }
+    case "ver-copias-auto": return verCopiasAuto();
+    case "recuperar-copia": return recuperarCopia(Number(el.dataset.id));
+    case "pedir-proteccion":
+      return navigator.storage?.persist?.().then((si) => {
+        pintarProteccion(si);
+        if (!si) avisar({ texto: "El navegador no la ha concedido. Suele darla a las apps instaladas que se usan a menudo." });
+      }).catch(() => pintarProteccion(null));
+    case "rutina-publicada": return rutinaPublicada();
+    case "buscar-actualizacion": return buscarActualizacion();
+    case "novedades": return hojaNovedades();
+    case "apuntes": return hojaApuntes();
+    case "borrar-todo": return borrarTodo();
+    default: return undefined;
+  }
+}
+
+// --- Antes de cambiar los días ---
+
+// Al cargar una copia, volver a copiar, volver a la publicada o recuperar una copia automática: si hay una sesión en
+// curso de un día que no va a estar después, se pregunta si se termina antes (así no queda una sesión huérfana).
+// Devuelve false si se cancela o si no se pudo guardar.
+async function antesDeQuitarDias(diasNuevos, que) {
+  const sesion = almacen.leerSesion();
+  if (!sesion || diasNuevos.some((d) => d.id === sesion.diaId)) return true;
+  const dia = diaPorId(almacen.datos(), sesion.diaId);
+  const seguir = await confirmar({
+    titulo: "Sesión en curso",
+    texto: `Tienes una sesión en curso de ${dia ? dia.title || dia.label : "otro día"}, y ese día no estará después de ${que}. ¿Terminarla antes?`,
+    aceptar: "Terminarla y seguir",
+  });
+  if (!seguir) return false;
+  const actual = almacen.leerSesion();
+  if (actual) {
+    if (S.totalSeries(actual) > 0) {
+      if (!terminarYGuardar(actual)) return false;
+    } else {
+      almacen.borrarSesion();
+      if (descanso.idActual()) descanso.saltar();
+    }
+  }
+  descanso.actualizarPantalla();
+  return true;
+}
+
+// --- Cargar una copia ---
+
+const contar = (n, uno, varios) => `${formatoNumero(n)} ${n === 1 ? uno : varios}`;
+
+async function leerYPrevisualizar(archivo) {
+  const error = document.getElementById("error-carga");
+  if (error) error.textContent = "";
+  const actuales = almacen.datos();
+  const leida = await leerCopia(archivo, { actuales, ahoraMs: ahora() });
+  if (!leida.ok) {
+    if (error) {
+      error.textContent = leida.error;
+      error.setAttribute("role", "alert");
+    }
+    avisar({ texto: leida.error, tipo: "error" });
+    return;
+  }
+  const r = leida.resumen;
+  const fecha = r.fecha && Number.isFinite(Date.parse(r.fecha)) ? `${fechaConAnio(Date.parse(r.fecha))}, ${hora(Date.parse(r.fecha))}` : null;
+  // «de» es interno: «beta» (esta app, desde cuando era la beta) o «versión normal» (la versión vieja).
+  const origen = r.de === "beta" ? "hecha con esta app" : r.de === "versión normal" ? "hecha con la versión vieja" : "copia antigua de la versión vieja";
+  const lineas = [
+    h("p", { class: "vista-previa-linea" }, fecha ? `Copia del ${fecha} · ${origen}` : `Copia · ${origen}`),
+    h("p", { class: "vista-previa-linea fuerte" }, `${contar(r.dias, "día", "días")} · ${contar(r.entradas, "ejercicio", "ejercicios")} (${formatoNumero(r.distintos)} distintos) · ${contar(r.marcas, "marca", "marcas")}`),
+    h("p", { class: "vista-previa-linea" }, leida.traeHistorial
+      ? contar(r.sesiones ?? 0, "sesión", "sesiones")
+      : `Sin historial: se conserva el tuyo (${contar(actuales.sesiones.length, "sesión", "sesiones")})`),
+  ];
+  const raros = leida.raros || {};
+  const partes = [];
+  if (raros.sesiones) partes.push(contar(raros.sesiones, "sesión", "sesiones"));
+  if (raros.marcas) partes.push(contar(raros.marcas, "cambio de marca", "cambios de marca"));
+  if (raros.apuntes) partes.push(contar(raros.apuntes, "apunte", "apuntes"));
+  if (partes.length) {
+    lineas.push(h("p", { class: "vista-previa-linea aviso-texto-fuerte" }, `${partes.join(", ")} con datos raros no se cargan; se guardan aparte.`));
+  }
+  if (leida.avisos.length) {
+    lineas.push(h("details", { class: "detalles" }, h("summary", null, `Avisos (${leida.avisos.length})`),
+      h("ul", { class: "lista-avisos" }, leida.avisos.map((a) => h("li", null, a)))));
+  }
+  if (leida.sinCambios) {
+    // Un diff sin cambios dejaría todo como la rutina publicada (y los ajustes de serie): no se deja cargar.
+    lineas.push(h("p", { class: "vista-previa-linea aviso-texto-fuerte" }, "Esta copia no trae cambios: es la rutina publicada. No hace falta cargarla."));
+    await confirmar({ titulo: "Cargar una copia", contenido: h("div", { class: "vista-previa" }, lineas), aceptar: null, cancelar: "Cerrar" });
+    return;
+  }
+  lineas.push(h("p", { class: "ayuda" }, leida.traeHistorial
+    ? "Se sustituyen tu rutina, tu historial, tus marcas y tus ajustes. Antes se guarda una copia automática."
+    : "Se sustituyen tu rutina, tus marcas y tus ajustes. Antes se guarda una copia automática."));
+  const ok = await confirmar({ titulo: "Cargar una copia", contenido: h("div", { class: "vista-previa" }, lineas), aceptar: "Cargar esta copia" });
+  if (!ok) return;
+  await cargarLeida(leida);
+}
+
+async function cargarLeida(leida) {
+  const t = ahora();
+  if (!(await antesDeQuitarDias(leida.datosNuevos.dias, "cargar la copia"))) return;
+  const copiaHecha = await guardarCopiaAuto(almacen.datos(), "antes de cargar una copia", t);
+  const deshacer = almacen.mutar((d) => aplicarCopia(d, leida, t));
+  ctx.aplicarTema(almacen.datos().ajustes.tema);
+  ctx.repintar();
+  avisarDeshacer(copiaHecha ? "Copia cargada" : "Copia cargada (sin copia automática previa)", deshacer, () => {
+    ctx.aplicarTema(almacen.datos().ajustes.tema);
+    ctx.repintar();
+  });
+}
+
+// --- Copias automáticas ---
+
+async function verCopiasAuto() {
+  const zona = document.getElementById("copias-auto");
+  if (!zona) return;
+  vaciar(zona).append(ayuda("Buscando…"));
+  let lista;
+  try {
+    lista = await listarCopiasAuto();
+  } catch {
+    vaciar(zona).append(ayuda("Las copias automáticas no funcionan en este navegador."));
+    return;
+  }
+  if (!lista.length) {
+    vaciar(zona).append(ayuda("Aún no hay copias automáticas. Se guardan al terminar cada sesión y antes de cambios grandes."));
+    return;
+  }
+  vaciar(zona).append(h("ul", { class: "lista-filas" }, lista.map((c) => h("li", { class: "fila-con-boton" },
+    h("span", { class: "fila-textos" },
+      h("span", { class: "fila-titulo" }, `${diaMes(c.fecha)}, ${hora(c.fecha)} · ${c.motivo}`),
+      h("span", { class: "fila-datos" }, c.resumen)),
+    h("button", { class: "boton boton-secundario boton-corto", type: "button", "data-accion": "recuperar-copia", "data-id": String(c.id) }, "Recuperar")))));
+}
+
+// Lee una copia automática y la deja lista para usar (migrada y reparada), o null si no se puede leer.
+export async function datosDeCopiaAuto(id) {
+  let registro;
+  try {
+    registro = await leerCopiaAuto(id);
+  } catch {
+    registro = null;
+  }
+  try {
+    let d = JSON.parse(registro?.datos ?? "null");
+    if (d && d.esquema < ESQUEMA) d = migrar(d);
+    if (d && d.esquema === ESQUEMA && validarDatos(d).ok) return { registro, datos: reparar(d).datos };
+  } catch {
+    // Copia ilegible.
+  }
+  return null;
+}
+
+async function recuperarCopia(id) {
+  const leida = await datosDeCopiaAuto(id);
+  if (!leida) {
+    avisar({ texto: "Esa copia no se puede leer.", tipo: "error" });
+    return;
+  }
+  const { registro, datos } = leida;
+  const ok = await confirmar({
+    titulo: "Recuperar una copia automática",
+    texto: `¿Recuperar la copia del ${diaMes(registro.fecha)}, ${hora(registro.fecha)} (${registro.motivo})? Se sustituyen tus datos. Antes se guarda una copia automática.`,
+    aceptar: "Recuperar",
+  });
+  if (!ok) return;
+  if (!(await antesDeQuitarDias(datos.dias, "recuperar la copia"))) return;
+  const copiaHecha = await guardarCopiaAuto(almacen.datos(), "antes de recuperar una copia", ahora());
+  const deshacer = almacen.mutar(() => datos);
+  ctx.aplicarTema(almacen.datos().ajustes.tema);
+  ctx.repintar();
+  avisarDeshacer(copiaHecha ? "Copia recuperada" : "Copia recuperada (sin copia automática previa)", deshacer, () => {
+    ctx.aplicarTema(almacen.datos().ajustes.tema);
+    ctx.repintar();
+  });
+}
+
+// --- La rutina publicada ---
+
+async function rutinaPublicada() {
+  const ok = await confirmar({
+    titulo: "Volver a la rutina publicada",
+    texto: "Deja los días y ejercicios como en la rutina publicada. Conserva tus marcas y tu historial. Antes se guarda una copia automática.",
+    aceptar: "Volver a la publicada",
+  });
+  if (!ok) return;
+  let base;
+  try {
+    base = await cargarBase();
+  } catch {
+    avisar({ texto: "No se ha podido leer la rutina publicada. Comprueba la conexión y vuelve a intentarlo.", tipo: "error" });
+    return;
+  }
+  if (!(await antesDeQuitarDias(base.rutina.days, "volver a la rutina publicada"))) return;
+  const t = ahora();
+  const copiaHecha = await guardarCopiaAuto(almacen.datos(), "antes de volver a la rutina publicada", t);
+  const deshacer = almacen.mutar((d) => aplicarRutinaPublicada(d, base, t));
+  ctx.repintar();
+  avisarDeshacer(copiaHecha ? "Rutina publicada puesta" : "Rutina publicada puesta (sin copia automática previa)", deshacer, () => ctx.repintar());
+}
+
+// --- La app: versión, novedades y apuntes ---
+
+async function buscarActualizacion() {
+  if (!ctx.version.buscar) {
+    avisar({ texto: "Sin service worker no se puede buscar ahora. Recarga la página con conexión." });
+    return;
+  }
+  avisar({ texto: "Buscando…" });
+  const r = await ctx.version.buscar();
+  if (r === "nueva") avisar({ texto: "Hay una versión nueva de la app.", accion: "Recargar", alPulsar: () => ctx.version.recargar?.() });
+  else if (r === "error") avisar({ texto: "No se ha podido buscar: comprueba la conexión." });
+  else avisar({ texto: "Ya tienes la última versión" });
+}
+
+export function hojaNovedades() {
+  const cuerpo = NOVEDADES.map((n) => h("section", { class: "novedad" },
+    h("h3", { class: "tarjeta-titulo" }, `Versión ${n.version} · ${fechaConAnio(new Date(`${n.fecha}T12:00:00`).getTime())}`),
+    h("ul", { class: "lista-novedades" }, n.cambios.map((c) => h("li", null, c)))));
+  abrirHoja({ titulo: "Novedades", cuerpo, pie: [boton("Cerrar", "cerrar-hoja", { clase: "boton-principal boton-ancho" })] });
+}
+
+// Hoja de apuntes: se abre desde Ajustes y tocando el lápiz de arriba, en cualquier pantalla. Cada apunte guarda la
+// pantalla y, en Entreno, el día, el ejercicio abierto y la serie.
+export function hojaApuntes() {
+  if (!almacen.datos()) return;
+  const pantallaAhora = ctx.pantalla();
+  const contexto = pantallaAhora === "entreno" ? ctx.contextoApunte?.() || "" : "";
+  const lista = h("ul", { class: "lista-filas lista-apuntes" });
+  const pintarLista = () => {
+    const apuntes = [...almacen.datos().apuntes].reverse();
+    vaciar(lista);
+    if (!apuntes.length) {
+      lista.append(h("li", { class: "fila-simple" }, "Aún no hay apuntes."));
+      return;
+    }
+    for (const a of apuntes) {
+      lista.append(h("li", { class: "fila-con-boton" },
+        h("span", { class: "fila-textos" },
+          h("span", { class: "fila-datos" }, [`${diaMes(a.fecha)}, ${hora(a.fecha)}`, NOMBRES_PANTALLA[a.pantalla] || a.pantalla, a.version].filter(Boolean).join(" · ")),
+          a.contexto ? h("span", { class: "fila-datos" }, a.contexto) : null,
+          h("span", { class: "fila-titulo apunte-texto" }, a.texto)),
+        h("button", { class: "boton-icono", type: "button", "data-accion": "borrar-apunte", "data-id": a.id, "aria-label": "Borrar este apunte" }, icono("papelera"))));
+    }
+  };
+  const area = h("textarea", { class: "campo-texto campo-area", id: "apunte-nuevo", "data-campo": "apunte", maxlength: String(LIMITES.apunte), rows: "4" });
+  const cuerpo = [
+    h("div", { class: "campo" },
+      h("label", { class: "campo-rotulo", for: "apunte-nuevo" }, "Qué ha fallado o qué se te ocurre"),
+      area,
+      h("p", { class: "ayuda" }, contexto
+        ? `Se apunta también dónde estabas: ${NOMBRES_PANTALLA[pantallaAhora]} · ${contexto}.`
+        : `Se apunta también dónde estabas: ${NOMBRES_PANTALLA[pantallaAhora] || pantallaAhora}. Va dentro de las copias.`),
+      h("p", { class: "campo-error", id: "apunte-error" })),
+    boton("Guardar apunte", "guardar-apunte", { clase: "boton-principal boton-ancho" }),
+    h("h3", { class: "seccion-titulo" }, "Tus apuntes"),
+    lista,
+    boton("Copiar todo", "copiar-apuntes", { clase: "boton-secundario boton-ancho", ico: "copia" }),
+  ];
+  pintarLista();
+  abrirHoja({
+    titulo: "Apuntar un fallo o una idea",
+    cuerpo,
+    clase: "hoja-alta",
+    alAccion: (accion, el) => {
+      if (accion === "guardar-apunte") {
+        const texto = recortar(area.value, LIMITES.apunte);
+        const error = document.getElementById("apunte-error");
+        if (!texto) {
+          if (error) error.textContent = "Escribe algo antes de guardar.";
+          return;
+        }
+        if (error) error.textContent = "";
+        const t = ahora();
+        const apunte = { id: idApunte(t), fecha: t, pantalla: pantallaAhora, version: VERSION, texto };
+        if (contexto) apunte.contexto = contexto;
+        almacen.mutar((d) => { d.apuntes.push(apunte); });
+        area.value = "";
+        pintarLista();
+        avisar({ texto: "Apunte guardado" });
+      } else if (accion === "borrar-apunte") {
+        const id = el.dataset.id;
+        const deshacer = almacen.mutar((d) => { d.apuntes = d.apuntes.filter((a) => a.id !== id); });
+        pintarLista();
+        avisarDeshacer("Apunte borrado", deshacer, () => pintarLista());
+      } else if (accion === "copiar-apuntes") {
+        const texto = almacen.datos().apuntes.map((a) => [
+          [`${diaMes(a.fecha)} ${hora(a.fecha)}`, NOMBRES_PANTALLA[a.pantalla] || a.pantalla, a.version].filter(Boolean).join(" · "),
+          a.contexto || null,
+          a.texto,
+        ].filter(Boolean).join("\n")).join("\n\n");
+        if (!texto) {
+          avisar({ texto: "No hay apuntes que copiar." });
+          return;
+        }
+        Promise.resolve(navigator.clipboard?.writeText(texto))
+          .then(() => avisar({ texto: "Apuntes copiados" }))
+          .catch(() => avisar({ texto: "No se han podido copiar. Guarda una copia: los apuntes van dentro." }));
+      }
+    },
+  });
+}
+
+// --- Zona peligrosa ---
+
+// Dos pasos. En el segundo, «Borrar todo» va a la izquierda: un doble toque en «Seguir» (a la derecha) cae en
+// «Cancelar». Además, una hoja recién abierta no hace caso a los toques de los primeros 400 ms (avisos.js).
+async function borrarTodo() {
+  const seguir = await confirmar({
+    titulo: "Borrar todos los datos",
+    texto: "Borra la rutina, el historial y los ajustes en este móvil. Las copias automáticas se conservan.",
+    aceptar: "Seguir",
+    peligro: true,
+  });
+  if (!seguir) return;
+  const borrar = await confirmar({
+    titulo: "¿Borrar ahora?",
+    texto: "Esto no se puede deshacer desde aquí. Antes se guarda una copia automática, que puedes recuperar luego.",
+    aceptar: "Borrar todo",
+    peligro: true,
+    invertir: true,
+  });
+  if (!borrar) return;
+  await guardarCopiaAuto(almacen.datos(), "antes de borrar todo", ahora());
+  cerrarAviso();
+  descanso.saltar();
+  almacen.borrarTodoBeta();
+  // Para que la pantalla de la primera vez ofrezca recuperar lo de antes de borrar.
+  almacen.cambiarUi((u) => { u.borradoEn = ahora(); });
+  location.reload();
+}
+
+export { copiasAutoFuncionan };
