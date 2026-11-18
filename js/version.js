@@ -2,14 +2,14 @@
 // cambio en un archivo de la app obliga a subirla en los tres sitios (una prueba de tests/ comprueba que coinciden).
 // Hasta la 0.2.10 fue la beta, en beta/; desde la 1.0.0, es la app, en la dirección de siempre (D-121).
 export const VERSION = "1.1.0";
-export const FECHA_VERSION = "2026-11-17";
+export const FECHA_VERSION = "2026-11-18";
 
 // Novedades por versión, de la más nueva a la más vieja. Se enseñan en Ajustes → La app → Novedades y, la primera
 // vez, en «Qué tiene de nuevo».
 export const NOVEDADES = [
   {
     version: "1.1.0",
-    fecha: "2026-11-17",
+    fecha: "2026-11-18",
     cambios: [
       "En Rutina, el orden se cambia también arrastrando: mantén pulsado un día o un ejercicio y muévelo adonde quieras (cerca de arriba o de abajo, la pantalla se desplaza sola). Las flechas siguen ahí.",
       "Las flechas de un superset van a su derecha, como en los demás ejercicios; y los ejercicios sueltos vuelven a verse como tarjetas.",
