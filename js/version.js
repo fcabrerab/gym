@@ -1,12 +1,22 @@
 // Versión de la app. La misma VERSION está en ../sw.js y en la meta «gym-beta-version» de ../index.html: cada
 // cambio en un archivo de la app obliga a subirla en los tres sitios (una prueba de tests/ comprueba que coinciden).
 // Hasta la 0.2.10 fue la beta, en beta/; desde la 1.0.0, es la app, en la dirección de siempre (D-121).
-export const VERSION = "1.1.0";
-export const FECHA_VERSION = "2026-11-18";
+export const VERSION = "1.2.0";
+export const FECHA_VERSION = "2026-11-19";
 
 // Novedades por versión, de la más nueva a la más vieja. Se enseñan en Ajustes → La app → Novedades y, la primera
 // vez, en «Qué tiene de nuevo».
 export const NOVEDADES = [
+  {
+    version: "1.2.0",
+    fecha: "2026-11-19",
+    cambios: [
+      "En Rutina, los cambios ya no se guardan al momento: en cuanto cambias algo, abajo sale una barra con «Cancelar» y «Guardar». «Guardar» los guarda; «Cancelar» lo deja todo como estaba (y aún puedes deshacerlo).",
+      "La hoja de cada ejercicio trae «Cancelar» y «Guardar» en vez de «Hecho». Si la cierras con cambios (con la X, Atrás o tocando fuera), te pregunta antes. Abierta desde Entreno, «Guardar» lo guarda al momento.",
+      "Si sales de Rutina con cambios sin guardar, te pregunta si guardarlos o descartarlos. Y si el móvil cierra la app a mitad, no se pierden: Entreno te los recuerda, con «Revisar» y «Descartar».",
+      "Añadir, duplicar y eliminar un día siguen siendo al momento; con cambios sin guardar, antes te pregunta qué hacer con ellos.",
+    ],
+  },
   {
     version: "1.1.0",
     fecha: "2026-11-18",

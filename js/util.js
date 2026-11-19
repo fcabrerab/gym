@@ -21,6 +21,14 @@ export function parametroLocal(nombre) {
   }
 }
 
+// ¿Es la beta? (D-124) La beta es esta misma app copiada en su carpeta beta/: usa tus mismos datos, va
+// sin service worker propio (la de siempre no la toca y solo funciona con conexión) y lo dice arriba. En las pruebas,
+// «?canal=beta» (solo en local).
+export function esBeta() {
+  if (typeof location === "undefined") return false;
+  return new URL("./", location.href).pathname.endsWith("/beta/") || parametroLocal("canal") === "beta";
+}
+
 export function ahora() {
   if (gancho === undefined) {
     gancho = null;

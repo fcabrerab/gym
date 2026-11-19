@@ -7,15 +7,16 @@
 
 import { h, icono, vaciar } from "./dom.js";
 import { foto, animar } from "./movimiento.js";
-import { avisar, cerrarAviso, confirmar, abrirHoja, anunciar } from "./avisos.js";
+import { avisar, avisarDeshacer, cerrarAviso, confirmar, abrirHoja, anunciar } from "./avisos.js";
 import { ctx } from "./contexto.js";
 import {
   miniatura, control, ponerErrorControl, banner, textoSerie, textoSeries, lineaDatos, textoBotonHecha, boton, vacio, ayuda,
   pasoEn, leerCamposEn,
 } from "./piezas.js";
-import { abrirHojaEjercicio } from "./rutina.js";
+import { abrirHojaEjercicio, revisarBorrador } from "./rutina.js";
 import { accionGuardarCopia } from "./ajustes.js";
 import * as almacen from "../almacen.js";
+import * as borrador from "../borrador.js";
 import * as S from "../sesion.js";
 import * as descanso from "../descanso.js";
 import * as copiaPc from "../copia-pc.js";
@@ -198,6 +199,15 @@ function pintarBanners() {
   }
   if (ctx.version.nueva) {
     lista.push(banner({ texto: "Hay una versión nueva de la app.", botones: [boton("Recargar", "recargar-version", { clase: "boton-principal" })], icono: "descargar" }));
+  }
+  // Cambios de Rutina sin guardar (el móvil cerró la app a mitad: D-123). Durante una sesión, esperan, como la copia.
+  if (borrador.hay() && !sesionActiva(datos, sesion, t)) {
+    lista.push(banner({
+      texto: "Tienes cambios sin guardar en la rutina.",
+      botones: [boton("Revisar", "revisar-borrador", { clase: "boton-principal" }), boton("Descartar", "descartar-borrador")],
+      clase: "banner-aviso",
+      icono: "lapiz",
+    }));
   }
   // Durante una sesión no se enseña nada que empuje la lista hacia abajo (la copia puede esperar).
   if (!sesionActiva(datos, sesion, t)) {
@@ -644,6 +654,12 @@ export function alAccionEntreno(accion, el) {
       pintarResumen();
       return undefined;
     case "recargar-version": return ctx.version.recargar?.();
+    case "revisar-borrador": return revisarBorrador();
+    case "descartar-borrador": {
+      const deshacer = borrador.descartar();
+      pintarBanners();
+      return avisarDeshacer("Cambios descartados.", deshacer, () => ctx.repintar());
+    }
     case "guardar-copia": return accionGuardarCopia({ alTerminar: () => pintarBanners() });
     case "posponer-copia":
       almacen.cambiarUi((u) => { u.posponerCopiaHasta = ahora() + 2 * 86400000; });

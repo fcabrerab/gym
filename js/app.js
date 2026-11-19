@@ -1,10 +1,11 @@
 // Arranque de la app: lee los datos (o los copia de la versión vieja la primera vez), rescata los dañados, monta la
-// barra de descanso, los avisos y la navegación inferior, lleva las rutas por hash y el botón Atrás, el tema y el
-// service worker (con la mudanza desde la beta: D-121). Es el ÚNICO módulo que hace algo al importarse: los demás
-// solo declaran funciones.
+// barra de descanso, los avisos y la navegación inferior, lleva las rutas por hash y el botón Atrás (salir de Rutina
+// con cambios sin guardar pregunta antes: D-123), el tema y el service worker (con la mudanza desde la beta: D-121). Es
+// el ÚNICO módulo que hace algo al importarse: los demás solo declaran funciones.
 
 import { VERSION } from "./version.js";
 import * as almacen from "./almacen.js";
+import * as borrador from "./borrador.js";
 import * as descanso from "./descanso.js";
 import * as avisosPc from "./avisos-pc.js";
 import * as copiaPc from "./copia-pc.js";
@@ -12,7 +13,7 @@ import { copiarDesdeNormal, leerTemaNormal } from "./normal.js";
 import { guardarCopiaAuto, listarCopiasAuto } from "./copias.js";
 import { diaPorId } from "./modelo.js";
 import { abandonada } from "./sesion.js";
-import { ahora, parametroLocal, esLocal, fechaLocal, diaMes, hora } from "./util.js";
+import { ahora, parametroLocal, esLocal, esBeta, fechaLocal, diaMes, hora } from "./util.js";
 import { h, vaciar } from "./ui/dom.js";
 import {
   montarAvisos, avisar, cerrarAvisoDeshacer, confirmar, anunciar, alVolverAtras, alPulsarTecla, hojaAbierta, alCerrarseLasHojas, hayAvisoDeshacer,
@@ -24,7 +25,7 @@ import {
   actualizarEntreno, contextoApunte, accionBarra,
 } from "./ui/entreno.js";
 import { pintarHistorial, alAccionHistorial, vistaHistorialGuardada } from "./ui/historial.js";
-import { pintarRutina, alAccionRutina, alCampoRutina } from "./ui/rutina.js";
+import { pintarRutina, alAccionRutina, alCampoRutina, actualizarBarra, resolverBorrador } from "./ui/rutina.js";
 import {
   pintarAjustes, alAccionAjustes, alCampoAjustes, hojaNovedades, hojaApuntes, datosDeCopiaAuto, pedirPermisoNotificaciones,
   repintarAvisosPc, repintarCopiaPc,
@@ -48,6 +49,8 @@ let swRegistrado = false;
 let textoDanado = null;
 let destinoPendiente = null; // pestaña a la que ir cuando acabe el history.go() de volver desde un detalle
 let enlaceAvisosPc = null; // se abrió con «#avisos-pc=…» (el enlace de la página de avisos del PC): «puesta» o «activa»
+let ultimoLugar = null; // {hash, estado} de la última pantalla pintada: Atrás desde Rutina con cambios vuelve ahí y pregunta
+let preguntandoSalir = false;
 
 // --- Errores (para las pruebas y para entender fallos) ---
 
@@ -123,7 +126,22 @@ function irA(hash, modoHistorial = "push") {
   pintarRuta({ arriba: true });
 }
 
+// Salir de Rutina con cambios sin guardar: antes se pregunta «Guardar», «Descartar» o «Seguir editando» (D-123); si ya
+// no quedan (guardados o descartados), se sigue con «despues».
+function salirDeRutina(despues) {
+  if (preguntandoSalir) return;
+  preguntandoSalir = true;
+  resolverBorrador().then((ok) => {
+    preguntandoSalir = false;
+    if (ok) despues();
+  }, () => { preguntandoSalir = false; });
+}
+
 function irAPestana(tab) {
+  if (rutaActual?.tab === "rutina" && tab !== "rutina" && borrador.hay()) {
+    salirDeRutina(() => irAPestana(tab));
+    return;
+  }
   const actual = leerRuta(location.hash);
   const nivel = history.state?.nivel ?? 0;
   if (tab === "entreno") {
@@ -186,6 +204,8 @@ function pintarRuta({ arriba = false } = {}) {
     filaDias.hidden = true;
     arranque.pintarErrorPantalla(pantalla, { enEntreno: ruta.tab === "entreno" });
   }
+  ultimoLugar = { hash: location.hash, estado: history.state };
+  actualizarBarra();
   if (arriba && cambia && !desplazado) window.scrollTo(0, 0);
 }
 
@@ -279,7 +299,19 @@ function conectarEventos() {
       destinoPendiente = null;
       history.replaceState({ nivel: 1 }, "", destino);
     }
-    if (modo === "app") pintarRuta({ arriba: true });
+    if (modo !== "app") return;
+    // Atrás saliendo de Rutina con cambios sin guardar: se vuelve a poner Rutina, donde estaba, y se pregunta; si
+    // ya no quedan cambios, Atrás otra vez (D-123).
+    if (rutaActual?.tab === "rutina" && leerRuta(location.hash).tab !== "rutina" && borrador.hay() && ultimoLugar) {
+      try {
+        history.pushState(ultimoLugar.estado, "", ultimoLugar.hash);
+      } catch {
+        // Sin historial (raro): se pregunta igual.
+      }
+      salirDeRutina(() => history.back());
+      return;
+    }
+    pintarRuta({ arriba: true });
   });
   document.addEventListener("keydown", (ev) => {
     alPulsarTecla(ev);
@@ -333,12 +365,29 @@ function alCambioAlmacen(e) {
     if (rutaActual?.tab === "entreno") repintar();
   } else if (e.tipo === "descanso" && e.fuera) {
     descanso.recargarDesdeFuera();
+  } else if (e.tipo === "borrador" && e.fuera) {
+    // Otra ventana cambió los cambios de Rutina sin guardar: se vuelve a pintar (salvo mientras se escribe en un campo).
+    const activo = document.activeElement;
+    const escribiendo = pantalla.contains(activo) && /^(INPUT|TEXTAREA)$/.test(activo?.tagName || "");
+    if (!escribiendo && ["rutina", "entreno"].includes(rutaActual?.tab)) repintar();
+    else actualizarBarra();
   }
 }
 
 // --- Arranque ---
 
+// La beta (D-124) lo dice arriba, junto al nombre, con un enlace a la app normal (la carpeta de arriba).
+function marcarBeta() {
+  if (!esBeta()) return;
+  document.title = "Gym Beta";
+  document.documentElement.dataset.canal = "beta";
+  document.querySelector(".marca")?.append(h("a", {
+    class: "marca-beta", href: "../", title: "Estás en la beta: toca para ir a la app normal", "aria-label": "Beta. Ir a la app normal",
+  }, "BETA"));
+}
+
 function montar() {
+  marcarBeta();
   ctx.irA = irA;
   ctx.repintar = repintar;
   ctx.aplicarTema = aplicarTema;
@@ -379,6 +428,11 @@ function montar() {
   montarBarra(document.getElementById("barra-descanso"), document.getElementById("capa-fin"));
   almacen.escucharOtrasVentanas();
   almacen.alCambiar(alCambioAlmacen);
+  // Cada cambio de Rutina sin guardar: un «Deshacer» a la vista ya no es lo último (se quita) y la barra se pone al día.
+  borrador.alCambiar(() => {
+    cerrarAvisoDeshacer();
+    actualizarBarra();
+  });
   conectarEventos();
   // Después de conectarEventos: la vuelta de luz se pone cuando la app ya ha hecho lo suyo con el toque.
   montarBrillo();
@@ -429,16 +483,21 @@ function iniciarApp(avisos = []) {
 // «App actualizada» sale después de recargar, no justo antes).
 let versionVistaAntes = null;
 
+// La versión vista se apunta en gym-beta-ui; la beta, aparte (versionVistaBeta), para que al ir de una a otra no salga
+// cada vez «actualizada» (D-124).
+const CAMPO_VERSION = () => (esBeta() ? "versionVistaBeta" : "versionVista");
+
 function avisoVersion() {
   const ui = almacen.leerUi();
-  versionVistaAntes = ui.versionVista;
-  if (!ui.versionVista) {
-    almacen.cambiarUi((u) => { u.versionVista = VERSION; });
+  const campo = CAMPO_VERSION();
+  versionVistaAntes = ui[campo];
+  if (!ui[campo]) {
+    almacen.cambiarUi((u) => { u[campo] = VERSION; });
     return;
   }
-  if (ui.versionVista !== VERSION) {
-    almacen.cambiarUi((u) => { u.versionVista = VERSION; });
-    avisar({ texto: `App actualizada a la ${VERSION}`, accion: "Novedades", alPulsar: () => hojaNovedades() });
+  if (ui[campo] !== VERSION) {
+    almacen.cambiarUi((u) => { u[campo] = VERSION; });
+    avisar({ texto: `${esBeta() ? "Beta" : "App"} actualizada a la ${VERSION}`, accion: "Novedades", alPulsar: () => hojaNovedades() });
   }
 }
 
@@ -469,7 +528,7 @@ async function primeraVez() {
     // Sin almacenamiento persistente: los datos siguen guardados igual.
   }
   almacen.cambiarUi((u) => {
-    u.versionVista = VERSION;
+    u[CAMPO_VERSION()] = VERSION;
     delete u.borradoEn;
   });
   aplicarTema(r.datos.ajustes.tema);
@@ -600,6 +659,10 @@ function registrarSW() {
     if (ev.data?.tipo === "aviso-pc") descanso.ponerAlDia();
   });
   navigator.serviceWorker.startMessages?.();
+  // La beta (D-124) no registra service worker: la lleva el de la app normal (su alcance, la carpeta de arriba, la cubre), que deja
+  // pasar sus archivos a la red sin guardarlos. Uno propio borraría las cachés de la normal al activarse (y la normal
+  // quita los de beta/). Sus avisos y notificaciones van por el registro de la normal.
+  if (esBeta()) return;
   let pedidoRecargar = false;
   let mudanza = false;
   let recargando = false;

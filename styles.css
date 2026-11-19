@@ -831,3 +831,33 @@ body.con-hoja .avisos { top: calc(env(safe-area-inset-top) + 12px); bottom: auto
 /* Mientras una tarjeta se mueve es una capa propia, y el resplandor del aro (detrás, con z-index −1) quedaría encima de
    su fondo: se esconde esos 0,2 s (el aro, no). */
 .ej.abierto.en-movimiento::after { opacity: 0; }
+
+/* --- Lo de la 1.2.0: «Cancelar» y «Guardar» en Rutina (D-123) --- */
+
+/* La barra de los cambios sin guardar: fija sobre la navegación (con un descanso en marcha, encima de su barra), en el
+   color de los avisos. Mientras se ve, la página deja sitio debajo y los avisos breves salen por encima de ella. */
+.barra-borrador {
+  position: fixed; left: 0; right: 0; z-index: 24;
+  bottom: calc(var(--alto-nav) + env(safe-area-inset-bottom));
+  min-height: var(--alto-barra); padding: 8px var(--margen);
+  background: var(--aviso-fondo); color: var(--aviso-texto); border-top: 1px solid var(--borde);
+  box-shadow: 0 -4px 12px rgb(0 0 0 / .14);
+}
+.barra-borrador-fila { max-width: 560px; margin: 0 auto; display: flex; align-items: center; gap: 8px; }
+.barra-borrador-texto { flex: 1; min-width: 0; margin: 0; font-size: 14px; font-weight: 700; line-height: 1.25; }
+.barra-borrador .boton { flex: none; padding: 0 14px; }
+.barra-borrador .boton-secundario { background: transparent; color: var(--aviso-texto); border-color: currentColor; }
+body.con-descanso .barra-borrador { bottom: calc(var(--alto-nav) + var(--alto-barra) + env(safe-area-inset-bottom)); }
+body.con-borrador { padding-bottom: calc(var(--alto-nav) + var(--alto-barra) + env(safe-area-inset-bottom) + 24px); }
+body.con-borrador.con-descanso { padding-bottom: calc(var(--alto-nav) + 2 * var(--alto-barra) + env(safe-area-inset-bottom) + 24px); }
+body.con-borrador:not(.con-descanso):not(.con-hoja) .avisos { bottom: calc(var(--alto-nav) + var(--alto-barra) + env(safe-area-inset-bottom) + 8px); }
+/* En la lista de días, los que tienen algo sin guardar. */
+.marca-sin-guardar { color: var(--cuenta); font-weight: 700; }
+/* «Guardar · Descartar · Seguir editando»: los botones, uno debajo de otro. */
+.hoja-elegir .hoja-pie { flex-direction: column; }
+.hoja-elegir .hoja-pie .boton { flex: none; width: 100%; }
+/* La beta (D-124): «BETA» junto al nombre, en el color de los avisos; es un enlace a la app normal. */
+.marca-beta {
+  display: inline-flex; align-items: center; flex: none; min-height: 36px; padding: 0 12px; border-radius: 999px;
+  background: var(--aviso-fondo); color: var(--aviso-texto); font-size: 13px; font-weight: 800; letter-spacing: .06em; text-decoration: none;
+}

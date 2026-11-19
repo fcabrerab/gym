@@ -27,8 +27,14 @@ export async function ejecutar(c) {
     pulsar(b.d, "abrir-dia", id);
     await hastaQueVirtual(() => b.d.querySelector(`.pantalla-rutina[data-dia="${id}"]`), 1000);
   };
-  const ordenDias = () => datosGuardados().dias.map((d) => d.id);
-  const ordenEj = (diaId) => datosGuardados().dias.find((d) => d.id === diaId).ejercicios.map((e) => e.exerciseId);
+  // La rutina como se ve en Rutina: desde la 1.2.0, con lo que aún no se ha guardado (D-123); «Guardar», en su barra.
+  const rutina = () => leerJson("gym-beta-borrador")?.datos ?? datosGuardados();
+  const ordenDias = () => rutina().dias.map((d) => d.id);
+  const ordenEj = (diaId) => rutina().dias.find((d) => d.id === diaId).ejercicios.map((e) => e.exerciseId);
+  const guardarRutina = async (b) => {
+    pulsar(b.d, "guardar-rutina");
+    await esperar(50);
+  };
   const filaOrden = (d, clave) => d.querySelector(`[data-orden="${CSS.escape(clave)}"]`);
   const centro = (el) => {
     const r = el.getBoundingClientRect();
@@ -97,13 +103,13 @@ export async function ejecutar(c) {
     const moviendose = animando(b.d.querySelectorAll("[data-orden]"));
     const foco = b.d.activeElement;
     caso(moviendose >= 2 && ordenEj("tuesday-push").slice(0, 3).join() === "machine-shoulder-press,machine-chest-press,pec-deck",
-      `M2 bajar el superset: guardado al momento y ${moviendose} filas deslizándose`);
+      `M2 bajar el superset: cambia al momento y ${moviendose} filas deslizándose`);
     caso(foco?.dataset?.accion === "bajar-ejercicio" && foco.dataset.id === "machine-chest-press", "M2 el foco sigue en la flecha del superset movido");
     caso(await quieto(b), "M2 al acabar, nada se queda movido");
     reducirMovimiento(b);
     pulsar(b.d, "subir-ejercicio", "machine-chest-press");
-    caso(animando(b.d.querySelectorAll("[data-orden]")) === 0 && ordenEj("tuesday-push")[0] === "machine-chest-press",
-      "M2 con «Reducir movimiento», subirlo no anima nada (y se guarda igual)");
+    caso(animando(b.d.querySelectorAll("[data-orden]")) === 0 && ordenEj("tuesday-push")[0] === "machine-chest-press" && !leerJson("gym-beta-borrador"),
+      "M2 con «Reducir movimiento», subirlo no anima nada (y, de vuelta a como estaba, no queda nada sin guardar)");
     sinErrores(b, "M2");
     quitar(b);
   }
@@ -138,6 +144,8 @@ export async function ejecutar(c) {
     caso(b.w.location.hash === "#/rutina", `M3 el clic que llega al soltar no abre el día (${b.w.location.hash})`);
     caso(await quieto(b), "M3 la fila soltada se desliza a su sitio y al poco nada se mueve");
     await esperar(400);
+    await guardarRutina(b);
+    caso(JSON.stringify(datosGuardados().dias.map((d) => d.id)) === JSON.stringify(despues), "M3 con «Guardar», el orden nuevo queda guardado");
     pulsar(b.d, "abrir-dia", "thursday-pull");
     await esperar(50);
     caso(b.w.location.hash === "#/rutina/dia/thursday-pull", "M3 después, un toque normal abre el día como siempre");
@@ -229,7 +237,7 @@ export async function ejecutar(c) {
     const i = orden.indexOf("machine-chest-press");
     caso(orden[0] === "machine-shoulder-press" && orden[1] === "rope-triceps-pushdown" && i === 2 && orden[3] === "pec-deck",
       `M6 el superset, arrastrado entero: ${orden.slice(0, 5).join(", ")}`);
-    caso(datosGuardados().dias.find((d) => d.id === "tuesday-push").ejercicios.filter((e) => e.supersetId === "ss-m").length === 2,
+    caso(rutina().dias.find((d) => d.id === "tuesday-push").ejercicios.filter((e) => e.supersetId === "ss-m").length === 2,
       "M6 los dos siguen unidos en superset");
     await quieto(b);
     fila = filaOrden(b.d, "scaption-dumbbells");
@@ -312,6 +320,7 @@ export async function ejecutar(c) {
     const orden = ordenEj("tuesday-push");
     caso(orden.at(-1) === primero && orden[0] === "pec-deck", `M8 a mitad de la sesión, el primero pasa al final: ${orden.join(", ")}`);
     await esperar(450);
+    await guardarRutina(b);
     await ir(b, "entreno");
     await esperar(100);
     const enLista = [...b.d.querySelectorAll(".lista-ej > li.ej")].map((li) => li.dataset.ej);

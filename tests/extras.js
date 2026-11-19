@@ -212,6 +212,8 @@ export async function ejecutar(c) {
     await esperar(50);
     pulsar(b.d, "subir-dia", "wednesday-lower-a");
     await esperar(50);
+    pulsar(b.d, "guardar-rutina");
+    await esperar(50);
     const g = datosGuardados();
     caso(g.dias[0].id === "wednesday-lower-a" && g.dias[1].title === "Empuje" && g.rev === d.rev + 1, "F18 lo siguiente que se guarda parte de lo de la otra ventana (no lo pisa)");
     sinErrores(b, "F18");
@@ -335,11 +337,13 @@ export async function ejecutar(c) {
     quitar(b);
   }
 
-  // F35 mover y copiar un ejercicio a otro día
+  // F35 mover y copiar un ejercicio a otro día (desde la 1.2.0, en Rutina va a los cambios sin guardar: D-123)
   {
     await preparar(await datosBeta());
     const b = await cargarBeta();
-    const enDia = (diaId, id) => datosGuardados().dias.find((d) => d.id === diaId).ejercicios.some((e) => e.exerciseId === id);
+    // La rutina como se ve en Rutina (con lo que aún no se ha guardado) y la guardada.
+    const rutina = () => leerJson("gym-beta-borrador")?.datos ?? datosGuardados();
+    const enDia = (diaId, id, de = rutina()) => de.dias.find((d) => d.id === diaId).ejercicios.some((e) => e.exerciseId === id);
     b.d.querySelector('#nav [data-accion="ir-rutina"]').click();
     await esperar(50);
     pulsar(b.d, "abrir-dia", "tuesday-push");
@@ -353,8 +357,8 @@ export async function ejecutar(c) {
     b.d.querySelector('[data-accion="elegir-destino"][data-id="thursday-pull"]').click();
     await hastaQueVirtual(() => !hojaAbierta(b.d), 3000);
     await esperar(50);
-    caso(!enDia("tuesday-push", "machine-chest-press") && enDia("thursday-pull", "machine-chest-press") && avisoActual(b.d).startsWith("Movido a Jueves"),
-      `F35 mover al jueves («${avisoActual(b.d)}»)`);
+    caso(!enDia("tuesday-push", "machine-chest-press") && enDia("thursday-pull", "machine-chest-press") && avisoActual(b.d).startsWith("Movido a Jueves")
+      && enDia("tuesday-push", "machine-chest-press", datosGuardados()), `F35 mover al jueves («${avisoActual(b.d)}»), aún sin guardar`);
     pulsar(b.d, "deshacer");
     await esperar(50);
     caso(enDia("tuesday-push", "machine-chest-press") && !enDia("thursday-pull", "machine-chest-press"), "F35 deshacer el movimiento");
@@ -365,9 +369,15 @@ export async function ejecutar(c) {
     b.d.querySelector('[data-accion="elegir-destino"][data-id="wednesday-lower-a"]').click();
     await hastaQueVirtual(() => b.d.querySelectorAll(".capa-hoja").length === 1, 3000);
     await esperar(50);
-    caso(enDia("tuesday-push", "pec-deck") && enDia("wednesday-lower-a", "pec-deck") && avisoActual(b.d).startsWith("Copiado a Miércoles"), "F35 copiar al miércoles deja el ejercicio en los dos días");
-    pulsar(b.d, "cerrar-hoja");
+    caso(enDia("tuesday-push", "pec-deck") && enDia("wednesday-lower-a", "pec-deck") && avisoActual(b.d).startsWith("Copiado a Miércoles") && Boolean(hojaAbierta(b.d)),
+      "F35 copiar al miércoles deja el ejercicio en los dos días, y la hoja sigue abierta");
+    pulsar(b.d, "cancelar-ejercicio");
     await hastaQueVirtual(() => !hojaAbierta(b.d), 2000);
+    await esperar(50);
+    pulsar(b.d, "guardar-rutina");
+    await esperar(50);
+    caso(enDia("tuesday-push", "pec-deck", datosGuardados()) && enDia("wednesday-lower-a", "pec-deck", datosGuardados()) && !leerJson("gym-beta-borrador"),
+      "F35 al guardar, la copia queda en los dos días");
     sinErrores(b, "F35");
     quitar(b);
   }
