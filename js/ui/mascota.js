@@ -1,13 +1,15 @@
 // La mascota en Ajustes (D-133): su sección (encenderla o apagarla, y «Personalizarla») y su página (#/ajustes/mascota):
-// su nombre, su tamaño, el color de su luz, qué hace en el entreno y cómo es. Lo que se elige va a su ficha
-// (mascota/memoria.js), nunca a tus datos; la mascota en marcha se pone al día al momento (ctx.mascota(), de app.js).
+// su nombre, su tamaño, el color de su luz, qué hace en el entreno, su forma (la fase 2: de tus entrenos, que solo lee)
+// y cómo es. Lo que se elige va a su ficha (mascota/memoria.js), nunca a tus datos; la mascota en marcha se pone al día
+// al momento (ctx.mascota(), de app.js).
 
 import { h, icono, vaciar } from "./dom.js";
 import { boton, interruptor, seccion, ayuda } from "./piezas.js";
 import { ctx } from "./contexto.js";
 import * as memoria from "../mascota/memoria.js";
 import { rasgosDe, describir } from "../mascota/caracter.js";
-import { esBeta, fechaConAnio } from "../util.js";
+import { cuerpoDeTusEntrenos, formaVisible } from "../mascota/forma.js";
+import { ahora, esBeta, fechaConAnio } from "../util.js";
 
 const TAMANOS = [["pequena", "Pequeña"], ["normal", "Normal"], ["grande", "Grande"]];
 const LUCES = [["verde", "Verde"], ["cian", "Cian"], ["rosa", "Rosa"], ["ambar", "Ámbar"], ["violeta", "Violeta"]];
@@ -16,6 +18,27 @@ const ENTRENO = [
   ["rincon", "Contigo en el descanso", "En la serie, asomada abajo a la derecha; en el descanso sale, se recarga de luz y calienta para la siguiente."],
   ["escondida", "Escondida", "No sale mientras entrenas; vuelve al terminar."],
 ];
+
+// Cómo se la ve, por la forma que se le ve (la de fondo, más marcada con el bombeo del entreno: mascota/forma.js).
+const ESTADOS = [[0.2, "Gordita y fuera de forma"], [0.38, "Un poco blandita"], [0.55, "En su punto"], [0.8, "En forma"], [Infinity, "Muy definida"]];
+export const nombreForma = (forma) => ESTADOS.find(([hasta]) => forma < hasta)[1];
+const unir = (l) => (l.length > 1 ? `${l.slice(0, -1).join(", ")} y ${l[l.length - 1]}` : l[0] || "");
+
+// Su forma (la fase 2): de tus entrenos, que solo lee. Sin datos (aún no hay), nada.
+function seccionForma(f) {
+  const e = ctx.entrenosMascota();
+  if (!e) return null;
+  const c = cuerpoDeTusEntrenos(e, ahora(), { nacida: f.nacida });
+  const dias = c.porSemana === 1 ? "1 día" : `${c.porSemana} días`;
+  const hechos = c.ultimas4 === 0 ? "ninguno" : c.ultimas4 === 1 ? "1 día de entreno" : `${c.ultimas4} días de entreno`;
+  return seccion("Su forma",
+    h("p", { class: "linea-dato", "data-forma": formaVisible(c.fondo, c.general).toFixed(2) }, h("strong", null, nombreForma(formaVisible(c.fondo, c.general)))),
+    h("p", { class: "linea-dato" }, `En las últimas 4 semanas: ${hechos}. Tu rutina: ${dias} por semana.`),
+    c.general >= 0.15 ? h("p", { class: "linea-dato" }, "Con el bombeo de tu entreno, más marcada: se le pasa en unas horas.") : null,
+    c.bombeados.length ? h("p", { class: "linea-dato" }, `Bombeo: ${unir(c.bombeados)}.`) : null,
+    c.doloridos.length ? h("p", { class: "linea-dato" }, `Agujetas, suaves: ${unir(c.doloridos)}.`) : null,
+    ayuda("Su cuerpo sale de lo constante que eres con tu rutina, no de los kilos: lo de los últimos días cuenta más; si lo dejas, se ablanda poco a poco, y al volver se recupera rápido. En cada entreno se marca un poco más, y al día siguiente puede tener alguna agujeta."));
+}
 
 function opciones(lista, actual, accion, etiqueta, { muestra = null, desactivadas = false } = {}) {
   return h("div", { class: "opciones", role: "radiogroup", "aria-label": etiqueta },
@@ -35,7 +58,7 @@ export function seccionMascota() {
   return seccion("Mascota",
     interruptor({
       ajuste: "mascota-encendida", rotulo: nombre ? `${nombre}, tu mascota` : "Tu mascota", marcado: memoria.encendida(f, { beta: esBeta() }),
-      desactivado: Boolean(f.masNueva), ayuda: "Un monigote de luz que vive en la app y siente cada serie. Solo mira: nunca cambia tus datos.",
+      desactivado: Boolean(f.masNueva), ayuda: "Un monigote de luz que vive en la app, siente cada serie y tiene tu forma. Solo mira: nunca cambia tus datos.",
     }),
     boton("Personalizarla", "ir-mascota", { clase: "boton-secundario boton-ancho" }));
 }
@@ -69,10 +92,11 @@ export function pintarPaginaMascota(contenedor) {
     })),
     seccion("Su brillo", opciones(BRILLOS, a.brillo, "mascota-brillo", "Su brillo", { desactivadas: fija })),
     seccion("En el entreno", opciones(ENTRENO, a.entreno, "mascota-entreno", "En el entreno", { desactivadas: fija })),
+    seccionForma(f),
     seccion("Cómo es",
       ayuda("Su carácter le viene de nacimiento: cuánto pasea, se asoma, juega o se duerme. No habla ni te manda mensajes: mira, siente cada serie (ese músculo se le enciende un rato) y celebra tus marcas. Tócala y verás."),
       h("p", { class: "linea-dato" }, `Nació el ${fechaConAnio(f.nacida)}. La has tocado ${toques}.`),
-      ayuda("Vive solo en este móvil, en una ficha suya, aparte de tus datos: nunca los cambia. Pronto, su cuerpo contará tu forma (de gordito a definido) y recordará tus entrenos."))));
+      ayuda("Vive en este móvil, en una ficha suya, aparte de tus datos: nunca los cambia. Su ficha va también en tus copias («Exportar datos» y la del PC): al cargar una, vuelve ella, con su nombre y su carácter."))));
 }
 
 function cambiar(cambios) {

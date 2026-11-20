@@ -42,6 +42,13 @@ export const MUSCULOS = {
   gemelosI: [1.1, 1.1, 2.6], gemelosD: [1.1, 1.1, 2.6],
 };
 
+// Por dónde le duelen las agujetas (D-133, la fase 2): cada zona, con sus músculos y su gesto.
+export const REGIONES = {
+  brazos: { gesto: 'agujetasBrazos', musculos: ['bicepsI', 'bicepsD', 'tricepsI', 'tricepsD', 'hombrosI', 'hombrosD', 'hombrosPostI', 'hombrosPostD'] },
+  tronco: { gesto: 'agujetasTronco', musculos: ['pechoI', 'pechoD', 'dorsales', 'abs1', 'abs2', 'abs3', 'lumbares'] },
+  piernas: { gesto: 'agujetasPiernas', musculos: ['cuadricepsI', 'cuadricepsD', 'isquiosI', 'isquiosD', 'gluteos', 'gemelosI', 'gemelosD'] },
+};
+
 // Los grupos de la app («muscleGroup» de data/exercises.json): su gesto y lo que bombean.
 export const GRUPOS = {
   'Pecho': { gesto: 'pecho', musculos: ['pechoI', 'pechoD'] },
@@ -306,6 +313,42 @@ export const GESTOS = {
     cuadros: [[0.4, { cabeza: 9 }], [1.9, {}], [2.4, { cabeza: 0 }]],
     mirar: [[0.2, 2.2, 0, 0]],
     cara: [[0.9, 'tierna', 1.1]],
+  },
+
+  // ——— Con agujetas (D-133, la fase 2): suaves, se notan poco (los elige cerebro.js, por la zona que más le duele) ———
+  agujetasPiernas: { // una mano en la cadera y con la otra se frota el muslo, algo encorvada
+    nombre: 'Tiene agujetas en las piernas', dur: 3.0, espejable: true,
+    cuadros: [
+      [0.45, { orientacion: 35, inclinar: 26, ...piernasAd(10, -16), brazoI: 52, codoI: -100, brazoAdI: 0, codoAdI: 0,
+        brazoD: 4, codoD: 0, brazoAdD: 40, codoAdD: 10, hombros: 0.4 }],
+      [2.2, {}],
+      [3.0, { ...REPOSO, ...DE_PIE, orientacion: 0, inclinar: 0, hombros: 0 }],
+    ],
+    vibrar: [[0.5, 2.15, { brazoAdD: 10, codoAdD: 6 }, 2.6]],
+    cara: [[0.3, 'agotada', 1.1]],
+  },
+  agujetasBrazos: { // intenta levantar los brazos, le tiemblan y los deja caer: ¡uf!
+    nombre: 'Tiene agujetas en los brazos', dur: 3.0,
+    cuadros: [
+      [0.55, { ...brazos(52, -14), ...brazosAd(0, 0), hombros: 1 }],
+      [1.25, { ...brazos(60, -10) }],
+      [1.5, { ...REPOSO, hombros: 0 }],
+      [1.9, { hombros: 2.2, inclinar: 4 }],
+      [2.3, { hombros: -0.5 }],
+      [3.0, { hombros: 0, inclinar: 0 }],
+    ],
+    vibrar: [[0.5, 1.3, { brazoI: 3, brazoD: 3, codoI: 4, codoD: 4 }, 7]],
+    cara: [[0.3, 'esfuerzo', 1.1], [1.45, 'agotada', 1.0]],
+  },
+  agujetasTronco: {
+    nombre: 'Tiene agujetas en el tronco', dur: 3.0, espejable: true,
+    cuadros: [
+      [0.45, { ...EN_JARRAS, orientacion: 30, inclinar: -12, estirar: 0.015, hombros: -0.5 }],
+      [1.3, { lumbar: 6, pecho: 4 }],
+      [2.1, { lumbar: -4, pecho: -2 }],
+      [3.0, { ...REPOSO, orientacion: 0, inclinar: 0, lumbar: 0, pecho: 0, estirar: 0, hombros: 0 }],
+    ],
+    cara: [[0.3, 'agotada', 1.1], [2.2, 'contenta', 0.6]],
   },
 
   // ——— En el descanso (D-135). «objeto»: [desde, hasta, qué lleva, en qué mano] ———

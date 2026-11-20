@@ -6,9 +6,13 @@
 // En la app (D-133), lo del prototipo (bocetos/mascota/v3/) y, además: su carácter (cuántas papeletas tiene cada cosa
 // en el sorteo de qué hacer: «pesos», de caracter.js), el modo tranquilo (en el entreno: sin pasear ni saltar), saltos
 // entre tramos libres de las tarjetas (no solo de borde a borde), un techo para la cabeza y qué hacer si su superficie
-// se va de la pantalla. Qué hace cada pieza y cómo añadir algo, en LEEME.md.
+// se va de la pantalla. Y su cuerpo, de tus entrenos (la fase 2: forma.js, que se lo da con ponerCuerpo()): la forma
+// de fondo, el bombeo (el de cada músculo y el general, que la marca más) y las agujetas, que se notan poco (alguna vez
+// le duele y se queja; con las piernas cargadas, anda más despacio y salta menos). Qué hace cada pieza y cómo añadir
+// algo, en LEEME.md.
 import { POSE_BASE, MEDIDAS, mezclar, normalizar, cinematica, lerp, limitar, suave, tramo } from './esqueleto.js';
-import { GESTOS, GRUPOS, CARAS, MUSCULOS } from './gestos.js';
+import { GESTOS, GRUPOS, CARAS, MUSCULOS, REGIONES } from './gestos.js';
+import { formaVisible, BOMBEO_SERIE, GENERAL_SERIE } from './forma.js';
 
 const MARGEN = 14;        // px que deja hasta el borde de una tarjeta
 const VELOCIDAD = 34;     // px por segundo al pasear
@@ -18,11 +22,13 @@ const BOMBEO_DURA = 150;  // s que tarda en irse el bombeo (por defecto: en la a
 
 // Las papeletas de cada cosa en el sorteo de qué hacer (elegir()); su carácter las multiplica (caracter.js).
 // En la app salta más y se queda quieta menos que en el prototipo (D-134: que se mueva entre las tarjetas).
+// «agujetas»: las suyas con las agujetas en su punto (con menos, menos; sin, ninguna).
 export const PESOS = {
   quieto: 2.2, pasear: 3.2, saltar: 2.6, sentarse: 0.8, asomarse: 0.9, desperezarse: 0.4, rascarse: 0.45, mirarte: 0.7, dormir: 2.5,
+  agujetas: 1.1,
 };
 // En el modo tranquilo (en el entreno), solo estas: ni pasea ni salta.
-export const TRANQUILAS = new Set(['quieto', 'sentarse', 'asomarse', 'desperezarse', 'rascarse', 'mirarte', 'dormir']);
+export const TRANQUILAS = new Set(['quieto', 'sentarse', 'asomarse', 'desperezarse', 'rascarse', 'mirarte', 'dormir', 'agujetas']);
 const PASO = 22;          // grados que abre cada pierna al andar
 
 // La cara se enciende como un tubo de neón (parpadea y se queda) y se apaga igual.
@@ -62,11 +68,11 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
   const unoDe = (lista) => lista[Math.floor(azar() * lista.length)];
 
   const m = {
-    t: 0, x: 0, sup: null, ultY: null, perdida: false, desde: null, llegada: 0, forma: 0.25, escala,
+    t: 0, x: 0, sup: null, ultY: null, perdida: false, desde: null, llegada: 0, fondo: 0.25, general: 0, escala,
     descanso: null, rest: null, carga: 1, flash: -9, destinoSalto: null,
     pesos: {}, tranquila: false, suenoTras, bombeoDura,
     sueno: 0, accion: null, cola: [], previa: null, avisado: '',
-    musc: Object.fromEntries(Object.keys(MUSCULOS).map((k) => [k, { bombeo: 0, contr: 0 }])),
+    musc: Object.fromEntries(Object.keys(MUSCULOS).map((k) => [k, { bombeo: 0, contr: 0, agujetas: 0 }])),
     cara: null,
     mirada: { x: 0, y: 0, ox: 0, oy: 0, hasta: 0 },
     ladeo: 0,
@@ -134,14 +140,26 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
   }
   const ponerCara = (nombre, dur) => { m.cara = { nombre, t0: m.t, dur }; };
   const efecto = (tipo) => m.efectos.push({ tipo, t0: m.t, dur: { z: 2.4, chispas: 1.1 }[tipo] || 1, giro: entre(0, 60) });
+  // Cada serie: sus músculos, bombeados; y ella, un poco más marcada (el bombeo general). Al momento: luego forma.js lo
+  // pone exacto, de tus sesiones.
   function bombear(claves) {
-    for (const k of claves) m.musc[k].bombeo = Math.min(1, m.musc[k].bombeo + 0.4);
+    for (const k of claves) m.musc[k].bombeo = Math.min(1, m.musc[k].bombeo + BOMBEO_SERIE);
+    m.general = Math.min(1, m.general + GENERAL_SERIE);
+  }
+  // Cuánto le duele una zona (REGIONES: brazos, tronco o piernas), de 0 a 1.
+  const dolor = (zona) => Math.max(0, ...REGIONES[zona].musculos.map((k) => m.musc[k].agujetas));
+  // La zona que más le duele, o null si ninguna (o casi).
+  function masDolorida() {
+    let r = null;
+    for (const z in REGIONES) if (dolor(z) > 0.12 && (!r || dolor(z) > dolor(r))) r = z;
+    return r;
   }
 
-  // El cuerpo según la forma de fondo (gordito → definido) y cómo está cada músculo.
+  // El cuerpo según su forma (gordito → definido: la de fondo, más marcada con el bombeo general) y cómo está cada músculo.
   function cuerpoDe(resp = 0) {
-    const def = tramo(m.forma, 0.5, 1);      // definido: de la mitad para arriba
-    const gordo = tramo(m.forma, 0.45, 0.05); // gordito: de la mitad para abajo
+    const forma = formaVisible(m.fondo, m.general);
+    const def = tramo(forma, 0.5, 1);      // definido: de la mitad para arriba
+    const gordo = tramo(forma, 0.45, 0.05); // gordito: de la mitad para abajo
     const bultos = {}, ver = {}, luz = {};
     for (const k in MUSCULOS) {
       const [a, b, c] = MUSCULOS[k], s = m.musc[k];
@@ -172,10 +190,13 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
     };
   }
 
-  // Pasea de perfil, mirando hacia donde va, con la cabeza un poco girada hacia nosotros.
+  // Pasea de perfil, mirando hacia donde va, con la cabeza un poco girada hacia nosotros. Con agujetas en las piernas,
+  // más despacio y con pasos más cortos (y las rodillas, más tiesas).
   function caminar(destino) {
     let v = 0, fase = 0;
-    const zancada = () => 4 * (MEDIDAS.muslo + MEDIDAS.pierna) * Math.sin((PASO * Math.PI) / 180) * m.escala;
+    const cargadas = dolor('piernas');
+    const velocidad = VELOCIDAD * (1 - 0.3 * cargadas), paso = PASO * (1 - 0.25 * cargadas), rodilla = 50 * (1 - 0.3 * cargadas);
+    const zancada = () => 4 * (MEDIDAS.muslo + MEDIDAS.pierna) * Math.sin((paso * Math.PI) / 180) * m.escala;
     return {
       nombre: 'Pasea', t: 0, transicion: 0.35,
       alEmpezar() {
@@ -187,17 +208,17 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
         const s = sup(); // si su tramo libre ha encogido (la app cambió), no se sale de él
         destino = limitar(destino, s.x1 + MARGEN, s.x2 - MARGEN);
         const falta = destino - m.x, dir = Math.sign(falta) || 1;
-        v = lerp(v, Math.min(VELOCIDAD, Math.abs(falta) * 3 + 5), Math.min(1, dt * 6));
+        v = lerp(v, Math.min(velocidad, Math.abs(falta) * 3 + 5), Math.min(1, dt * 6));
         m.x += dir * Math.min(Math.abs(falta), v * dt);
         fase += (dt * 2 * Math.PI * v) / zancada();
-        const ritmo = Math.min(1, v / VELOCIDAD), sn = Math.sin(fase), cs = Math.cos(fase);
+        const ritmo = Math.min(1, v / velocidad), sn = Math.sin(fase), cs = Math.cos(fase);
         mirarCara(3 * dir, 0.6, 0.2);
         return {
           pose: {
             ...POSE_BASE, orientacion: 90 * dir, cabezaGiro: -38 * dir, inclinar: 5 * ritmo,
             musloI: 2, musloD: 2,
-            musloAdI: PASO * sn * ritmo, rodillaAdI: -(5 + 50 * Math.max(0, cs) * ritmo),
-            musloAdD: -PASO * sn * ritmo, rodillaAdD: -(5 + 50 * Math.max(0, -cs) * ritmo),
+            musloAdI: paso * sn * ritmo, rodillaAdI: -(5 + rodilla * Math.max(0, cs) * ritmo),
+            musloAdD: -paso * sn * ritmo, rodillaAdD: -(5 + rodilla * Math.max(0, -cs) * ritmo),
             brazoI: 6, brazoD: 6, brazoAdI: -24 * sn * ritmo, brazoAdD: 24 * sn * ritmo, codoAdI: 28, codoAdD: 28,
             estirar: 0.012 * Math.abs(cs) * ritmo,
           },
@@ -653,10 +674,12 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
       : { saltar: 1 + 2 * aburrida, pasear: 1 + 0.5 * aburrida };
     const aSitio = (acciones) => (incomoda && s.libres?.length ? [caminar(puntoEn(s, null, Infinity, true)), ...acciones] : acciones);
     const k = (n) => PESOS[n] * (m.pesos[n] ?? 1) * (ganas[n] ?? 1); // sus papeletas, con su carácter
+    const zona = masDolorida(); // con agujetas, a veces se queja de esa zona; con las piernas cargadas, salta menos
     const opciones = [
-      ['quieto', k('quieto')], ['pasear', k('pasear')], ['saltar', salto ? k('saltar') : 0],
+      ['quieto', k('quieto')], ['pasear', k('pasear')], ['saltar', salto ? k('saltar') * (1 - 0.6 * dolor('piernas')) : 0],
       ['sentarse', k('sentarse') * (1 + 3 * m.sueno)], ['asomarse', k('asomarse')], ['desperezarse', k('desperezarse')],
       ['rascarse', k('rascarse')], ['mirarte', k('mirarte')], ['dormir', m.sueno > 0.7 ? k('dormir') : 0],
+      ['agujetas', zona ? k('agujetas') * dolor(zona) : 0],
     ].filter(([n, p]) => p > 0 && (n !== m.previa || n === 'quieto' || n === 'pasear') && (!m.tranquila || TRANQUILAS.has(n)));
     let r = azar() * opciones.reduce((a, [, p]) => a + p, 0);
     let elegida = opciones[0][0];
@@ -677,6 +700,7 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
         return Math.abs(x - m.x) < 1 ? [asomarse()] : [caminar(x), asomarse()];
       }
       case 'desperezarse': case 'rascarse': case 'mirarte': return [gesto(GESTOS[elegida])];
+      case 'agujetas': return aSitio([gesto(GESTOS[REGIONES[zona].gesto])]);
       default: return aSitio([quieto()]);
     }
   }
@@ -718,6 +742,7 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
       s.contr = 0;
       s.bombeo = Math.max(0, s.bombeo - dt / m.bombeoDura);
     }
+    m.general = Math.max(0, m.general - dt / m.bombeoDura);
     m.destello = 0;
     ponerAlDiaDescanso(dt);
     if (!sup()) return null;
@@ -937,8 +962,25 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
     },
     get escala() { return m.escala; },
     set escala(v) { m.escala = v; },
-    get forma() { return m.forma; },
-    set forma(v) { m.forma = limitar(v, 0, 1); },
+    // La forma que se le ve (de 0, gordita, a 1, definida): la de fondo, más marcada con el bombeo general. Ponerla
+    // cambia la de fondo.
+    get forma() { return formaVisible(m.fondo, m.general); },
+    set forma(v) { m.fondo = limitar(Number(v) || 0, 0, 1); },
+    get fondo() { return m.fondo; },
+    get general() { return m.general; },
+    // Su cuerpo, de tus entrenos (forma.js: cuerpoDeTusEntrenos()): la forma de fondo, el bombeo general y, por
+    // músculo, el bombeo y las agujetas. Lo que falte, igual que estaba.
+    ponerCuerpo({ fondo, general, bombeo, agujetas } = {}) {
+      if (Number.isFinite(fondo)) m.fondo = limitar(fondo, 0, 1);
+      if (Number.isFinite(general)) m.general = limitar(general, 0, 1);
+      for (const k in m.musc) {
+        if (Number.isFinite(bombeo?.[k])) m.musc[k].bombeo = limitar(bombeo[k], 0, 1);
+        if (Number.isFinite(agujetas?.[k])) m.musc[k].agujetas = limitar(agujetas[k], 0, 1);
+      }
+    },
+    // Para mirarla: el bombeo y las agujetas de cada músculo, y la zona que más le duele.
+    get musculos() { return Object.fromEntries(Object.entries(m.musc).map(([k, s]) => [k, { bombeo: s.bombeo, agujetas: s.agujetas }])); },
+    get dolorida() { return masDolorida(); },
     get accion() { return m.accion?.nombre || ''; },
   };
   return api;

@@ -1,7 +1,8 @@
 // La mascota en la app (D-133): junta su cerebro (qué hace: cerebro.js), su traje (cómo se pinta: traje-neon.js), el
-// escenario (dónde se pone y cuándo se ve: escenario.js), su memoria (sus ajustes y lo que recuerda: memoria.js) y su
-// carácter (caracter.js), y escucha lo que pasa en la app (sucesos.js). La carga app.js, después de arrancar, solo si
-// está encendida; si algo falla aquí, la app sigue igual. Cómo está hecha y cómo añadirle cosas, en LEEME.md.
+// escenario (dónde se pone y cuándo se ve: escenario.js), su memoria (sus ajustes y lo que recuerda: memoria.js), su
+// carácter (caracter.js) y su cuerpo, de tus entrenos (forma.js), y escucha lo que pasa en la app (sucesos.js). La carga
+// app.js, después de arrancar, solo si está encendida; si algo falla aquí, la app sigue igual. Cómo está hecha y cómo
+// añadirle cosas, en LEEME.md.
 
 import { crearMascota } from "./cerebro.js";
 import { crearTrajeNeon } from "./traje-neon.js";
@@ -9,38 +10,41 @@ import { GRUPOS } from "./gestos.js";
 import { crearEscenario } from "./escenario.js";
 import * as memoria from "./memoria.js";
 import { rasgosDe, pesosDe, suenoDe } from "./caracter.js";
+import { cuerpoDeTusEntrenos, BOMBEO_HORAS } from "./forma.js";
 import { escuchar } from "../sucesos.js";
-import { esBeta, esLocal, parametroLocal } from "../util.js";
+import { ahora, esBeta, esLocal, parametroLocal } from "../util.js";
 
 export const ESCALAS = { pequena: 0.45, normal: 0.55, grande: 0.68 };
 export const BRILLOS = { suave: 0.6, normal: 1, intenso: 1.7 };
 const ALTO_DE_PIE = 135;  // lo que mide de pie, en unidades del esqueleto (con la cabeza)
-const BOMBEO_HORAS = 3;   // lo que tarda en irse el bombeo de cada serie (D-128: unas horas)
-const FORMA = 0.3;        // de 0 (gordito) a 1 (definido); en la fase 2, de tus entrenos
+const CUERPO_CADA = 5 * 60000; // cada cuánto mira otra vez su cuerpo (la forma y las agujetas cambian despacio)
 // Fotogramas por segundo: menos cuanto más tranquila (gasta menos batería).
 const FPS = { moviendose: 30, calma: 20, dormida: 12 };
 
-let app = { haySesion: () => false, descanso: () => null };
+let app = { haySesion: () => false, descanso: () => null, entrenos: () => null };
 let viva = null;
 const sucesos = [];
 
-// app: { haySesion(), descanso() } (¿hay una sesión de entreno en marcha?; el descanso, como lo da estadoDescanso() de
-// js/descanso.js). Se puede llamar más de una vez.
+// app: { haySesion(), descanso(), entrenos() } (¿hay una sesión de entreno en marcha?; el descanso, como lo da
+// estadoDescanso() de js/descanso.js; y una copia de tus entrenos, { dias, sesiones, ejercicios, enCurso }, para su
+// cuerpo: forma.js). Se puede llamar más de una vez.
 export function iniciar(adaptador = {}) {
   app = { ...app, ...adaptador };
   if (!sucesos.length) {
-    sucesos.push(escuchar("serie", alSerie), escuchar("fin-sesion", alFinSesion), escuchar("mascota", aplicar));
+    sucesos.push(escuchar("serie", alSerie), escuchar("fin-sesion", alFinSesion), escuchar("mascota", () => aplicar()));
   }
   aplicar();
 }
 
-// Con lo que diga su ficha: si está encendida, que esté (y con sus ajustes); si no, fuera.
-export function aplicar() {
+// Con lo que diga su ficha: si está encendida, que esté (y con sus ajustes); si no, fuera. Con «renacer» (su ficha es
+// otra: la de una copia cargada), vuelve a nacer, con su carácter.
+export function aplicar({ renacer = false } = {}) {
   const f = memoria.leer({ crear: true });
   if (!memoria.encendida(f, { beta: esBeta() })) {
     parar();
     return;
   }
+  if (renacer) parar();
   if (!viva) viva = nacer(f);
   viva.ajustar(f);
 }
@@ -54,6 +58,7 @@ export function parar() {
 function alSerie(d) {
   if (!viva) return;
   viva.modo();
+  viva.pedirCuerpo(); // con la serie, su cuerpo (ya guardada en tu sesión)
   if (viva.oculta) return;
   viva.grupoSiguiente = d.grupoSiguiente || d.grupo || "";
   if (GRUPOS[d.grupo]) viva.cerebro.serie(d.grupo);
@@ -64,6 +69,7 @@ function alSerie(d) {
 function alFinSesion(d) {
   if (!viva) return;
   viva.modo();
+  viva.pedirCuerpo();
   if (d.marcas > 0) viva.cerebro.record();
   else viva.cerebro.hacerGesto("saludo");
 }
@@ -97,7 +103,6 @@ function nacer(ficha) {
     bombeoDura: BOMBEO_HORAS * 3600,
   });
   cerebro.pesos = pesosDe(rasgos);
-  cerebro.forma = FORMA;
   escenario = crearEscenario({ doc, win, alto: () => ALTO_DE_PIE * cerebro.escala + 8 });
   escenario.alCalcular = () => cerebro.reubicar();
   const traje = crearTrajeNeon(escenario.lienzo);
@@ -132,9 +137,34 @@ function nacer(ficha) {
   vigiaPantalla.observe(doc.body, { attributes: true, attributeFilter: ["data-pantalla"] });
   const cadaRato = win.setInterval(modo, 3000); // una sesión que se descarta o se abandona no siempre avisa
 
-  // Cuándo te vio por última vez (para la fase 2: si llevas días sin venir).
+  // Su cuerpo, de tus entrenos (forma.js, la fase 2): al nacer, al volver a la app (mientras estaba oculta, el tiempo
+  // ha pasado), tras cada serie y al terminar, y cada 5 min. Si algo falla, sigue con el que tenía.
+  let cuerpo = null;
+  let pendiente = 0;
+  function ponerAlDiaCuerpo() {
+    win.clearTimeout(pendiente);
+    pendiente = 0;
+    let e = null;
+    try {
+      e = app.entrenos?.();
+    } catch {
+      e = null;
+    }
+    if (!e) return;
+    cuerpo = cuerpoDeTusEntrenos(e, ahora(), { nacida: ficha.nacida });
+    cerebro.ponerCuerpo(cuerpo);
+  }
+  const pedirCuerpo = () => {
+    if (!pendiente) pendiente = win.setTimeout(ponerAlDiaCuerpo, 300);
+  };
+  ponerAlDiaCuerpo();
+  const cadaCuerpo = win.setInterval(ponerAlDiaCuerpo, CUERPO_CADA);
+
+  // Cuándo te vio por última vez (para más adelante: si llevas días sin venir).
   const verte = () => {
-    if (doc.visibilityState === "visible") memoria.anotar((f) => { f.vista = Date.now(); });
+    if (doc.visibilityState !== "visible") return;
+    memoria.anotar((f) => { f.vista = Date.now(); });
+    ponerAlDiaCuerpo();
   };
   verte();
   doc.addEventListener("visibilitychange", verte);
@@ -207,6 +237,9 @@ function nacer(ficha) {
     escenario,
     rasgos,
     modo,
+    pedirCuerpo,
+    ponerAlDiaCuerpo,
+    get cuerpo() { return cuerpo; },
     get oculta() { return oculta; },
     get grupoSiguiente() { return grupoSiguiente; },
     set grupoSiguiente(g) { grupoSiguiente = g; },
@@ -227,6 +260,8 @@ function nacer(ficha) {
     quitar() {
       win.cancelAnimationFrame(raf);
       win.clearInterval(cadaRato);
+      win.clearInterval(cadaCuerpo);
+      win.clearTimeout(pendiente);
       vigiaTema.disconnect();
       vigiaPantalla.disconnect();
       doc.removeEventListener("visibilitychange", verte);
@@ -251,6 +286,14 @@ if (esLocal()) {
     get brillo() { return viva?.traje.brillo ?? null; },
     get carga() { return viva?.cerebro.carga ?? null; },
     get descanso() { return viva?.cerebro.descanso ?? null; },
+    // su cuerpo: la forma que se le ve, la de fondo, el bombeo general, cada músculo y lo último de forma.js
+    get forma() { return viva?.cerebro.forma ?? null; },
+    get fondo() { return viva?.cerebro.fondo ?? null; },
+    get general() { return viva?.cerebro.general ?? null; },
+    get musculos() { return viva?.cerebro.musculos ?? null; },
+    get dolorida() { return viva?.cerebro.dolorida ?? null; },
+    get cuerpo() { return viva?.cuerpo ?? null; },
+    ponerAlDiaCuerpo() { viva?.ponerAlDiaCuerpo(); },
     hacer(nombre) { viva?.cerebro.hacer(nombre); },
     get cabeza() { return viva?.cerebro.cabeza ?? null; },
     get rasgos() { return viva?.rasgos ?? null; },

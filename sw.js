@@ -4,7 +4,7 @@
 // Cada cambio en un archivo de la app obliga a subir VERSION aquí, en js/version.js y en la meta «gym-beta-version» de
 // index.html (la prueba lo comprueba). Entre versiones no se quitan ni se renombran ids de index.html: así una
 // versión vieja que arranque un momento con el HTML nuevo no se rompe (y app.js, al ver otra versión, recarga).
-const VERSION = "1.3.3";
+const VERSION = "1.3.4";
 const CACHE = `gym-beta-${VERSION}`;
 const CACHE_IMAGENES = "gym-beta-imagenes"; // sobrevive a las versiones
 const MAX_IMAGENES = 80;
@@ -56,6 +56,7 @@ const ARCHIVOS = [
   "./js/sucesos.js",
   "./js/mascota/mascota.js",
   "./js/mascota/memoria.js",
+  "./js/mascota/forma.js",
   "./js/mascota/caracter.js",
   "./js/mascota/escenario.js",
   "./js/mascota/cerebro.js",

@@ -1,9 +1,10 @@
 // La mascota (D-133): su memoria (su ficha, aparte de tus datos), su carácter (de su semilla), su cerebro (vive sin
 // errores; tranquila, ni pasea ni salta; en el rincón, asomada; si su tarjeta se va, aparece en otra), dónde se pone
-// (solo donde, de pie, no tapa nada) y, en la app, cómo se entera de cada serie, cómo se la toca y su página en Ajustes.
+// (solo donde, de pie, no tapa nada), su cuerpo de tus entrenos (la fase 2: la forma, el bombeo y las agujetas; su
+// ficha, en tus copias) y, en la app, cómo se entera de cada serie, cómo se la toca y su página en Ajustes.
 // En la beta sale de entrada; en la normal, solo si la enciendes.
 
-import { datosBeta } from "./datos.js";
+import { datosBeta, sesionInventada, ms } from "./datos.js";
 
 function azarDe(semilla) {
   let a = semilla;
@@ -16,13 +17,17 @@ function azarDe(semilla) {
 }
 
 export async function ejecutar(c) {
-  const { caso, esperar, limpiarBeta, guardar, leerJson, cargarBeta, quitar, pulsar, teclear, sinErrores, hastaQue } = c;
+  const { caso, esperar, limpiarBeta, guardar, leerJson, cargarBeta, quitar, pulsar, teclear, sinErrores, hastaQue, textoDe, avisoActual, hojaAbierta } = c;
   const { VERSION } = await import("/js/version.js");
   const memoria = await import("/js/mascota/memoria.js");
   const caracter = await import("/js/mascota/caracter.js");
   const { crearMascota, PESOS } = await import("/js/mascota/cerebro.js");
   const { calcularSuperficies } = await import("/js/mascota/escenario.js");
   const { GRUPOS } = await import("/js/mascota/gestos.js");
+  const forma = await import("/js/mascota/forma.js");
+  const copias = await import("/js/copias.js");
+  const HORA = 3600000;
+  const DIA = 24 * HORA;
 
   // MA1-MA4 Su memoria
   {
@@ -142,6 +147,133 @@ export async function ejecutar(c) {
       && libres(200).length === 1 && libres(200)[0][0] > 60 && libres(268).length === 0
       && libres(500).length === 1 && libres(500)[0][0] > 30 && libres(500)[0][0] < 70 && libres(500)[0][1] - libres(500)[0][0] > 250,
     `MA9 puede ponerse en todas las tarjetas (una fila que empieza donde su tarjeta, no cuenta aparte); sus tramos libres (de pie, no tapa nada): junto a un título o a un botón sin caja, y ninguno entre dos tarjetas pegadas (${texto})`);
+  }
+
+  // MA20-MA22 Su cuerpo, de tus entrenos (forma.js; D-133, la fase 2)
+  const d = await datosBeta();
+  const T = ms("2026-11-20T12:00:00");
+  const entrenos = (sesiones, enCurso = null) => ({ dias: d.dias, sesiones, ejercicios: d.ejercicios, enCurso });
+  // «n» sesiones enteras a «porSem» por semana, la última hace «hace» días (y 3 h), de la más vieja a la más nueva
+  const ritmo = (porSem, n, hace = 0, prefijo = "r") => Array.from({ length: n }, (_, i) => {
+    const inicio = T - hace * DIA - 3 * HORA - (i * 7 * DIA) / porSem;
+    return sesionInventada(d, d.dias[i % d.dias.length].id, new Date(inicio).toISOString(), { id: `${prefijo}-${i}` });
+  }).reverse();
+  const cuerpo = (sesiones, ahora = T, { nacida = null, enCurso = null } = {}) => forma.cuerpoDeTusEntrenos(entrenos(sesiones, enCurso), ahora, { nacida });
+  const fondo = (sesiones, ahora = T, nacida = null) => cuerpo(sesiones, ahora, { nacida }).fondo;
+
+  // MA20 La forma de fondo: de tu constancia con tu rutina
+  {
+    const e = entrenos(ritmo(5, 20));
+    const antes = JSON.stringify(e);
+    forma.cuerpoDeTusEntrenos(e, T, {});
+    const intacto = JSON.stringify(e) === antes;
+    const nueva = fondo([], T, T);
+    const siempre = fondo(ritmo(5, 20));
+    const aMedias = fondo(ritmo(2, 8));
+    const dejado = fondo(ritmo(5, 20, 30));
+    const dejadoAntes = fondo(ritmo(5, 20, 37, "a"));
+    const vuelta = fondo([...ritmo(5, 20, 37, "a"), ...ritmo(5, 5, 0, "b")]);
+    const entera = sesionInventada(d, "tuesday-push", "2026-11-20T09:00:00", { id: "entera" });
+    const parcial = sesionInventada(d, "tuesday-push", "2026-11-20T09:00:00", { id: "parcial", soloPrimeros: 1 });
+    const otraDelDia = sesionInventada(d, "thursday-pull", "2026-11-20T10:30:00", { id: "otra" });
+    const ayer = sesionInventada(d, "thursday-pull", "2026-11-19T10:30:00", { id: "ayer" });
+    const t = (x) => x.toFixed(2);
+    caso(forma.entrenosPorSemana(d.dias) === 5 && intacto && nueva >= 0.3 && nueva <= 0.4 && siempre >= 0.85 && aMedias >= 0.35 && aMedias <= 0.65
+      && dejado <= 0.2 && vuelta - dejadoAntes >= 0.3,
+    `MA20 su forma de fondo sale de tu constancia con tu rutina (5 por semana), sin tocar tus datos: al empezar, ${t(nueva)}; siempre, ${t(siempre)}; a 2 por semana, ${t(aMedias)}; un mes sin ir, ${t(dejado)}; y al volver una semana, de ${t(dejadoAntes)} a ${t(vuelta)}`);
+    caso(fondo([parcial]) < fondo([entera]) && fondo([entera, otraDelDia]) - fondo([entera]) < 0.01 && fondo([ayer, entera]) - fondo([entera]) > 0.08
+      && forma.entrenosPorSemana([{ diasSemana: [] }, { diasSemana: [] }, {}]) === 3 && forma.entrenosPorSemana([{ diasSemana: [1, 3] }, { diasSemana: [] }]) === 3,
+    "MA20 una sesión de pocas series cuenta menos; dos el mismo día, como una; y tu rutina: sus días de la semana (los que no tienen, uno cada uno)");
+  }
+
+  // MA21 El bombeo: cada serie hincha sus músculos y la marca un poco más; se va en 3 h, aunque cierres la app
+  {
+    const T0 = T - 5 * HORA;
+    const conHora = (hora) => ({
+      id: "s-pecho", diaId: "tuesday-push", diaNombre: "Martes", inicio: T0, fin: T0 + 10 * 60000, seriesPlan: 4,
+      ejercicios: [{ exerciseId: "pec-deck", nombre: "Pec deck", tipo: "peso", plan: null,
+        series: [1, 2, 3, 4].map((i) => (hora ? { kg: 40, reps: 10, t: T0 + i * 120000 } : { kg: 40, reps: 10 })) }],
+    });
+    const fin = T0 + 8 * 60000;
+    const b1 = cuerpo([conHora(true)], fin + 1000);
+    const b2 = cuerpo([conHora(true)], fin + HORA);
+    const b3 = cuerpo([conHora(true)], fin + 3.1 * HORA);
+    const sinHora = cuerpo([conHora(false)], fin + 30 * 60000);
+    const enCurso = { id: "s-ahora", diaId: "thursday-pull", inicio: T - 5 * 60000, ejercicios: { "lat-pulldown": [{ kg: 40, reps: 10, t: T - 60000 }] } };
+    const ahora = cuerpo([], T, { enCurso });
+    caso(b1.bombeo.pechoI > 0.99 && Math.abs(b2.bombeo.pechoI - 2 / 3) < 0.02 && b3.bombeo.pechoI === 0 && b1.bombeo.bicepsI === 0
+      && Math.abs(b1.general - (0.4 - 3 * (2 / 180))) < 0.01 && b2.general > 0 && b2.general < 0.1 && b1.bombeados.join() === "Pecho" && b3.bombeados.length === 0
+      && sinHora.bombeo.pechoI > 0.5 && ahora.bombeo.dorsales > 0.38 && ahora.general > 0 && ahora.bombeados.join() === "Espalda",
+    `MA21 el bombeo: 4 series de pecho lo hinchan entero (${b1.bombeo.pechoI.toFixed(2)}), a la hora le queda ${b2.bombeo.pechoI.toFixed(2)} y a las 3 h nada; el general, ${b1.general.toFixed(2)}; sin hora (una copia de antes), igual; y cuenta la sesión en marcha`);
+    caso(Math.abs(forma.formaVisible(0.4, 1) - 0.7) < 1e-9 && forma.formaVisible(0.4, 0) === 0.4 && forma.formaVisible(1, 1) === 1,
+      "MA21 con el bombeo general entero, se acerca a definida la mitad de lo que le falta");
+  }
+
+  // MA22 Las agujetas: al día siguiente, suaves; a veces se queja, y con las piernas cargadas anda más despacio
+  {
+    const Tq = T - 40 * HORA;
+    const piernas = {
+      id: "s-piernas", diaId: "wednesday-lower-a", diaNombre: "Miércoles", inicio: Tq - 20 * 60000, fin: Tq, seriesPlan: 6,
+      ejercicios: [{ exerciseId: "leg-press", nombre: "Prensa", tipo: "peso", plan: null, series: Array.from({ length: 6 }, (_, i) => ({ kg: 100, reps: 10, t: Tq - (6 - i) * 120000 })) }],
+    };
+    const en = (horas) => cuerpo([piernas], Tq + horas * HORA).agujetas.cuadricepsI;
+    const a30 = cuerpo([piernas], Tq + 30 * HORA);
+    caso(Math.abs(en(30) - 0.72) < 0.03 && en(2) === 0 && en(12) > 0 && en(12) < 0.5 && en(5 * 24) === 0 && a30.doloridos.join() === "Cuádriceps"
+      && a30.agujetas.pechoI === 0,
+    `MA22 las agujetas: empiezan a las 8 h (a las 12, ${en(12).toFixed(2)}), en su punto al día siguiente (${en(30).toFixed(2)}, con 6 series) y se van a los 4 días`);
+    const sitio = () => [{ id: "a", x1: 0, x2: 2000, y: 300 }];
+    const andado = (cargadas) => {
+      const m = crearMascota({ superficies: sitio, azar: azarDe(3), autonoma: false });
+      m.ponerCuerpo({ agujetas: { cuadricepsI: cargadas, cuadricepsD: cargadas } });
+      for (let i = 0; i < 10; i++) m.paso(1 / 30);
+      m.hacer("pasear");
+      m.paso(1 / 30);
+      const x0 = m.cabeza[0];
+      for (let i = 0; i < 60; i++) m.paso(1 / 30);
+      return { recorrido: Math.abs(m.cabeza[0] - x0), dolorida: m.dolorida };
+    };
+    const sano = andado(0);
+    const cargado = andado(0.8);
+    const quejas = (cargadas, semilla) => {
+      const m = crearMascota({ superficies: () => [{ id: "a", x1: 20, x2: 380, y: 300 }, { id: "b", x1: 200, x2: 380, y: 520 }], azar: azarDe(semilla), techo: () => 60 });
+      m.ponerCuerpo({ agujetas: { cuadricepsI: cargadas, cuadricepsD: cargadas } });
+      const vistas = new Set();
+      for (let i = 0; i < 30 * 600; i++) {
+        m.paso(1 / 30);
+        vistas.add(m.accion);
+      }
+      return vistas;
+    };
+    caso(cargado.recorrido < sano.recorrido * 0.85 && cargado.dolorida === "piernas" && sano.dolorida === null
+      && quejas(0.8, 11).has("Tiene agujetas en las piernas") && ![...quejas(0, 11)].some((x) => /agujetas/.test(x)),
+    `MA22 con las piernas cargadas anda más despacio (${Math.round(cargado.recorrido)} px en 2 s; sin agujetas, ${Math.round(sano.recorrido)}) y a veces se queja de ellas; sin agujetas, nunca`);
+  }
+
+  // MA23 Su ficha, en tus copias: va en «beta.mascota» y vuelve al cargarla
+  {
+    await limpiarBeta();
+    const sinFicha = copias.construirExportacion(await datosBeta(), ms("2026-11-20T10:00:00"));
+    memoria.leer({ ahora: 1000, crear: true });
+    memoria.cambiarAjustes({ nombre: "Chispa", luz: "rosa" });
+    const ficha = leerJson(memoria.CLAVE);
+    const exp = copias.construirExportacion(await datosBeta(), ms("2026-11-20T10:00:00"));
+    const leida = await copias.leerCopia(JSON.stringify(exp), { actuales: null, ahoraMs: 5 });
+    localStorage.removeItem(memoria.CLAVE);
+    const vuelve = memoria.restaurar(leida.mascota);
+    const tras = leerJson(memoria.CLAVE);
+    memoria.anotar((f) => { f.vista = 123; });
+    const otraVez = copias.construirExportacion(await datosBeta(), ms("2026-11-20T10:00:00"));
+    caso(!("mascota" in sinFicha.beta) && exp.beta.mascota?.semilla === ficha.semilla && exp.beta.mascota.ajustes.nombre === "Chispa"
+      && !("vista" in exp.beta.mascota) && JSON.stringify(otraVez) === JSON.stringify(exp)
+      && leida.ok && vuelve && tras?.semilla === ficha.semilla && tras.ajustes.luz === "rosa" && tras.nacida === ficha.nacida,
+    "MA23 su ficha va en la copia (beta.mascota; si nunca ha salido, no va; sin cuándo te vio, para que dos copias de lo mismo sean iguales) y al cargarla vuelve ella: su semilla, cuándo nació y sus ajustes");
+    const deLaNormal = await copias.leerCopia(JSON.stringify({ ...exp, beta: undefined }), { actuales: null, ahoraMs: 5 });
+    memoria.restaurar({ v: 99, semilla: 5, otra: 1 });
+    const masNueva = leerJson(memoria.CLAVE);
+    caso(deLaNormal.ok && deLaNormal.mascota === null && masNueva?.v === 99 && memoria.paraCopia()?.otra === 1
+      && memoria.restaurar("x") === false && memoria.restaurar([1]) === false && memoria.restaurar(null) === false,
+    "MA23 una copia sin ella no la trae; una ficha de una versión más nueva va y vuelve tal cual; lo que no es una ficha, no");
+    await limpiarBeta();
   }
 
   // MA17 El descanso (D-135): se recupera, descansa, calienta a los 10 s y se pone en guardia a los 3; su luz se recarga;
@@ -323,6 +455,75 @@ export async function ejecutar(c) {
     for (let i = 0; i < 24 && m?.superficie !== "rincon"; i++) m?.avanzar(0.25);
     caso(m?.superficie === "rincon" && !m?.descanso, `MA18 al acabar el descanso vuelve a su rincón (${m?.superficie})`);
     sinErrores(b, "MA18");
+    quitar(b);
+  }
+
+  // MA24 En la app (la fase 2): su cuerpo sale de tus entrenos (con tu rutina entera las últimas semanas, definida); al
+  // apuntar series, ese músculo se le hincha y se marca más; y su página lo dice («Su forma»)
+  {
+    await limpiarBeta();
+    const base = await datosBeta();
+    const T1 = ms("2026-11-03T18:00:00");
+    const sesiones = Array.from({ length: 20 }, (_, i) => sesionInventada(base, base.dias[i % base.dias.length].id,
+      new Date(T1 - DIA - (i * 7 * DIA) / 5).toISOString(), { id: `s-ma24-${i}` })).reverse();
+    guardar("gym-beta-datos", await datosBeta({ sesiones }));
+    guardar("gym-beta-ui", { versionVista: VERSION, versionVistaBeta: VERSION, ayudaSerieVista: true });
+    const b = await cargarBeta({ canal: "beta" });
+    await hastaQue(() => b.w.__gymMascota?.viva, 200);
+    const m = b.w.__gymMascota;
+    const fondoAntes = m?.fondo;
+    pulsar(b.d, "abrir-ejercicio", "pec-deck");
+    await esperar(200);
+    for (let i = 0; i < 3; i++) {
+      pulsar(b.d, "serie-hecha", "pec-deck");
+      await esperar(150);
+      pulsar(b.d, "descanso-saltar");
+      await esperar(100);
+    }
+    await esperar(400);
+    const pecho = m?.musculos?.pechoI?.bombeo;
+    caso(fondoAntes >= 0.85 && pecho >= 0.95 && m?.general > 0.1 && m?.forma > m?.fondo,
+      `MA24 en la app, su cuerpo sale de tus entrenos: con tu rutina entera, definida (${fondoAntes?.toFixed(2)}); al apuntar series, ese músculo se le hincha (pecho ${pecho?.toFixed(2)}) y se marca más (bombeo general, ${m?.general?.toFixed(2)})`);
+    b.d.querySelector('#nav [data-accion="ir-ajustes"]').click();
+    await esperar(100);
+    pulsar(b.d, "ir-mascota");
+    await esperar(100);
+    const pagina = textoDe(b.d, ".pantalla-mascota");
+    caso(/Su forma/.test(pagina) && /Muy definida/.test(pagina) && /Bombeo: Pecho/.test(pagina) && /En las últimas 4 semanas: \d+ días de entreno/.test(pagina),
+      `MA24 su página dice cómo está y por qué («${pagina.slice(pagina.indexOf("Su forma"), pagina.indexOf("Su forma") + 150)}»)`);
+    sinErrores(b, "MA24");
+    quitar(b);
+  }
+
+  // MA25 Cargar una copia que la trae: lo dice, vuelve ella (y nace otra vez, con su carácter) y «Deshacer» deja la de antes
+  {
+    await preparar();
+    const otra = { v: 1, nacida: ms("2026-10-01T10:00:00"), semilla: 4242, ajustes: { nombre: "Lumen", luz: "cian" }, vista: null, toques: 7 };
+    const exp = copias.construirExportacion(await datosBeta(), ms("2026-11-03T10:00:00"), { mascota: otra });
+    const b = await cargarBeta({ canal: "beta" });
+    await hastaQue(() => b.w.__gymMascota?.viva, 200);
+    const antes = leerJson(memoria.CLAVE);
+    b.d.querySelector('#nav [data-accion="ir-ajustes"]').click();
+    await esperar(100);
+    const input = b.d.querySelector('[data-campo="archivo"]');
+    const dt = new b.w.DataTransfer();
+    dt.items.add(new b.w.File([JSON.stringify(exp)], "copia.json", { type: "application/json" }));
+    input.files = dt.files;
+    input.dispatchEvent(new b.w.Event("change", { bubbles: true }));
+    await hastaQue(() => hojaAbierta(b.d), 200);
+    const previa = textoDe(b.d, ".capa-hoja:last-of-type .hoja");
+    pulsar(b.d, "confirmar");
+    await hastaQue(() => avisoActual(b.d).startsWith("Copia cargada"), 300);
+    await hastaQue(() => b.w.__gymMascota?.viva, 100);
+    const cargada = leerJson(memoria.CLAVE);
+    const luz = b.w.__gymMascota?.luz;
+    pulsar(b.d, "deshacer");
+    await esperar(100);
+    const deshecha = leerJson(memoria.CLAVE);
+    caso(previa.includes("Con tu mascota, Lumen") && previa.includes("tus ajustes y tu mascota") && cargada?.semilla === 4242 && cargada?.toques === 7
+      && luz === "cian" && Boolean(antes) && deshecha?.semilla === antes.semilla && b.d.querySelectorAll(".mascota-capa").length === 1,
+    `MA25 cargar una copia que la trae: lo dice («Con tu mascota, Lumen»), vuelve ella (su semilla y su luz: ${luz}) y «Deshacer» deja la de antes`);
+    sinErrores(b, "MA25");
     quitar(b);
   }
 

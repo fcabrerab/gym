@@ -9,6 +9,7 @@ import { ctx } from "./contexto.js";
 import { boton, control, ponerErrorControl, interruptor, seccion, ayuda } from "./piezas.js";
 import { terminarYGuardar } from "./entreno.js";
 import { seccionMascota, alAccionMascota, alCampoMascota } from "./mascota.js";
+import * as memoriaMascota from "../mascota/memoria.js";
 import * as almacen from "../almacen.js";
 import * as descanso from "../descanso.js";
 import * as avisosPc from "../avisos-pc.js";
@@ -525,6 +526,9 @@ async function leerYPrevisualizar(archivo) {
       ? contar(r.sesiones ?? 0, "sesión", "sesiones")
       : `Sin historial: se conserva el tuyo (${contar(actuales.sesiones.length, "sesión", "sesiones")})`),
   ];
+  // Su ficha (D-133), si la copia la trae: vuelve ella, con su nombre y su carácter.
+  const nombreMascota = typeof leida.mascota?.ajustes?.nombre === "string" ? leida.mascota.ajustes.nombre.trim().slice(0, memoriaMascota.NOMBRE_MAX) : "";
+  if (leida.mascota) lineas.push(h("p", { class: "vista-previa-linea" }, nombreMascota ? `Con tu mascota, ${nombreMascota}` : "Con tu mascota"));
   const raros = leida.raros || {};
   const partes = [];
   if (raros.sesiones) partes.push(contar(raros.sesiones, "sesión", "sesiones"));
@@ -543,9 +547,10 @@ async function leerYPrevisualizar(archivo) {
     await confirmar({ titulo: "Cargar una copia", contenido: h("div", { class: "vista-previa" }, lineas), aceptar: null, cancelar: "Cerrar" });
     return;
   }
+  const yMascota = leida.mascota ? ", tus ajustes y tu mascota" : " y tus ajustes";
   lineas.push(h("p", { class: "ayuda" }, leida.traeHistorial
-    ? "Se sustituyen tu rutina, tu historial, tus marcas y tus ajustes. Antes se guarda una copia automática."
-    : "Se sustituyen tu rutina, tus marcas y tus ajustes. Antes se guarda una copia automática."));
+    ? `Se sustituyen tu rutina, tu historial, tus marcas${yMascota}. Antes se guarda una copia automática.`
+    : `Se sustituyen tu rutina, tus marcas${yMascota}. Antes se guarda una copia automática.`));
   const ok = await confirmar({ titulo: "Cargar una copia", contenido: h("div", { class: "vista-previa" }, lineas), aceptar: "Cargar esta copia" });
   if (!ok) return;
   await cargarLeida(leida);
@@ -555,7 +560,22 @@ async function cargarLeida(leida) {
   const t = ahora();
   if (!(await antesDeQuitarDias(leida.datosNuevos.dias, "cargar la copia"))) return;
   const copiaHecha = await guardarCopiaAuto(almacen.datos(), "antes de cargar una copia", t);
-  const deshacer = almacen.mutar((d) => aplicarCopia(d, leida, t));
+  const deshacerDatos = almacen.mutar((d) => aplicarCopia(d, leida, t));
+  // Su ficha, si la copia la trae (D-133): vuelve ella; al deshacer, la de antes (o ninguna, si no tenía).
+  let deshacer = deshacerDatos;
+  if (leida.mascota) {
+    const antes = memoriaMascota.paraCopia();
+    memoriaMascota.restaurar(leida.mascota);
+    ctx.mascota({ renacer: true });
+    deshacer = () => {
+      const r = deshacerDatos();
+      if (r === false) return false;
+      if (antes) memoriaMascota.restaurar(antes);
+      else memoriaMascota.olvidar();
+      ctx.mascota({ renacer: true });
+      return r;
+    };
+  }
   ctx.aplicarTema(almacen.datos().ajustes.tema);
   ctx.repintar();
   avisarDeshacer(copiaHecha ? "Copia cargada" : "Copia cargada (sin copia automática previa)", deshacer, () => {
