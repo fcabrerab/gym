@@ -191,6 +191,49 @@ export function crearTrajeNeon(lienzo) {
     ctx.fillStyle = g;
     disco(ctx, x, y, R);
     pintarCara(f, parte);
+    if (f.cinta) pintarCinta(f, parte);
+  }
+
+  // La cinta (D-135, la 4): mientras entrenas, una cinta blanca alrededor de la cabeza, a la altura de la frente. Se
+  // pinta lo que da hacia nosotros (de frente, en la frente; de espaldas, la nuca) y, si se ve, el nudo con sus puntas.
+  function pintarCinta(f, parte) {
+    const zH = parte.centro[2];
+    const yb = -9.5, rb = Math.sqrt(17.6 * 17.6 - yb * yb);
+    const punto = (th) => f.cin.cara(rb * Math.cos(th), yb, 0.6, Math.sin(th) < 0);
+    const N = 40;
+    const anillo = Array.from({ length: N + 1 }, (_, i) => punto((i / N) * 2 * Math.PI));
+    const pintar = (color, ancho) => {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = ancho;
+      for (let i = 0; i < N; i++) {
+        const [a, b] = [anillo[i], anillo[i + 1]];
+        if (a[2] < zH - 0.5 || b[2] < zH - 0.5) continue; // detrás de la cabeza
+        ctx.beginPath();
+        ctx.moveTo(a[0], a[1]);
+        ctx.lineTo(b[0], b[1]);
+        ctx.stroke();
+      }
+    };
+    ctx.save();
+    ctx.lineCap = 'round';
+    pintar(col.borde, 6.2);
+    pintar('#f8fafc', 4.2);
+    const nudo = punto(-Math.PI / 2); // en la nuca
+    if (nudo[2] >= zH - 3) {
+      const lado = Math.sign(nudo[0] - parte.centro[0]) || 1;
+      for (const [dx, dy] of [[9, 5], [7, 11]]) {
+        const fin = [nudo[0] + lado * dx, nudo[1] + dy];
+        for (const [color, ancho] of [[col.borde, 4.6], ['#f8fafc', 2.8]]) {
+          ctx.strokeStyle = color;
+          ctx.lineWidth = ancho;
+          ctx.beginPath();
+          ctx.moveTo(nudo[0], nudo[1]);
+          ctx.quadraticCurveTo(nudo[0] + lado * dx * 0.6, nudo[1] - 1, fin[0], fin[1]);
+          ctx.stroke();
+        }
+      }
+    }
+    ctx.restore();
   }
 
   function pintarCara(f, parte) {
@@ -361,8 +404,9 @@ export function crearTrajeNeon(lienzo) {
 
   // origen: dónde cae la esquina de arriba a la izquierda del lienzo, en px del escenario. En la app el lienzo es
   // pequeño y va con ella; en el prototipo, [0, 0] (el lienzo es todo el escenario).
-  // Lo que lleva en la mano (D-135): la botella (de la mano hacia fuera, como el antebrazo), la toalla, que cuelga, o el
-  // trofeo, una copa dorada siempre derecha, con el pie en la mano.
+  // Lo que lleva en la mano (D-135): la botella (de la mano hacia fuera, como el antebrazo), la toalla, que cuelga, el
+  // trofeo, una copa dorada siempre derecha, con el pie en la mano, o una mancuerna pequeña, con la barra cruzada en el
+  // puño y un disco a cada lado.
   function pintarObjeto(f, { tipo, mano }) {
     const p = f.cin.p;
     const m = p['mano' + mano];
@@ -416,6 +460,18 @@ export function crearTrajeNeon(lienzo) {
       ctx.fill();
       ctx.stroke();
       trazo([[x - 4.5, y - 15], [x - 3.5, y - 9.5]], 'rgba(255, 255, 255, 0.75)', 1.4); // el brillo
+    } else if (tipo === 'mancuerna') {
+      const [px, py] = [-uy, ux]; // de lado a lado del puño: cruzada con el antebrazo
+      const a = [m[0] - px * 6.5, m[1] - py * 6.5];
+      const b = [m[0] + px * 6.5, m[1] + py * 6.5];
+      trazo([a, b], col.borde, 3.8); // la barra
+      trazo([a, b], '#e2e8f0', 2);
+      for (const [cx, cy] of [a, b]) { // los discos
+        const d1 = [cx - ux * 4.2, cy - uy * 4.2];
+        const d2 = [cx + ux * 4.2, cy + uy * 4.2];
+        trazo([d1, d2], col.borde, 7);
+        trazo([d1, d2], '#94a3b8', 4.8);
+      }
     }
     ctx.restore();
   }
@@ -454,7 +510,7 @@ export function crearTrajeNeon(lienzo) {
       if (parte.centro) pintarCabeza(f, parte);
       else pintarParte(f, parte);
     }
-    if (f.objeto) pintarObjeto(f, f.objeto);
+    for (const o of [].concat(f.objeto || [])) pintarObjeto(f, o); // uno, o uno en cada mano
     pintarEfectos(f);
     if (huesos) pintarHuesos(f);
     ctx.restore();

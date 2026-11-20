@@ -200,11 +200,12 @@ export function cinematica(pose, cuerpo, { espejo = false, apoyo = 'pies' } = {}
   }
   partes.sort((x, y) => x.clave - y.clave);
 
-  // un punto de la cara (x a la derecha, y hacia abajo, desde el centro de la cabeza), ya visto desde la pantalla
+  // un punto de la cara (x a la derecha, y hacia abajo, desde el centro de la cabeza), ya visto desde la pantalla; con
+  // «atras», el de la nuca (para lo que da la vuelta a la cabeza, como la cinta)
   const asiente = pose.cabezaAd + iP * 0.5, girada = pose.cabezaGiro;
-  const cara = (x, y, encima = 0.4) => {
+  const cara = (x, y, encima = 0.4, atras = false) => {
     const R = M.cabeza + encima;
-    let z = Math.sqrt(Math.max(0, R * R - x * x - y * y));
+    let z = (atras ? -1 : 1) * Math.sqrt(Math.max(0, R * R - x * x - y * y));
     let yy = y * cos(asiente) + z * sen(asiente);
     z = -y * sen(asiente) + z * cos(asiente);
     const xx = x * cos(aC) - yy * sen(aC);

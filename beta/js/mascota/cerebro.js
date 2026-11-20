@@ -11,7 +11,7 @@
 // le duele y se queja; con las piernas cargadas, anda más despacio y salta menos). Qué hace cada pieza y cómo añadir
 // algo, en LEEME.md.
 import { POSE_BASE, MEDIDAS, mezclar, normalizar, cinematica, lerp, limitar, suave, tramo } from './esqueleto.js';
-import { GESTOS, GRUPOS, CARAS, MUSCULOS, REGIONES, CON_TROFEO } from './gestos.js';
+import { GESTOS, GRUPOS, CARAS, MUSCULOS, REGIONES, CON_TROFEO, IMITAR } from './gestos.js';
 import { formaVisible, BOMBEO_SERIE, GENERAL_SERIE } from './forma.js';
 
 const MARGEN = 14;        // px que deja hasta el borde de una tarjeta
@@ -71,7 +71,7 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
   const m = {
     t: 0, x: 0, sup: null, ultY: null, perdida: false, desde: null, llegada: 0, fondo: 0.25, general: 0, escala,
     descanso: null, rest: null, carga: 1, flash: -9, destinoSalto: null,
-    pesos: {}, tranquila: false, suenoTras, bombeoDura, trofeo: false, calentado: -1e9, saludar: null,
+    pesos: {}, tranquila: false, suenoTras, bombeoDura, trofeo: false, calentado: -1e9, saludar: null, cinta: false,
     sueno: 0, accion: null, cola: [], previa: null, avisado: '',
     musc: Object.fromEntries(Object.keys(MUSCULOS).map((k) => [k, { bombeo: 0, contr: 0, agujetas: 0 }])),
     cara: null,
@@ -457,7 +457,8 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
       m.carga = lerp(m.carga, 1, Math.min(1, dt * 1.5));
       return;
     }
-    if (m.rest?.id !== d.id) m.rest = { id: d.id, recuperada: false, calentando: false, guardia: false, recargada: false };
+    // un descanso nuevo; en más o menos 6 de cada 10, imitará tu ejercicio (para que no sea siempre lo mismo)
+    if (m.rest?.id !== d.id) m.rest = { id: d.id, recuperada: false, calentando: false, guardia: false, recargada: false, imitara: azar() < 0.6 };
     m.sueno = Math.min(m.sueno, 0.3); // descansando contigo no le entra sueño
     m.carga = lerp(m.carga, 0.35 + 0.95 * limitar(d.fraccion, 0, 1), Math.min(1, dt * 3));
     if (!m.rest.recargada && d.fraccion >= 0.985) {
@@ -487,8 +488,11 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
       r.recuperada = true;
       return [gesto(GESTOS.jadear), gesto(GESTOS.secarse)];
     }
-    const opciones = [['sentarse', 3], ['beber', 1.5], ['reloj', 1.4], ['desperezarse', 0.7], ['quieto', 1], ['mirarte', 0.8], ['pasear', 0.7]]
-      .filter(([n]) => n !== m.previa || n === 'sentarse');
+    // imitar tu ejercicio (el de la serie que acabas de hacer): en los descansos que toca, una vez
+    const puedeImitar = r && r.imitara && !r.imitado && IMITAR[m.descanso?.grupo];
+    const opciones = [['sentarse', 3], ['beber', 1.5], ['reloj', 1.4], ['desperezarse', 0.7], ['quieto', 1], ['mirarte', 0.8], ['pasear', 0.7],
+      ['imitar', puedeImitar ? 2.5 : 0]]
+      .filter(([n, p]) => p > 0 && (n !== m.previa || n === 'sentarse'));
     let x = azar() * opciones.reduce((a, [, p]) => a + p, 0);
     let elegida = opciones[0][0];
     for (const [n, p] of opciones) {
@@ -502,12 +506,36 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
       case 'sentarse': return aSitio([sentarse(entre(5, 9))]);
       case 'beber': return aSitio([gesto(GESTOS.beber)]);
       case 'reloj': return [mirarReloj()];
+      case 'imitar':
+        r.imitado = true;
+        return aSitio([imitar(m.descanso.grupo)]);
       case 'desperezarse': return [gesto(GESTOS.desperezarse)];
       case 'mirarte': return [gesto(GESTOS.mirarte)];
       case 'pasear': return [caminar(puntoEn(s))];
       default: return aSitio([quieto()]);
     }
   }
+  // Imita tu ejercicio (D-135, la 4): con su mancuerna pequeña (o dos), unas repeticiones del de ese grupo (IMITAR de
+  // gestos.js), con cara de esfuerzo y ese músculo encendido en cada subida; al acabar, contenta.
+  function imitar(grupo, reps = 4) {
+    const def = IMITAR[grupo];
+    const a = { ...POSE_BASE, ...def.a }, b = { ...a, ...def.b };
+    const T = 1.2, entra = 0.35, sale = 0.6, dur = entra + reps * T + sale;
+    const objeto = def.manos === 'ambas' ? [{ tipo: 'mancuerna', mano: 'I' }, { tipo: 'mancuerna', mano: 'D' }] : { tipo: 'mancuerna', mano: def.manos || 'D' };
+    const musculos = GRUPOS[grupo]?.musculos || [];
+    return {
+      nombre: def.nombre, t: 0, transicion: 0.4,
+      actualizar(dt) {
+        const t = (this.t += dt);
+        const dentro = t > entra && t < entra + reps * T;
+        const u = dentro ? (1 - Math.cos((2 * Math.PI * (t - entra)) / T)) / 2 : 0;
+        for (const k of musculos) m.musc[k].contr = Math.max(m.musc[k].contr, 0.55 * u);
+        return { pose: mezclar(a, b, u), apoyo: 'pies', x: m.x, y: sup().y, cara: dentro ? 'esfuerzo' : 'contenta', objeto };
+      },
+      get hecha() { return this.t >= dur; },
+    };
+  }
+
   // Mira la cuenta atrás de la barra del descanso.
   function mirarReloj() {
     return {
@@ -876,7 +904,7 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
     const f = {
       t: m.t, cin, raiz, escala: m.escala, pose, apoyo: salida.apoyo, cuerpo, cara, abiertos,
       mirada: [m.mirada.x, m.mirada.y], efectos: m.efectos.map((e) => ({ ...e, edad: m.t - e.t0 })),
-      ocultar, sombra, destello: m.destello, accion: m.accion.nombre, carga: m.carga, objeto: salida.objeto || null,
+      ocultar, sombra, destello: m.destello, accion: m.accion.nombre, carga: m.carga, objeto: salida.objeto || null, cinta: m.cinta,
     };
     m.ultimo = f;
     return f;
@@ -915,6 +943,9 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
     // Su trofeo (D-135): si hoy has batido una marca entrenando, lo lleva el resto del día.
     get trofeo() { return m.trofeo; },
     set trofeo(v) { m.trofeo = Boolean(v); },
+    // Su cinta (D-135, la 4): la lleva mientras hay una sesión en marcha.
+    get cinta() { return m.cinta; },
+    set cinta(v) { m.cinta = Boolean(v); },
     // Un toque en el escenario: si es en ella, reacciona; si no, mira hacia allí (y a veces se acerca).
     tocar(px, py) {
       if (!api.contiene(px, py)) {
@@ -969,8 +1000,12 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
           return p ? [caminar(p.x0), saltar(p.s1, p.x1)] : [quieto()];
         },
       };
+      const [accion, grupo] = String(nombre).split(':');
       if (GESTOS[nombre]) reaccionar([gesto(GESTOS[nombre], { espejo: false })]);
-      else if (otras[nombre]) {
+      else if (accion === 'imitar' && IMITAR[grupo]) {
+        m.cola = [imitar(grupo, 1e3)];
+        empezar(m.cola.shift());
+      } else if (otras[nombre]) {
         m.cola = otras[nombre]();
         empezar(m.cola.shift());
       }
