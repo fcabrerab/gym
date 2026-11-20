@@ -5,7 +5,7 @@
 import { datosBeta } from "./datos.js";
 
 export async function ejecutar(c) {
-  const { caso, esperar, real, limpiarBeta, guardar, leerJson, cargarBeta, quitar, textoDe, sinErrores } = c;
+  const { caso, esperar, real, limpiarBeta, guardar, leerJson, cargarBeta, quitar, textoDe, sinErrores, hastaQue } = c;
   const { VERSION } = await import("/js/version.js");
   const preparar = async () => {
     await limpiarBeta();
@@ -44,6 +44,27 @@ export async function ejecutar(c) {
     caso(!b.d.querySelector(".marca-beta") && b.d.title === "Gym" && ui.versionVista === VERSION && !("versionVistaBeta" in ui),
       "BT4 la app normal no dice «BETA» y apunta su versión vista como siempre");
     sinErrores(b, "BT4");
+    quitar(b);
+  }
+
+  // BT5 La normal enlaza a la beta (arriba y en Ajustes) solo si en beta/ hay una más nueva (D-134); si no, nada.
+  {
+    await preparar();
+    const { compararVersiones } = await import("/js/beta.js");
+    const r = await real(fetch("/beta/js/version.js", { cache: "no-store" }).catch(() => null));
+    const vBeta = r?.ok ? ((await real(r.text())).match(/VERSION = "([^"]+)"/)?.[1] || null) : null;
+    const hay = Boolean(vBeta) && compararVersiones(vBeta, VERSION) > 0;
+    const b = await cargarBeta();
+    await hastaQue(() => !hay || b.d.querySelector(".marca-ir-beta"), 200);
+    const arriba = b.d.querySelector(".marca-ir-beta");
+    b.d.querySelector('#nav [data-accion="ir-ajustes"]').click();
+    await esperar(50);
+    const enAjustes = b.d.querySelector('.pantalla-ajustes a[href="./beta/"]');
+    caso(hay ? arriba?.getAttribute("href") === "./beta/" && enAjustes?.textContent === "Probar la beta" : !arriba && !enAjustes,
+      hay ? `BT5 hay una beta más nueva (${vBeta}): arriba, «BETA ›», y en Ajustes, «Probar la beta»` : `BT5 sin una beta más nueva en beta/ (${vBeta || "no hay"}), la normal no enlaza a nada`);
+    caso(compararVersiones("1.3.0", "1.2.1") > 0 && compararVersiones("1.2.1", "1.2.1") === 0 && compararVersiones("1.10.0", "1.9.9") > 0
+      && compararVersiones("1.2", "1.2.0") === 0 && compararVersiones("1.2.0", "1.3.0") < 0, "BT5 compara las versiones número a número");
+    sinErrores(b, "BT5");
     quitar(b);
   }
 }

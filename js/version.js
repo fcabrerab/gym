@@ -1,12 +1,19 @@
 // Versión de la app. La misma VERSION está en ../sw.js y en la meta «gym-beta-version» de ../index.html: cada
 // cambio en un archivo de la app obliga a subirla en los tres sitios (una prueba de tests/ comprueba que coinciden).
 // Hasta la 0.2.10 fue la beta, en beta/; desde la 1.0.0, es la app, en la dirección de siempre (D-121).
-export const VERSION = "1.2.0";
-export const FECHA_VERSION = "2026-11-19";
+export const VERSION = "1.2.1";
+export const FECHA_VERSION = "2026-11-20";
 
 // Novedades por versión, de la más nueva a la más vieja. Se enseñan en Ajustes → La app → Novedades y, la primera
 // vez, en «Qué tiene de nuevo».
 export const NOVEDADES = [
+  {
+    version: "1.2.1",
+    fecha: "2026-11-20",
+    cambios: [
+      "Cuando hay una beta con cosas nuevas para probar, arriba, junto al nombre, sale «BETA ›», y en Ajustes → La app, «Probar la beta»: te llevan a ella. La beta usa tus mismos datos; para volver, toca «BETA» allí.",
+    ],
+  },
   {
     version: "1.2.0",
     fecha: "2026-11-19",

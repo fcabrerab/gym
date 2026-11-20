@@ -4,7 +4,7 @@
 // Cada cambio en un archivo de la app obliga a subir VERSION aquí, en js/version.js y en la meta «gym-beta-version» de
 // index.html (la prueba lo comprueba). Entre versiones no se quitan ni se renombran ids de index.html: así una
 // versión vieja que arranque un momento con el HTML nuevo no se rompe (y app.js, al ver otra versión, recarga).
-const VERSION = "1.2.0";
+const VERSION = "1.2.1";
 const CACHE = `gym-beta-${VERSION}`;
 const CACHE_IMAGENES = "gym-beta-imagenes"; // sobrevive a las versiones
 const MAX_IMAGENES = 80;
@@ -12,9 +12,10 @@ const PREFIJO = "gym-beta-";
 // Las cachés de la app vieja (su service worker estaba aquí mismo, en la raíz): se borran al activarse este (D-121).
 const PREFIJO_VIEJA = "gym-pwa-";
 const BASE = new URL("./", self.location).href; // la carpeta de la app
-// Lo que no es de la app aunque cuelgue de su carpeta: la rutina publicada (siempre de la red, como antes), las pruebas
-// y la dirección vieja de la beta (que solo lleva aquí). Este service worker no las atiende.
-const AJENAS = ["./data/", "./tests/", "./beta/"].map((ruta) => new URL(ruta, BASE).href);
+// Lo que no es de la app aunque cuelgue de su carpeta: la rutina publicada (siempre de la red, como antes), las pruebas,
+// la beta (D-124) y las páginas de prueba de bocetos/ (D-132: si las guardara, el móvil vería versiones viejas). Este
+// service worker no las atiende.
+const AJENAS = ["./data/", "./tests/", "./beta/", "./bocetos/"].map((ruta) => new URL(ruta, BASE).href);
 const ajena = (url) => AJENAS.some((ruta) => url.startsWith(ruta));
 const ARCHIVOS = [
   "./",
@@ -50,6 +51,7 @@ const ARCHIVOS = [
   "./js/ui/brillo.js",
   "./js/ui/movimiento.js",
   "./js/ui/arrastre.js",
+  "./js/beta.js",
 ];
 
 const pedirFresco = (ruta) => new Request(new URL(ruta, BASE), { cache: "reload" });

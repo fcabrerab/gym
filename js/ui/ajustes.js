@@ -12,6 +12,7 @@ import * as almacen from "../almacen.js";
 import * as descanso from "../descanso.js";
 import * as avisosPc from "../avisos-pc.js";
 import * as copiaPc from "../copia-pc.js";
+import * as beta from "../beta.js";
 import * as S from "../sesion.js";
 import { VERSION, FECHA_VERSION, NOVEDADES } from "../version.js";
 import { ESQUEMA, LIMITES, validarDatos, reparar, migrar, diaPorId } from "../modelo.js";
@@ -270,6 +271,11 @@ export function pintarAjustes(contenedor) {
           h("p", { class: "linea-dato", id: "sin-conexion" }, `Funciona sin conexión: ${sinConexion ? "sí" : "todavía no"}`),
           sinConexion ? null : ayuda("Se prepara sola la primera vez que la app se abre con conexión: ciérrala y vuelve a abrirla con conexión, y ya funcionará sin ella."),
           boton("Buscar actualización", "buscar-actualizacion", { clase: "boton-secundario boton-ancho" }),
+          // Si hay una beta más nueva (D-134): qué es y cómo llegar a ella.
+          beta.disponible() ? [
+            h("p", { class: "linea-dato" }, `Hay una beta, la ${beta.disponible().version}: lo nuevo, para probarlo antes de que llegue aquí. Usa tus mismos datos.`),
+            h("a", { class: "boton boton-secundario boton-ancho", href: "./beta/" }, "Probar la beta"),
+          ] : null,
         ],
       boton("Novedades", "novedades", { clase: "boton-secundario boton-ancho" }),
       boton("Apuntar un fallo o una idea", "apuntes", { clase: "boton-secundario boton-ancho", ico: "lapiz" }),

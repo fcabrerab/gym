@@ -861,3 +861,6 @@ body.con-borrador:not(.con-descanso):not(.con-hoja) .avisos { bottom: calc(var(-
   display: inline-flex; align-items: center; flex: none; min-height: 36px; padding: 0 12px; border-radius: 999px;
   background: var(--aviso-fondo); color: var(--aviso-texto); font-size: 13px; font-weight: 800; letter-spacing: .06em; text-decoration: none;
 }
+
+/* En la app normal, si hay una beta más nueva (D-134): «BETA ›», un enlace a ella, con borde en vez de fondo. */
+.marca-ir-beta { background: transparent; border: 1.5px solid currentColor; }
