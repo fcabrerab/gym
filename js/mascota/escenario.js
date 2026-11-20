@@ -35,7 +35,8 @@ function conCaja(el) {
 // barra; alto: lo que mide de pie, en px; idDe(el): un número fijo por elemento; scrollY: lo desplazada que está la
 // página (yDoc = y + scrollY: la «y» en la página, que no cambia al desplazarla). libres: los tramos [x1, x2] donde,
 // de pie, no tapa nada.
-export function calcularSuperficies({ raiz, abajo = null, region, alto, anchoMin = 46, idDe, scrollY = 0 }) {
+// evitar: { top, bottom, left, right } (o null): una zona donde no ponerse ni tapar (en el descanso, el ejercicio abierto).
+export function calcularSuperficies({ raiz, abajo = null, region, alto, anchoMin = 46, idDe, scrollY = 0, evitar = null }) {
   const visible = (r) => r.width > 0 && r.height > 0 && r.bottom > region.y1 - alto && r.top < region.y2 + alto;
   const caja = (el, r) => ({ el, l: r.left, r: r.right, t: r.top, b: r.bottom });
   const obstaculos = [];
@@ -85,6 +86,7 @@ export function calcularSuperficies({ raiz, abajo = null, region, alto, anchoMin
     const x1 = r.left + 8;
     const x2 = r.right - 8;
     if (x2 - x1 < anchoMin) return;
+    if (evitar && y > evitar.top - 2 && y - alto < evitar.bottom && x2 > evitar.left && x1 < evitar.right) return;
     superficies.push({ id: `${tipo}-${idDe(el)}`, el, x1, x2, y, yDoc: fija ? null : y + scrollY, c1: r.left, c2: r.right, tipo, libres: libresDe(el, y, x1, x2) });
   };
   for (const { el, r } of unicas) poner(el, r, "tarjeta", false);
@@ -121,6 +123,7 @@ export function crearEscenario({ doc = document, win = window, alto, anchoMin = 
   let dpr = 1;
   let colocado = null;
   let enPagina = false;
+  let evitar = null; // un selector: lo que no tapar (en el descanso, el ejercicio abierto)
   let alCalcular = () => {};
   const quitar = [];
 
@@ -148,7 +151,8 @@ export function crearEscenario({ doc = document, win = window, alto, anchoMin = 
     medir();
     let todas = [];
     if (!rincon && pantalla) {
-      todas = calcularSuperficies({ raiz: pantalla, abajo: barraAbajo(), region, alto: alto(), anchoMin, idDe, scrollY: win.scrollY });
+      const zona = evitar ? doc.querySelector(evitar)?.getBoundingClientRect() : null;
+      todas = calcularSuperficies({ raiz: pantalla, abajo: barraAbajo(), region, alto: alto(), anchoMin, idDe, scrollY: win.scrollY, evitar: zona });
     }
     lista = todas.length ? todas : [rinconAhora()];
     alCalcular(lista);
@@ -300,6 +304,20 @@ export function crearEscenario({ doc = document, win = window, alto, anchoMin = 
     medirLienzo,
     colocar,
     get enPagina() { return enPagina; },
+    // En el descanso: lo que no tapar (un selector, o null).
+    get evitar() { return evitar; },
+    set evitar(sel) {
+      if ((sel || null) === evitar) return;
+      evitar = sel || null;
+      calcular();
+    },
+    // Dónde está la cuenta atrás del descanso (para mirarla), en px de la ventana, o null.
+    reloj() {
+      const b = doc.getElementById("barra-descanso");
+      if (!b || b.hidden) return null;
+      const r = b.getBoundingClientRect();
+      return r.height ? [r.left + 60, r.top + r.height / 2] : null;
+    },
     set alCalcular(fn) { alCalcular = fn || (() => {}); },
     // En el entreno: solo el rincón.
     get rincon() { return rincon; },

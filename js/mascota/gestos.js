@@ -307,4 +307,40 @@ export const GESTOS = {
     mirar: [[0.2, 2.2, 0, 0]],
     cara: [[0.9, 'tierna', 1.1]],
   },
+
+  // ——— En el descanso (D-135). «objeto»: [desde, hasta, qué lleva, en qué mano] ———
+  jadear: {
+    nombre: 'Recupera el aliento', dur: 3.2,
+    cuadros: [
+      [0.45, { orientacion: 40, inclinar: 32, ...brazos(14, 6), ...brazosAd(38, 8), ...piernasAd(22, -36), hombros: 0.6 }],
+      [2.7, {}],
+      [3.2, { ...REPOSO, orientacion: 0, inclinar: 0, ...piernasAd(0, -4), hombros: 0 }],
+    ],
+    vibrar: [[0.45, 2.7, { hombros: 1.8, inclinar: 3 }, 2.4]],
+    cara: [[0.2, 'agotada', 2.7]],
+  },
+  secarse: {
+    nombre: 'Se seca el sudor', dur: 2.8, espejable: true,
+    cuadros: [[0.45, { brazoD: 150, codoD: 104, codoAdD: 0, brazoAdD: 24, cabeza: -6 }], [2.1, {}],
+      [2.8, { brazoD: 10, codoD: -6, codoAdD: 14, brazoAdD: 0, cabeza: 0 }]],
+    vibrar: [[0.5, 2.0, { brazoAdD: 16, cabeza: 2 }, 1.8]],
+    cara: [[0.2, 'agotada', 1.4], [1.7, 'contenta', 1.0]],
+    objeto: [[0.05, 2.75, 'toalla', 'D']],
+  },
+  beber: {
+    nombre: 'Bebe agua', dur: 3.2, espejable: true,
+    cuadros: [[0.6, { brazoD: 70, codoD: 124, brazoAdD: 44, codoAdD: 0, cabeza: -12, inclinar: -4 }], [2.3, {}],
+      [3.2, { brazoD: 10, codoD: -6, brazoAdD: 0, codoAdD: 14, cabeza: 0, inclinar: 0 }]],
+    vibrar: [[0.8, 2.2, { cabeza: 1.5 }, 3]],
+    cara: [[2.4, 'contenta', 0.8]],
+    objeto: [[0, 3.2, 'botella', 'D']],
+  },
+  chocar: {
+    nombre: '¡Choca esos cinco!', dur: 1.9, espejable: true,
+    cuadros: [[0.35, { brazoD: 128, codoD: 16, codoAdD: 0, brazoAdD: 36, orientacion: 10 }], [1.4, {}],
+      [1.9, { brazoD: 10, codoD: -6, codoAdD: 14, brazoAdD: 0, orientacion: 0 }]],
+    cara: [[0.25, 'risa', 1.4]],
+    efectos: [[0.55, 'chispas']],
+    destello: [0.5, 1.1],
+  },
 };

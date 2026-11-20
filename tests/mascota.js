@@ -144,6 +144,41 @@ export async function ejecutar(c) {
     `MA9 puede ponerse en todas las tarjetas (una fila que empieza donde su tarjeta, no cuenta aparte); sus tramos libres (de pie, no tapa nada): junto a un título o a un botón sin caja, y ninguno entre dos tarjetas pegadas (${texto})`);
   }
 
+  // MA17 El descanso (D-135): se recupera, descansa, calienta a los 10 s y se pone en guardia a los 3; su luz se recarga;
+  // y si la tocas, choca los cinco
+  {
+    const m = crearMascota({ superficies: () => [{ id: "a", x1: 20, x2: 380, y: 300 }, { id: "b", x1: 40, x2: 360, y: 420 }], azar: azarDe(11) });
+    for (let i = 0; i < 30; i++) m.paso(1 / 30);
+    const total = 60;
+    const vistas = [];
+    let cargaInicio = null;
+    let cargaFin = 0;
+    for (let i = 0; i <= total * 30; i++) {
+      const quedan = Math.max(0, Math.ceil(total - i / 30));
+      m.descanso = { id: "d1", quedan, fraccion: 1 - quedan / total, pausa: false, grupoSiguiente: "Pecho" };
+      m.paso(1 / 30);
+      if (vistas[vistas.length - 1] !== m.accion) vistas.push(m.accion);
+      if (i === 45) cargaInicio = m.carga;
+      if (i === total * 30) cargaFin = m.carga;
+    }
+    const donde = (n) => vistas.indexOf(n);
+    caso(donde("Recupera el aliento") >= 0 && donde("Se seca el sudor") > donde("Recupera el aliento")
+      && donde("Calienta para la siguiente") > donde("Se seca el sudor") && donde("¡Lista para la siguiente!") > donde("Calienta para la siguiente")
+      && cargaInicio < 0.6 && cargaFin > 1.2,
+    `MA17 en el descanso se recupera, descansa, calienta a los 10 s y se pone en guardia a los 3; su luz, de ${cargaInicio?.toFixed(2)} a ${cargaFin.toFixed(2)} (${vistas.join(" → ")})`);
+    m.descanso = { id: "d2", quedan: 50, fraccion: 0.2, pausa: false, grupoSiguiente: "Pecho" };
+    for (let i = 0; i < 30 * 8; i++) m.paso(1 / 30);
+    if (m.cabeza) m.tocar(...m.cabeza);
+    let choca = false;
+    for (let i = 0; i < 30 * 5 && !choca; i++) {
+      m.paso(1 / 30);
+      choca = /Choca/.test(m.accion);
+    }
+    m.descanso = null;
+    for (let i = 0; i < 30 * 3; i++) m.paso(1 / 30);
+    caso(choca && Math.abs(m.carga - 1) < 0.1, `MA17 si la tocas en el descanso, choca los cinco; y sin descanso, su luz vuelve a la de siempre (${m.carga.toFixed(2)})`);
+  }
+
   const preparar = async () => {
     await limpiarBeta();
     guardar("gym-beta-datos", await datosBeta());
@@ -180,7 +215,8 @@ export async function ejecutar(c) {
     caso(/pecho/i.test(m?.accion) && m?.tranquila && m?.superficie === "rincon",
       `MA11 al apuntar una serie de pecho va a su rincón del entreno y la siente (${[...new Set(vistas)].join(" → ")}, ${m?.superficie})`);
 
-    m?.avanzar(6); // ya asomada
+    m?.avanzar(6); // ya fuera del rincón, en el descanso (D-135)
+    for (let i = 0; i < 20 && /Salta|Baja de un salto/.test(m?.accion); i++) m?.avanzar(0.25); // quieta, no a medio salto
     const [hx, hy] = (m?.cabeza || [0, 0]).map(Math.round);
     let llega = 0;
     const contar = () => { llega += 1; };
@@ -192,9 +228,13 @@ export async function ejecutar(c) {
     debajo.dispatchEvent(new b.w.MouseEvent("click", { bubbles: true, clientX: hx, clientY: hy }));
     b.d.removeEventListener("click", contar, true);
     avisos.hidden = false;
-    m?.avanzar(0.3);
-    caso(llega === 0 && /susto|saluda|cosquillas/i.test(m?.accion) && leerJson(memoria.CLAVE)?.toques === 1,
-      `MA12 tocarla: reacciona (${m?.accion}) y el toque no pulsa lo que tiene debajo`);
+    let reaccion = "";
+    for (let i = 0; i < 16 && !reaccion; i++) {
+      m?.avanzar(0.25);
+      if (/susto|saluda|cosquillas|Choca/i.test(m?.accion)) reaccion = m.accion;
+    }
+    caso(llega === 0 && Boolean(reaccion) && leerJson(memoria.CLAVE)?.toques === 1,
+      `MA12 tocarla: reacciona (${reaccion || m?.accion}; en el descanso, choca los cinco) y el toque no pulsa lo que tiene debajo`);
 
     b.d.querySelector('#nav [data-accion="ir-ajustes"]').click();
     await esperar(100);
@@ -222,6 +262,37 @@ export async function ejecutar(c) {
     const vuelve = await hastaQue(() => m?.viva, 100);
     caso(apagada && Boolean(vuelve) && b.d.querySelectorAll(".mascota-capa").length === 1, "MA14 apagada, se va (y no gasta nada); encendida, vuelve");
     sinErrores(b, "MA10-MA14");
+    quitar(b);
+  }
+
+  // MA18 En la app: tras sentir la serie, en el descanso sale del rincón, lejos del ejercicio abierto y con la luz baja; al
+  // acabar el descanso, vuelve a asomarse en su rincón
+  {
+    await preparar();
+    const b = await cargarBeta({ canal: "beta" });
+    await hastaQue(() => b.w.__gymMascota?.viva, 200);
+    const m = b.w.__gymMascota;
+    pulsar(b.d, "abrir-ejercicio", "pec-deck");
+    await esperar(200);
+    pulsar(b.d, "serie-hecha", "pec-deck");
+    await esperar(200);
+    const vistas = [];
+    for (let i = 0; i < 40 && (!m?.superficie || m?.superficie === "rincon"); i++) {
+      m?.avanzar(0.25);
+      vistas.push(m?.accion);
+    }
+    m?.avanzar(0.5);
+    const fuera = m?.superficie;
+    const abierto = b.d.querySelector(".ej.abierto")?.getBoundingClientRect();
+    const sup = m?.superficies.find((s) => s.id === fuera);
+    const lejos = Boolean(sup) && (!abierto || !(sup.y > abierto.top - 2 && sup.y - 82 < abierto.bottom && sup.x2 > abierto.left && sup.x1 < abierto.right));
+    caso(Boolean(fuera) && fuera !== "rincon" && lejos && Boolean(m?.descanso) && m?.carga < 0.8,
+      `MA18 tras sentir la serie, en el descanso sale del rincón (${fuera}), lejos del ejercicio abierto, con la luz baja (${m?.carga?.toFixed(2)}; ${[...new Set(vistas)].join(" → ")})`);
+    pulsar(b.d, "descanso-saltar");
+    await esperar(200);
+    for (let i = 0; i < 24 && m?.superficie !== "rincon"; i++) m?.avanzar(0.25);
+    caso(m?.superficie === "rincon" && !m?.descanso, `MA18 al acabar el descanso vuelve a su rincón (${m?.superficie})`);
+    sinErrores(b, "MA18");
     quitar(b);
   }
 

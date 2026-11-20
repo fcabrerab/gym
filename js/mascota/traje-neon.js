@@ -95,7 +95,8 @@ export function crearTrajeNeon(lienzo) {
   function pintarHalo(f) {
     const [x0, y0, x1, y1] = caja(f), w = x1 - x0, h = y1 - y0;
     if (w <= 0 || h <= 0) return;
-    for (const [extra, alfa] of [[10 * (0.8 + 0.2 * brillo), col.halo2 * (1 + 2 * f.destello) * brillo], [4.5, col.halo1 * (1 + 1.6 * f.destello) * brillo]]) {
+    const intensidad = brillo * Math.max(0.25, f.carga ?? 1); // en el descanso, la carga: de apagada a recargada
+    for (const [extra, alfa] of [[10 * (0.8 + 0.2 * brillo), col.halo2 * (1 + 2 * f.destello) * intensidad], [4.5, col.halo1 * (1 + 1.6 * f.destello) * intensidad]]) {
       hctx.setTransform(dpr, 0, 0, dpr, -ox * dpr, -oy * dpr);
       hctx.clearRect(x0, y0, w, h);
       hctx.translate(f.raiz[0], f.raiz[1]);
@@ -358,12 +359,48 @@ export function crearTrajeNeon(lienzo) {
 
   // origen: dónde cae la esquina de arriba a la izquierda del lienzo, en px del escenario. En la app el lienzo es
   // pequeño y va con ella; en el prototipo, [0, 0] (el lienzo es todo el escenario).
+  // Lo que lleva en la mano (D-135): la botella (de la mano hacia fuera, como el antebrazo) o la toalla, que cuelga.
+  function pintarObjeto(f, { tipo, mano }) {
+    const p = f.cin.p;
+    const m = p['mano' + mano];
+    const c = p['codo' + mano];
+    if (!m || !c) return;
+    const d = Math.hypot(m[0] - c[0], m[1] - c[1]) || 1;
+    const ux = (m[0] - c[0]) / d;
+    const uy = (m[1] - c[1]) / d;
+    const trazo = (puntos, color, ancho) => {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = ancho;
+      ctx.beginPath();
+      ctx.moveTo(puntos[0][0], puntos[0][1]);
+      if (puntos.length === 3) ctx.quadraticCurveTo(puntos[1][0], puntos[1][1], puntos[2][0], puntos[2][1]);
+      else ctx.lineTo(puntos[1][0], puntos[1][1]);
+      ctx.stroke();
+    };
+    ctx.save();
+    ctx.lineCap = 'round';
+    if (tipo === 'botella') {
+      const a = [m[0] - ux * 3, m[1] - uy * 3];
+      const b = [m[0] + ux * 9, m[1] + uy * 9];
+      const t = [m[0] + ux * 12.5, m[1] + uy * 12.5];
+      trazo([a, b], col.borde, 7.6);
+      trazo([a, b], '#7dd3fc', 5.6);
+      trazo([[a[0] - uy * 1.2, a[1] + ux * 1.2], [b[0] - uy * 1.2, b[1] + ux * 1.2]], 'rgba(255, 255, 255, 0.7)', 1.4);
+      trazo([b, t], col.borde, 3.6);
+    } else if (tipo === 'toalla') {
+      const tira = [m, [m[0] + 7, m[1] + 8], [m[0] + 2, m[1] + 17]];
+      trazo(tira, col.borde, 5.6);
+      trazo(tira, '#f8fafc', 3.8);
+    }
+    ctx.restore();
+  }
+
   function dibujar(f, origen = [0, 0]) {
     [ox, oy] = origen;
     ctx.setTransform(dpr, 0, 0, dpr, -ox * dpr, -oy * dpr);
     ctx.clearRect(ox, oy, ancho, alto);
     if (!f) return;
-    base = huesos ? 0.3 : 1;
+    base = (huesos ? 0.3 : 1) * Math.min(1, 0.45 + 0.55 * (f.carga ?? 1)); // con poca carga, más apagada
     ctx.save();
     const izq = ox - 50, der = ox + ancho + 50, arriba = oy - 50, abajo = oy + alto + 50;
     if (recorte) {
@@ -392,6 +429,7 @@ export function crearTrajeNeon(lienzo) {
       if (parte.centro) pintarCabeza(f, parte);
       else pintarParte(f, parte);
     }
+    if (f.objeto) pintarObjeto(f, f.objeto);
     pintarEfectos(f);
     if (huesos) pintarHuesos(f);
     ctx.restore();

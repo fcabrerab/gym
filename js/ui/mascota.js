@@ -13,7 +13,7 @@ const TAMANOS = [["pequena", "Pequeña"], ["normal", "Normal"], ["grande", "Gran
 const LUCES = [["verde", "Verde"], ["cian", "Cian"], ["rosa", "Rosa"], ["ambar", "Ámbar"], ["violeta", "Violeta"]];
 const BRILLOS = [["suave", "Suave"], ["normal", "Normal"], ["intenso", "Intenso"]];
 const ENTRENO = [
-  ["rincon", "Quieta en un rincón", "Se asoma abajo a la derecha y desde allí siente cada serie."],
+  ["rincon", "Contigo en el descanso", "En la serie, asomada abajo a la derecha; en el descanso sale, se recarga de luz y calienta para la siguiente."],
   ["escondida", "Escondida", "No sale mientras entrenas; vuelve al terminar."],
 ];
 

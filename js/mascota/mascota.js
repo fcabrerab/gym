@@ -20,11 +20,12 @@ const FORMA = 0.3;        // de 0 (gordito) a 1 (definido); en la fase 2, de tus
 // Fotogramas por segundo: menos cuanto más tranquila (gasta menos batería).
 const FPS = { moviendose: 30, calma: 20, dormida: 12 };
 
-let app = { haySesion: () => false };
+let app = { haySesion: () => false, descanso: () => null };
 let viva = null;
 const sucesos = [];
 
-// app: { haySesion() } (¿hay una sesión de entreno en marcha?). Se puede llamar más de una vez.
+// app: { haySesion(), descanso() } (¿hay una sesión de entreno en marcha?; el descanso, como lo da estadoDescanso() de
+// js/descanso.js). Se puede llamar más de una vez.
 export function iniciar(adaptador = {}) {
   app = { ...app, ...adaptador };
   if (!sucesos.length) {
@@ -54,6 +55,7 @@ function alSerie(d) {
   if (!viva) return;
   viva.modo();
   if (viva.oculta) return;
+  viva.grupoSiguiente = d.grupoSiguiente || d.grupo || "";
   if (GRUPOS[d.grupo]) viva.cerebro.serie(d.grupo);
   else viva.cerebro.hacerGesto("mirarte"); // un ejercicio sin grupo (uno tuyo nuevo): te mira
   if (d.marca) viva.cerebro.record();
@@ -89,6 +91,7 @@ function nacer(ficha) {
     superficies: () => escenario.superficies(),
     escala: ESCALAS[ficha.ajustes.tamano] || ESCALAS.normal,
     techo: () => escenario.region().y1,
+    reloj: () => escenario.reloj(),
     alReubicar: () => escenario.aparecer(),
     suenoTras: suenoDe(rasgos),
     bombeoDura: BOMBEO_HORAS * 3600,
@@ -101,18 +104,24 @@ function nacer(ficha) {
   const reducido = win.matchMedia?.("(prefers-reduced-motion: reduce)");
   let oculta = false;
   let entreno = "rincon";
+  let entrenando = false;
+  let fuera = false; // en el descanso, fuera del rincón
+  let grupoSiguiente = "";
 
   const ponerTema = () => { traje.tema = doc.documentElement.dataset.tema === "oscuro" ? "oscuro" : "claro"; };
   ponerTema();
   const vigiaTema = new MutationObserver(ponerTema);
   vigiaTema.observe(doc.documentElement, { attributes: true, attributeFilter: ["data-tema"] });
 
-  // En el entreno (en su pantalla, con una sesión en marcha): quieta en el rincón, o escondida, según sus ajustes.
+  // En el entreno (en su pantalla, con una sesión en marcha): en la serie, asomada en el rincón; en el descanso, fuera,
+  // lejos del ejercicio abierto (D-135); o escondida todo el rato, según sus ajustes.
   function modo() {
-    const entrenando = doc.body.dataset.pantalla === "entreno" && Boolean(app.haySesion());
+    entrenando = doc.body.dataset.pantalla === "entreno" && Boolean(app.haySesion());
     const esconder = entrenando && entreno === "escondida";
-    escenario.rincon = entrenando;
-    cerebro.tranquila = entrenando || Boolean(reducido?.matches);
+    const enLaSerie = entrenando && !fuera;
+    escenario.evitar = entrenando && fuera ? ".ej.abierto" : null;
+    escenario.rincon = enLaSerie;
+    cerebro.tranquila = enLaSerie || Boolean(reducido?.matches);
     if (esconder !== oculta) {
       oculta = esconder;
       escenario.lienzo.hidden = esconder;
@@ -151,6 +160,27 @@ function nacer(ficha) {
     traje.dibujar(f, origen);
   }
 
+  // Un paso de su vida: el descanso de la app (cuánto queda, para su carga y lo que hace; y, tras sentir la serie, fuera
+  // del rincón), sus superficies al día y lo que hace.
+  function vivir(dt) {
+    const d = leerDescanso();
+    cerebro.descanso = d;
+    const sale = Boolean(d) && !cerebro.reaccionando;
+    if (sale !== fuera) {
+      fuera = sale;
+      modo();
+    }
+    escenario.ponerAlDia();
+    return cerebro.paso(dt);
+  }
+
+  function leerDescanso() {
+    const e = app.descanso?.();
+    if (!entrenando || !e || (e.fase !== "corriendo" && e.fase !== "pausa")) return null;
+    const total = Math.max(1, e.duracion || 0, e.quedan || 0);
+    return { id: e.id, quedan: e.quedan, fraccion: 1 - e.quedan / total, pausa: e.fase === "pausa", grupoSiguiente };
+  }
+
   let raf = 0;
   let antes = 0;
   let acumulado = 0;
@@ -164,8 +194,7 @@ function nacer(ficha) {
     const paso = Math.min(0.1, acumulado); // tras una pausa larga no da un salto
     acumulado = 0;
     if (oculta) return; // escondida en el entreno: ni vive ni se pinta (sale al terminar)
-    escenario.ponerAlDia();
-    const f = cerebro.paso(paso);
+    const f = vivir(paso);
     if (escenario.tapada()) return; // detrás de una hoja: vive, pero no hace falta pintarla
     pintar(f);
   }
@@ -179,13 +208,12 @@ function nacer(ficha) {
     rasgos,
     modo,
     get oculta() { return oculta; },
+    get grupoSiguiente() { return grupoSiguiente; },
+    set grupoSiguiente(g) { grupoSiguiente = g; },
     // Para las pruebas: vive «segundos» de golpe (a 30 fotogramas por segundo) y se pinta el último.
     avanzar(segundos) {
       let f = null;
-      for (let i = 0; i < Math.round(segundos * 30); i++) {
-        escenario.ponerAlDia();
-        f = cerebro.paso(1 / 30);
-      }
+      for (let i = 0; i < Math.round(segundos * 30); i++) f = vivir(1 / 30);
       pintar(f);
     },
     ajustar(f) {
@@ -221,6 +249,9 @@ if (esLocal()) {
     get oculta() { return Boolean(viva?.oculta); },
     get enPagina() { return Boolean(viva?.escenario.enPagina); },
     get brillo() { return viva?.traje.brillo ?? null; },
+    get carga() { return viva?.cerebro.carga ?? null; },
+    get descanso() { return viva?.cerebro.descanso ?? null; },
+    hacer(nombre) { viva?.cerebro.hacer(nombre); },
     get cabeza() { return viva?.cerebro.cabeza ?? null; },
     get rasgos() { return viva?.rasgos ?? null; },
     avanzar(segundos) { viva?.avanzar(segundos); },
