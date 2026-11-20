@@ -26,6 +26,7 @@ body {
 }
 header { display: flex; align-items: center; gap: 6px; padding: 10px 12px 4px; flex-wrap: wrap; }
 h1 { font-size: 1.05rem; margin: 0 auto 0 0; }
+.version { font-size: .75rem; font-weight: 600; color: var(--suave); }
 button {
   font: inherit; color: var(--texto); background: var(--superficie); border: 1px solid var(--borde);
   border-radius: 999px; padding: 5px 12px; min-height: 36px; cursor: pointer;
@@ -50,17 +51,22 @@ button[aria-pressed="true"] { background: var(--acento); color: var(--sobre-acen
 .nota { font-size: .8rem; color: var(--suave); margin: 8px 0 0; }
 .solo header, .solo .mandos { display: none; }
 .solo #escenario { margin: 0; }
-#error { color: light-dark(#b91c1c, #f87171); font-size: .85rem; white-space: pre-wrap; margin: 8px 0 0; }
+#error { position: absolute; left: 0; right: 0; top: 28px; z-index: 2; margin: 0; padding: 8px 10px; border-radius: 10px;
+  background: light-dark(#fee2e2, #3b1219); color: light-dark(#991b1b, #fecaca); font-size: .85rem; white-space: pre-wrap; }
 </style>
 <script>
   // Si algo falla, que se vea en la página (es una prueba).
   addEventListener('error', (e) => { const p = document.getElementById('error'); if (p) { p.hidden = false; p.textContent += (e.message || 'Error') + '\n'; } });
+  addEventListener('load', () => setTimeout(() => {
+    const p = document.getElementById('error');
+    if (!window.__mascota && p && p.hidden) { p.hidden = false; p.textContent = 'No se ha podido cargar la mascota. Recarga la página; si sigue igual, dímelo.'; }
+  }, 4000));
   addEventListener('unhandledrejection', (e) => { const p = document.getElementById('error'); if (p) { p.hidden = false; p.textContent += String(e.reason) + '\n'; } });
 </script>
 </head>
 <body>
 <header>
-  <h1>La mascota · prototipo</h1>
+  <h1>La mascota · prototipo <span class="version">v2 · 3D</span></h1>
   <button type="button" id="tema">Tema: el del móvil</button>
   <button type="button" id="lupa" aria-pressed="false">Lupa</button>
   <button type="button" id="huesos" aria-pressed="false">Esqueleto</button>
@@ -68,6 +74,7 @@ button[aria-pressed="true"] { background: var(--acento); color: var(--sobre-acen
 </header>
 <main id="escenario">
   <p id="ahora" aria-live="polite"></p>
+  <p id="error" role="alert" hidden></p>
   <div class="tarjeta"><b>Curl de bíceps en banco inclinado</b><span>3 × 12 · 12,5 kg</span></div>
   <div class="tarjeta"><b>Prensa de piernas sentada</b><span>4 × 12 · 110 kg</span></div>
   <div class="tarjeta"><b>Remo sentado en polea baja</b><span>4 × 10 · 45 kg</span></div>
@@ -80,12 +87,12 @@ button[aria-pressed="true"] { background: var(--acento); color: var(--sobre-acen
   <p class="nota">Tócala. Si la dejas, vive sola: pasea, salta, se sienta, se asoma y, al rato, se duerme.
     Cada serie, además, «bombea» ese músculo un rato (aquí, un par de minutos; en la app, unas horas).
     Es una página de prueba, aparte de la app: no lee ni guarda nada.</p>
-  <p id="error" hidden></p>
 </section>
 <script type="module">
-import { crearMascota } from './mascota/cerebro.js';
-import { crearTrajeNeon } from './mascota/traje-neon.js';
-import { GRUPOS } from './mascota/gestos.js';
+// «?v=2»: la versión (igual en mascota/cerebro.js y arriba, en el título); al cambiar algo, súbela en todos.
+import { crearMascota } from './mascota/cerebro.js?v=2';
+import { crearTrajeNeon } from './mascota/traje-neon.js?v=2';
+import { GRUPOS } from './mascota/gestos.js?v=2';
 
 // Para probar: ?solo · ?tema=claro|oscuro · ?forma=0..1 · ?huesos · ?quieta (sin vida propia) · ?semilla=n
 // · ?escala=0.55 · ?accion=<grupo, «record» o «dormir», «sentarse», «asomarse», «pasear», «saltar»> · ?t=<s> (y se congela ahí)
