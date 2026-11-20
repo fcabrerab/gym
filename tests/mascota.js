@@ -352,6 +352,62 @@ export async function ejecutar(c) {
     "MA27 días sin entrenar: con tu rutina (5 por semana), desde 3; con 3 por semana, desde 5; y sin ningún entreno aún, no (no hay «vuelta»)");
   }
 
+  // MA30 Sus accesorios (D-135, la 4): en el descanso imita tu ejercicio con una mancuerna pequeña (una vez por descanso,
+  // el de la serie que acabas de hacer), y con una sesión en marcha lleva su cinta
+  {
+    const { IMITAR } = await import("/js/mascota/gestos.js");
+    const { POSE_BASE } = await import("/js/mascota/esqueleto.js");
+    const sitio = () => [{ id: "a", x1: 20, x2: 380, y: 300 }];
+    const malas = [];
+    for (const grupo of Object.keys(GRUPOS)) {
+      const def = IMITAR[grupo];
+      const m = crearMascota({ superficies: sitio, azar: azarDe(2), autonoma: false });
+      for (let i = 0; i < 10; i++) m.paso(1 / 30);
+      m.hacer(`imitar:${grupo}`);
+      const poses = [];
+      let f = null;
+      for (let i = 0; i < 120; i++) {
+        f = m.paso(1 / 30);
+        poses.push(f.pose);
+      }
+      // cuánto del movimiento recorre (1: de la pose de partida a la del esfuerzo, entero)
+      const ini = { ...POSE_BASE, ...(def?.a || {}) }, fin = { ...ini, ...(def?.b || {}) };
+      const recorre = Math.max(0, ...Object.keys(def?.b || {}).filter((k) => Math.abs(fin[k] - ini[k]) > 1e-9).map((k) => {
+        const v = poses.map((p) => p[k]);
+        return (Math.max(...v) - Math.min(...v)) / Math.abs(fin[k] - ini[k]);
+      }));
+      const mancuernas = [].concat(f.objeto || []).filter((o) => o.tipo === "mancuerna").length;
+      if (!def || m.accion !== def.nombre || mancuernas !== (def.manos === "ambas" ? 2 : 1) || recorre < 0.8 || !f.raiz.every(Number.isFinite)) {
+        malas.push(`${grupo} (${m.accion}, ${mancuernas}, ${recorre.toFixed(2)})`);
+      }
+    }
+    caso(malas.length === 0, `MA30 imita el ejercicio de cada grupo de la app (${Object.keys(GRUPOS).length}), con su mancuerna en la mano o una en cada una${malas.length ? `; mal: ${malas.join(", ")}` : ""}`);
+    const descanso = (semilla) => {
+      const m = crearMascota({ superficies: () => [{ id: "a", x1: 20, x2: 380, y: 300 }, { id: "b", x1: 40, x2: 360, y: 420 }], azar: azarDe(semilla) });
+      for (let i = 0; i < 30; i++) m.paso(1 / 30);
+      const total = 90;
+      let veces = 0;
+      let antes = "";
+      for (let i = 0; i <= total * 30; i++) {
+        const quedan = Math.max(0, Math.ceil(total - i / 30));
+        m.descanso = { id: "d1", quedan, fraccion: 1 - quedan / total, pausa: false, grupoSiguiente: "Pecho", grupo: "Bíceps" };
+        m.paso(1 / 30);
+        if (m.accion !== antes && m.accion === "Imita tu curl de bíceps") veces += 1;
+        antes = m.accion;
+      }
+      return veces;
+    };
+    const veces = [1, 2, 3, 4, 5, 6, 7, 8].map(descanso);
+    const conCinta = crearMascota({ superficies: sitio, azar: azarDe(2), autonoma: false });
+    conCinta.cinta = true;
+    const f1 = conCinta.paso(1 / 30);
+    conCinta.cinta = false;
+    const f2 = conCinta.paso(1 / 30);
+    const imita = veces.filter((v) => v === 1).length;
+    caso(veces.every((v) => v <= 1) && imita >= 2 && imita <= 7 && f1?.cinta === true && f2?.cinta === false,
+      `MA30 en el descanso, a veces imita tu ejercicio, una vez como mucho (en 8 descansos de 90 s: ${veces.join(", ")}); y su cinta, mientras hay sesión`);
+  }
+
   // MA17 El descanso (D-135): se recupera, descansa, calienta a los 10 s y se pone en guardia a los 3; su luz se recarga;
   // y si la tocas, choca los cinco
   {
@@ -679,6 +735,37 @@ export async function ejecutar(c) {
       && !tras1.includes("Se despierta de golpe") && !tras1.includes("¡Qué alegría verte!") && tras1.includes("Te saluda"),
     `MA29 tras días sin entrenar, al abrir la app estaba dormida y se alegra de verte (${tras5.slice(0, 5).join(" → ")}); si entrenaste ayer, te saluda (${tras1.slice(0, 3).join(" → ")})`);
     await limpiarBeta();
+  }
+
+  // MA31 En la app (D-135, la 4): con una sesión en marcha lleva su cinta (al terminarla, se la quita); y en el descanso
+  // sabe qué ejercicio acabas de hacer, para imitarlo
+  {
+    await preparar();
+    const b = await cargarBeta({ canal: "beta" });
+    await hastaQue(() => b.w.__gymMascota?.viva, 200);
+    const m = b.w.__gymMascota;
+    const sinSesion = m.cinta;
+    pulsar(b.d, "abrir-ejercicio", "pec-deck");
+    await esperar(150);
+    pulsar(b.d, "serie-hecha", "pec-deck");
+    await esperar(200);
+    m.avanzar(0.5);
+    const conSesion = m.cinta;
+    const grupo = m.descanso?.grupo;
+    pulsar(b.d, "descanso-saltar");
+    await esperar(100);
+    pulsar(b.d, "terminar-sesion");
+    await esperar(50);
+    pulsar(b.d, "confirmar");
+    await hastaQueVirtual(() => textoDe(b.d, ".hoja-titulo") === "Sesión guardada", 3000);
+    pulsar(b.d, "cerrar-hoja");
+    await hastaQueVirtual(() => !hojaAbierta(b.d), 2000);
+    m.avanzar(0.5);
+    const tras = m.cinta;
+    caso(!sinSesion && conSesion && grupo === "Pecho" && !tras,
+      `MA31 con una sesión en marcha lleva su cinta (antes: ${sinSesion}; durante: ${conSesion}; al terminar: ${tras}) y en el descanso sabe qué acabas de hacer (${grupo})`);
+    sinErrores(b, "MA31");
+    quitar(b);
   }
 
   // MA15 En la app normal no sale ni guarda nada hasta que la enciendes en Ajustes

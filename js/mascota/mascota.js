@@ -63,6 +63,7 @@ function alSerie(d) {
   viva.pedirCuerpo(); // con la serie, su cuerpo (ya guardada en tu sesión)
   if (viva.oculta) return;
   viva.grupoSiguiente = d.grupoSiguiente || d.grupo || "";
+  viva.grupoHecho = d.grupo || ""; // en el descanso, imita ese ejercicio (D-135, la 4)
   if (GRUPOS[d.grupo]) viva.cerebro.serie(d.grupo);
   else viva.cerebro.hacerGesto("mirarte"); // un ejercicio sin grupo (uno tuyo nuevo): te mira
   if (d.marca) viva.cerebro.record();
@@ -121,6 +122,7 @@ function nacer(ficha) {
   let entrenando = false;
   let fuera = false; // en el descanso, fuera del rincón
   let grupoSiguiente = "";
+  let grupoHecho = "";
 
   const ponerTema = () => { traje.tema = doc.documentElement.dataset.tema === "oscuro" ? "oscuro" : "claro"; };
   ponerTema();
@@ -130,7 +132,9 @@ function nacer(ficha) {
   // En el entreno (en su pantalla, con una sesión en marcha): en la serie, asomada en el rincón; en el descanso, fuera,
   // lejos del ejercicio abierto (D-135); o escondida todo el rato, según sus ajustes.
   function modo() {
-    entrenando = doc.body.dataset.pantalla === "entreno" && Boolean(app.haySesion());
+    const haySesion = Boolean(app.haySesion());
+    cerebro.cinta = haySesion; // con una sesión en marcha, lleva su cinta (D-135, la 4)
+    entrenando = doc.body.dataset.pantalla === "entreno" && haySesion;
     const esconder = entrenando && entreno === "escondida";
     const enLaSerie = entrenando && !fuera;
     escenario.evitar = entrenando && fuera ? ".ej.abierto" : null;
@@ -228,7 +232,7 @@ function nacer(ficha) {
     const e = app.descanso?.();
     if (!entrenando || !e || (e.fase !== "corriendo" && e.fase !== "pausa")) return null;
     const total = Math.max(1, e.duracion || 0, e.quedan || 0);
-    return { id: e.id, quedan: e.quedan, fraccion: 1 - e.quedan / total, pausa: e.fase === "pausa", grupoSiguiente };
+    return { id: e.id, quedan: e.quedan, fraccion: 1 - e.quedan / total, pausa: e.fase === "pausa", grupoSiguiente, grupo: grupoHecho };
   }
 
   let raf = 0;
@@ -265,6 +269,8 @@ function nacer(ficha) {
     get oculta() { return oculta; },
     get grupoSiguiente() { return grupoSiguiente; },
     set grupoSiguiente(g) { grupoSiguiente = g; },
+    get grupoHecho() { return grupoHecho; },
+    set grupoHecho(g) { grupoHecho = g; },
     // Para las pruebas: vive «segundos» de golpe (a 30 fotogramas por segundo) y se pinta el último.
     avanzar(segundos) {
       let f = null;
@@ -315,6 +321,7 @@ if (esLocal()) {
     get musculos() { return viva?.cerebro.musculos ?? null; },
     get dolorida() { return viva?.cerebro.dolorida ?? null; },
     get trofeo() { return Boolean(viva?.cerebro.trofeo); },
+    get cinta() { return Boolean(viva?.cerebro.cinta); },
     get celebracionPendiente() { return viva?.celebrar ?? null; },
     get cuerpo() { return viva?.cuerpo ?? null; },
     ponerAlDiaCuerpo() { viva?.ponerAlDiaCuerpo(); },

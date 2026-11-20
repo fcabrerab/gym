@@ -32,6 +32,7 @@ Fuera de esta carpeta:
 - **En el entreno** (en su pantalla y con una sesión en marcha): en la serie, asomada en el rincón. Al apuntar una serie, siente ese músculo (con una marca nueva, la celebra) y, si empieza un descanso, sale (D-135): recupera el aliento, se seca con la toalla y descansa contigo (se sienta, bebe, mira la cuenta atrás) lejos del ejercicio abierto. Su luz se recarga durante el descanso (de 0,35 a 1,3: «recargada»); a los 10 s calienta para el siguiente ejercicio y a los 3 se pone en guardia; al acabar, vuelve al rincón. Si eliges «Escondida», no sale en toda la sesión.
 - **Su cuerpo** (`forma.js`, mirado al nacer, al volver a la app, tras cada serie, al terminar y cada 5 min): de fondo, según tu constancia con tu rutina (lo de los últimos 10 días cuenta más; si lo dejas un mes, gordita; una semana de vuelta y se recupera). Cada serie hincha sus músculos y la marca un poco más (el bombeo general); se le pasa en 3 h. Al día siguiente, agujetas suaves: a veces se queja de esa zona (`REGIONES` de `gestos.js`) y, con las piernas cargadas, anda más despacio y salta menos.
 - **Los momentos de la sesión** (D-135): al abrir un ejercicio sin sesión en marcha (vas a empezar), calienta ese grupo (como mucho una vez cada 10 min: `calentarAntes()`). Al terminar, lo celebra según cómo fue (`finSesion()`: con una marca nueva, el récord y su trofeo; con todas las series, «¡Sesión completa!»; con el 60 % o más, «¡Bien hecho!»; con menos, «Algo es algo»; siempre contenta), pero cuando cierras el resumen, que la tapa (`vivir()` de `mascota.js`). Con una marca batida hoy entrenando, lleva su trofeo el resto del día (quieta, paseando y sentada) y a ratos presume de él. Si llevas 6 h sin abrir la app, al volver te saluda; y si además llevas días sin entrenar (`llevasDiasSin()` de `forma.js`), te espera dormida, se despierta y se alegra de verte (`bienvenida()`), sin reproches.
+- **Sus accesorios** (D-135): en el descanso, la botella y la toalla; en más o menos 6 de cada 10 descansos, imita con una mancuerna pequeña (o dos) el ejercicio de la serie que acabas de hacer (`imitar()`, con `IMITAR` de `gestos.js`: uno por grupo de la app); con una sesión en marcha, lleva una cinta en la cabeza (`cinta`, que pinta `pintarCinta()` de `traje-neon.js`); y el trofeo, con una marca de hoy.
 - **«Reducir movimiento»** del móvil: siempre tranquila, sin pasear ni saltar.
 
 ## Cómo añadirle cosas
@@ -44,13 +45,14 @@ Fuera de esta carpeta:
 - **Un suceso de la app**: cuéntalo donde pasa, con `contar()` de `js/sucesos.js`, y apúntalo en su cabecera. Escúchalo en `iniciar()` de `mascota.js`.
 - **Un ajuste en su página**: añádelo en `OPCIONES` y `AJUSTES` de `memoria.js`, ponlo en `js/ui/mascota.js` y aplícalo en `ajustar()` de `mascota.js`.
 - **Otro traje** (otro estilo): un archivo como `traje-neon.js` con la misma forma (`dibujar(f, origen)`, `medidas()`, `tema`, `luz`, `recorte`).
+- **Un accesorio en la mano**: su dibujo, en `pintarObjeto()` de `traje-neon.js`; quien lo lleva lo dice en su salida (`objeto: { tipo, mano }`, o una lista, uno en cada mano), o un gesto con `objeto` en `gestos.js`.
 
 Cada archivo nuevo va en `ARCHIVOS` de `sw.js`, para que funcione sin conexión, y cada cambio sube la versión, como el resto de la app.
 
 ## Lo que viene (D-133, D-135)
 
-- Hechas: la fase 1 (viva en la app), el descanso como su momento, la fase 2 (su cuerpo, de tus entrenos; su ficha, en tus copias) y los momentos de la sesión (calienta, celebra, su trofeo y la bienvenida).
-- Después, por este orden: más accesorios, tocarla más, el ritmo del día, la fase 3 y los trajes que se ganan.
+- Hechas: la fase 1 (viva en la app), el descanso como su momento, la fase 2 (su cuerpo, de tus entrenos; su ficha, en tus copias), los momentos de la sesión (calienta, celebra, su trofeo y la bienvenida) y sus accesorios (la mancuerna con la que imita tu ejercicio y la cinta).
+- Después, por este orden: tocarla más, el ritmo del día, la fase 3 y los trajes que se ganan.
 - **Fase 3, se adapta a ti**: tu ritmo (te espera los días que sueles ir), cómo la tratas (más confiada si la tocas) y lo que entrenas. Todo moviendo poco a poco sus rasgos, guardados en su ficha.
 
 ## Probarla

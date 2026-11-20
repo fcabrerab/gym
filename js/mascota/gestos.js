@@ -45,6 +45,33 @@ export const MUSCULOS = {
   gemelosI: [1.1, 1.1, 2.6], gemelosD: [1.1, 1.1, 2.6],
 };
 
+// Cómo imita tu ejercicio con una mancuerna pequeña (D-135, la 4): en el descanso, unas repeticiones del de la serie que
+// acabas de hacer (cerebro.js: imitar()). Por grupo de la app: cómo se llama, en qué mano la lleva («D» o «ambas»), la
+// pose de partida («a», sobre la de pie) y lo que cambia al hacer fuerza («b»).
+export const IMITAR = {
+  'Bíceps': { nombre: 'Imita tu curl de bíceps', manos: 'ambas',
+    a: { orientacion: 40, ...brazos(8, 0), ...brazosAd(4, 10) }, b: { codoAdI: 135, codoAdD: 135 } },
+  'Tríceps': { nombre: 'Imita tu extensión de tríceps', manos: 'D',
+    a: { orientacion: 40, brazoD: 165, codoD: 0, brazoAdD: 0, codoAdD: -120 }, b: { codoAdD: -5 } },
+  'Hombro': { nombre: 'Imita tu press de hombros', manos: 'ambas',
+    a: { ...brazos(88, 92), ...brazosAd(0, 0) }, b: { ...brazos(165, 12) } },
+  'Hombro posterior': { nombre: 'Imita tus pájaros', manos: 'ambas',
+    a: { orientacion: 40, inclinar: 50, ...piernasAd(10, -16), ...brazos(8, -6), ...brazosAd(50, 6) }, b: { ...brazos(78, -6) } },
+  'Pecho': { nombre: 'Imita tus aperturas', manos: 'ambas',
+    a: { orientacion: 25, ...brazos(80, 10), ...brazosAd(10, 10) }, b: { ...brazos(18, 10), ...brazosAd(85, 10) } },
+  'Espalda': { nombre: 'Imita tu remo', manos: 'D',
+    a: { orientacion: 60, inclinar: 45, ...piernasAd(14, -20), ...brazos(6, 0), ...brazosAd(45, 0) }, b: { brazoAdD: -25, codoAdD: 75 } },
+  'Cuádriceps': { nombre: 'Imita tu sentadilla', manos: 'D',
+    a: { orientacion: 35, ...brazos(8, 0), ...brazosAd(20, 120) }, b: { ...piernasAd(82, -112), inclinar: 26 } },
+  'Isquios': { nombre: 'Imita tu peso muerto', manos: 'ambas',
+    a: { orientacion: 60, ...brazos(6, 0), ...brazosAd(0, 0) }, b: { inclinar: 68, ...piernasAd(10, -16), ...brazosAd(68, 0) } },
+  'Gemelos': { nombre: 'Imita tus elevaciones de talones', manos: 'ambas',
+    a: { orientacion: 35, ...brazos(8, 0), ...brazosAd(0, 0) }, b: { puntillas: 1, estirar: 0.015 } },
+  'Abdominales': { nombre: 'Imita tu inclinación lateral', manos: 'D',
+    a: { ...brazos(8, 0), ...brazosAd(0, 0) }, b: { lumbar: 14, pecho: 8, brazoI: 40, codoI: -60 } },
+};
+IMITAR['Cadena posterior'] = IMITAR['Isquios'];
+
 // Por dónde le duelen las agujetas (D-133, la fase 2): cada zona, con sus músculos y su gesto.
 export const REGIONES = {
   brazos: { gesto: 'agujetasBrazos', musculos: ['bicepsI', 'bicepsD', 'tricepsI', 'tricepsD', 'hombrosI', 'hombrosD', 'hombrosPostI', 'hombrosPostD'] },
