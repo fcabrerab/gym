@@ -410,12 +410,12 @@ function haySesionViva() {
   return Boolean(s) && !abandonada(s, ahora()) && Boolean(datos && diaPorId(datos, s.diaId));
 }
 
-// Lo que la mascota lee de tus entrenos, para su cuerpo (D-133, la fase 2): una copia (nunca los de verdad) de tu
-// rutina, tus sesiones, la biblioteca (el grupo de cada ejercicio) y la sesión en marcha.
+// Lo que la mascota lee de tus entrenos, para su cuerpo (D-133, la fase 2) y sus momentos (D-135): una copia (nunca los
+// de verdad) de tu rutina, tus sesiones, tus marcas, la biblioteca (el grupo de cada ejercicio) y la sesión en marcha.
 function entrenosParaLaMascota() {
   const d = almacen.datos();
   if (!d) return null;
-  return structuredClone({ dias: d.dias, sesiones: d.sesiones, ejercicios: d.ejercicios, enCurso: almacen.leerSesion() });
+  return structuredClone({ dias: d.dias, sesiones: d.sesiones, marcas: d.marcas, ejercicios: d.ejercicios, enCurso: almacen.leerSesion() });
 }
 
 // La mascota (D-133): aparte, cargada cuando la app ya ha arrancado y solo si está encendida (en la beta, de entrada).

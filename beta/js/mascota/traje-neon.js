@@ -361,7 +361,8 @@ export function crearTrajeNeon(lienzo) {
 
   // origen: dónde cae la esquina de arriba a la izquierda del lienzo, en px del escenario. En la app el lienzo es
   // pequeño y va con ella; en el prototipo, [0, 0] (el lienzo es todo el escenario).
-  // Lo que lleva en la mano (D-135): la botella (de la mano hacia fuera, como el antebrazo) o la toalla, que cuelga.
+  // Lo que lleva en la mano (D-135): la botella (de la mano hacia fuera, como el antebrazo), la toalla, que cuelga, o el
+  // trofeo, una copa dorada siempre derecha, con el pie en la mano.
   function pintarObjeto(f, { tipo, mano }) {
     const p = f.cin.p;
     const m = p['mano' + mano];
@@ -393,6 +394,28 @@ export function crearTrajeNeon(lienzo) {
       const tira = [m, [m[0] + 7, m[1] + 8], [m[0] + 2, m[1] + 17]];
       trazo(tira, col.borde, 5.6);
       trazo(tira, '#f8fafc', 3.8);
+    } else if (tipo === 'trofeo') {
+      const oro = '#fbbf24';
+      const [x, y] = [m[0], m[1] + 1];
+      trazo([[x - 4, y], [x + 4, y]], col.borde, 4); // el pie
+      trazo([[x - 4, y], [x + 4, y]], oro, 2.2);
+      trazo([[x, y], [x, y - 6]], col.borde, 3.6); // el tallo
+      trazo([[x, y], [x, y - 6]], oro, 1.8);
+      for (const lado of [-1, 1]) { // las asas
+        trazo([[x + lado * 5.5, y - 15.5], [x + lado * 10, y - 13.5], [x + lado * 5, y - 9.5]], col.borde, 3.2);
+        trazo([[x + lado * 5.5, y - 15.5], [x + lado * 10, y - 13.5], [x + lado * 5, y - 9.5]], oro, 1.4);
+      }
+      ctx.beginPath(); // la copa
+      ctx.moveTo(x - 7, y - 17);
+      ctx.quadraticCurveTo(x - 7, y - 6, x, y - 6);
+      ctx.quadraticCurveTo(x + 7, y - 6, x + 7, y - 17);
+      ctx.closePath();
+      ctx.fillStyle = oro;
+      ctx.strokeStyle = col.borde;
+      ctx.lineWidth = 1.8;
+      ctx.fill();
+      ctx.stroke();
+      trazo([[x - 4.5, y - 15], [x - 3.5, y - 9.5]], 'rgba(255, 255, 255, 0.75)', 1.4); // el brillo
     }
     ctx.restore();
   }

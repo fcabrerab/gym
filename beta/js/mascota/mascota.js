@@ -10,7 +10,7 @@ import { GRUPOS } from "./gestos.js";
 import { crearEscenario } from "./escenario.js";
 import * as memoria from "./memoria.js";
 import { rasgosDe, pesosDe, suenoDe } from "./caracter.js";
-import { cuerpoDeTusEntrenos, BOMBEO_HORAS } from "./forma.js";
+import { cuerpoDeTusEntrenos, llevasDiasSin, BOMBEO_HORAS } from "./forma.js";
 import { escuchar } from "../sucesos.js";
 import { ahora, esBeta, esLocal, parametroLocal } from "../util.js";
 
@@ -18,6 +18,7 @@ export const ESCALAS = { pequena: 0.45, normal: 0.55, grande: 0.68 };
 export const BRILLOS = { suave: 0.6, normal: 1, intenso: 1.7 };
 const ALTO_DE_PIE = 135;  // lo que mide de pie, en unidades del esqueleto (con la cabeza)
 const CUERPO_CADA = 5 * 60000; // cada cuánto mira otra vez su cuerpo (la forma y las agujetas cambian despacio)
+const AUSENCIA = 6 * 3600000;  // tras este rato sin verte, al volver te da la bienvenida (D-135)
 // Fotogramas por segundo: menos cuanto más tranquila (gasta menos batería).
 const FPS = { moviendose: 30, calma: 20, dormida: 12 };
 
@@ -31,7 +32,8 @@ const sucesos = [];
 export function iniciar(adaptador = {}) {
   app = { ...app, ...adaptador };
   if (!sucesos.length) {
-    sucesos.push(escuchar("serie", alSerie), escuchar("fin-sesion", alFinSesion), escuchar("mascota", () => aplicar()));
+    sucesos.push(escuchar("serie", alSerie), escuchar("fin-sesion", alFinSesion), escuchar("preparar", alPreparar),
+      escuchar("mascota", () => aplicar()));
   }
   aplicar();
 }
@@ -66,12 +68,19 @@ function alSerie(d) {
   if (d.marca) viva.cerebro.record();
 }
 
+// Al terminar la sesión lo celebra según cómo fue (D-135), pero cuando la ves: al acabar sale la hoja del resumen, que
+// la tapa, así que espera a que la cierres (vivir()).
 function alFinSesion(d) {
   if (!viva) return;
   viva.modo();
   viva.pedirCuerpo();
-  if (d.marcas > 0) viva.cerebro.record();
-  else viva.cerebro.hacerGesto("saludo");
+  viva.celebrar = { series: d.series || 0, plan: d.plan || 0, marcas: d.marcas || 0 };
+}
+
+// Vas a empezar a entrenar (D-135): calienta ese grupo.
+function alPreparar(d) {
+  if (!viva || viva.oculta) return;
+  viva.cerebro.calentarAntes(d.grupo || "");
 }
 
 // Para las pruebas (solo en local, con «?mascota-azar=n»): el mismo azar cada vez.
@@ -153,6 +162,7 @@ function nacer(ficha) {
     if (!e) return;
     cuerpo = cuerpoDeTusEntrenos(e, ahora(), { nacida: ficha.nacida });
     cerebro.ponerCuerpo(cuerpo);
+    cerebro.trofeo = cuerpo.trofeo; // hoy has batido una marca: lo lleva el resto del día (D-135)
   }
   const pedirCuerpo = () => {
     if (!pendiente) pendiente = win.setTimeout(ponerAlDiaCuerpo, 300);
@@ -160,11 +170,15 @@ function nacer(ficha) {
   ponerAlDiaCuerpo();
   const cadaCuerpo = win.setInterval(ponerAlDiaCuerpo, CUERPO_CADA);
 
-  // Cuándo te vio por última vez (para más adelante: si llevas días sin venir).
+  // Cuándo te vio por última vez: tras 6 h sin verte, al volver te da la bienvenida; si llevas días sin entrenar, estaba
+  // dormida y se alegra de verte (D-135).
   const verte = () => {
     if (doc.visibilityState !== "visible") return;
-    memoria.anotar((f) => { f.vista = Date.now(); });
+    const antes = memoria.leer().vista;
+    const t = ahora();
+    memoria.anotar((f) => { f.vista = t; });
     ponerAlDiaCuerpo();
+    if (Number.isFinite(antes) && t - antes >= AUSENCIA) cerebro.bienvenida({ dormida: llevasDiasSin(cuerpo) });
   };
   verte();
   doc.addEventListener("visibilitychange", verte);
@@ -190,9 +204,15 @@ function nacer(ficha) {
     traje.dibujar(f, origen);
   }
 
-  // Un paso de su vida: el descanso de la app (cuánto queda, para su carga y lo que hace; y, tras sentir la serie, fuera
-  // del rincón), sus superficies al día y lo que hace.
+  // Un paso de su vida: la celebración del final de la sesión, cuando ya no la tapa el resumen; el descanso de la app
+  // (cuánto queda, para su carga y lo que hace; y, tras sentir la serie, fuera del rincón), sus superficies al día y lo
+  // que hace.
+  let celebrar = null;
   function vivir(dt) {
+    if (celebrar && !escenario.tapada()) {
+      cerebro.finSesion(celebrar);
+      celebrar = null;
+    }
     const d = leerDescanso();
     cerebro.descanso = d;
     const sale = Boolean(d) && !cerebro.reaccionando;
@@ -240,6 +260,8 @@ function nacer(ficha) {
     pedirCuerpo,
     ponerAlDiaCuerpo,
     get cuerpo() { return cuerpo; },
+    get celebrar() { return celebrar; },
+    set celebrar(c) { celebrar = c; },
     get oculta() { return oculta; },
     get grupoSiguiente() { return grupoSiguiente; },
     set grupoSiguiente(g) { grupoSiguiente = g; },
@@ -292,6 +314,8 @@ if (esLocal()) {
     get general() { return viva?.cerebro.general ?? null; },
     get musculos() { return viva?.cerebro.musculos ?? null; },
     get dolorida() { return viva?.cerebro.dolorida ?? null; },
+    get trofeo() { return Boolean(viva?.cerebro.trofeo); },
+    get celebracionPendiente() { return viva?.celebrar ?? null; },
     get cuerpo() { return viva?.cuerpo ?? null; },
     ponerAlDiaCuerpo() { viva?.ponerAlDiaCuerpo(); },
     hacer(nombre) { viva?.cerebro.hacer(nombre); },
