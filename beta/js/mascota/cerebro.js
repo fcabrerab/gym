@@ -17,8 +17,9 @@ const SUENO_TRAS = 50;    // s sin que le pase nada hasta tener sueño del todo 
 const BOMBEO_DURA = 150;  // s que tarda en irse el bombeo (por defecto: en la app, unas horas)
 
 // Las papeletas de cada cosa en el sorteo de qué hacer (elegir()); su carácter las multiplica (caracter.js).
+// En la app salta más y se queda quieta menos que en el prototipo (D-134: que se mueva entre las tarjetas).
 export const PESOS = {
-  quieto: 3, pasear: 3.2, saltar: 1.8, sentarse: 1, asomarse: 0.9, desperezarse: 0.45, rascarse: 0.45, mirarte: 0.7, dormir: 3,
+  quieto: 2.2, pasear: 3.2, saltar: 2.6, sentarse: 0.8, asomarse: 0.9, desperezarse: 0.4, rascarse: 0.45, mirarte: 0.7, dormir: 2.5,
 };
 // En el modo tranquilo (en el entreno), solo estas: ni pasea ni salta.
 export const TRANQUILAS = new Set(['quieto', 'sentarse', 'asomarse', 'desperezarse', 'rascarse', 'mirarte', 'dormir']);
@@ -61,7 +62,7 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
   const unoDe = (lista) => lista[Math.floor(azar() * lista.length)];
 
   const m = {
-    t: 0, x: 0, sup: null, ultY: null, perdida: false, forma: 0.25, escala,
+    t: 0, x: 0, sup: null, ultY: null, perdida: false, desde: null, llegada: 0, forma: 0.25, escala,
     pesos: {}, tranquila: false, suenoTras, bombeoDura,
     sueno: 0, accion: null, cola: [], previa: null, avisado: '',
     musc: Object.fromEntries(Object.keys(MUSCULOS).map((k) => [k, { bombeo: 0, contr: 0 }])),
@@ -82,17 +83,18 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
     const l = lista();
     let s = l.find((x) => x.id === m.sup);
     if (!s && l.length) {
-      // La suya ya no está: la más cercana a donde estaba (la primera vez, la de más arriba), y en el mismo sitio si
-      // cabe. Lo que hacía y lo que tenía pensado eran para la otra: paso() lo deja.
+      // La suya ya no está (se fue de la pantalla o cambió): la más cercana a donde estaba (la primera vez, la de más
+      // arriba). Cómo llega (de un salto desde donde estaba o fundiéndose), lo decide paso().
       const y = m.ultY;
-      s = y == null ? [...l].sort((a, b) => a.y - b.y)[0] : l.reduce((a, b) => (Math.abs(b.y - y) < Math.abs(a.y - y) ? b : a));
-      const antes = m.sup;
-      m.sup = s.id;
-      m.x = s.x2 - s.x1 < 2 * MARGEN ? (s.x1 + s.x2) / 2 : limitar(m.x || (s.x1 + s.x2) / 2, s.x1 + MARGEN, s.x2 - MARGEN);
-      if (antes != null) {
+      const lejania = (a) => Math.abs(a.y - y) + 0.3 * Math.abs(limitar(m.x, a.x1, a.x2) - m.x);
+      s = y == null ? [...l].sort((a, b) => a.y - b.y)[0] : l.reduce((a, b) => (lejania(b) < lejania(a) ? b : a));
+      if (m.sup != null && y != null) {
+        m.desde = { x: m.x, y };
         m.perdida = true;
-        alReubicar();
       }
+      m.sup = s.id;
+      m.llegada = m.t;
+      m.x = s.x2 - s.x1 < 2 * MARGEN ? (s.x1 + s.x2) / 2 : limitar(m.x || (s.x1 + s.x2) / 2, s.x1 + MARGEN, s.x2 - MARGEN);
     }
     if (s) m.ultY = s.y;
     return s;
@@ -197,33 +199,57 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
     };
   }
 
-  // Salta a la superficie de arriba o a la de abajo (o a otro tramo libre de la misma tarjeta): desde donde está, o un
-  // poco más allá, hasta un punto de ese tramo. En la app los tramos libres no siempre llegan al borde de la tarjeta,
-  // así que salta por delante de ellas.
+  // ¿Está bien ahí? Sin tramos libres apuntados (el prototipo, las pruebas), siempre; si no, dentro de uno: de pie,
+  // ahí no tapa nada.
+  function comodaEn(s, x) {
+    return !s?.libres || s.libres.some(([a, b]) => x >= a - 2 && x <= b + 2);
+  }
+  // Un punto donde ponerse en s, cerca de «cerca» (a «alcance» como mucho): casi siempre dentro de un tramo libre, si
+  // tiene; con «soloLibre», siempre (si tiene alguno).
+  function puntoEn(s, cerca = null, alcance = Infinity, soloLibre = false) {
+    const a0 = cerca == null ? -Infinity : cerca - alcance;
+    const b0 = cerca == null ? Infinity : cerca + alcance;
+    const dentro = ([a, b]) => [Math.max(a, s.x1 + MARGEN, a0), Math.min(b, s.x2 - MARGEN, b0)];
+    const libres = (s.libres || []).map(dentro).filter(([a, b]) => b > a);
+    if (libres.length && (soloLibre || azar() < 0.75)) {
+      const [a, b] = unoDe(libres);
+      return entre(a, b);
+    }
+    const [a, b] = dentro([s.x1, s.x2]);
+    return b > a ? entre(a, b) : limitar(cerca ?? (s.x1 + s.x2) / 2, s.x1 + MARGEN, s.x2 - MARGEN);
+  }
+
+  // Salta a otra superficie cercana (arriba, abajo o a otro tramo a la misma altura), mejor a una con sitio libre: desde
+  // donde está, o un poco más allá, hasta un punto de esa. Salta por delante de lo que haya en medio.
   function planearSalto() {
     const s0 = sup();
     if (!s0) return null;
-    const orden = [...lista()].sort((a, b) => a.y - b.y || a.x1 - b.x1);
-    const i = orden.findIndex((s) => s.id === s0.id);
     const opciones = [];
-    for (const s1 of [orden[i - 1], orden[i + 1]].filter(Boolean)) {
-      if (s1.x2 - s1.x1 < 2 * MARGEN) continue;
-      if (Math.abs(s1.y - s0.y) < 24 && s1.x1 <= s0.x2 && s1.x2 >= s0.x1) continue; // a la misma altura y pegadas: anda
-      const x1 = limitar(m.x + entre(-70, 70), s1.x1 + MARGEN, s1.x2 - MARGEN);
+    for (const s1 of lista()) {
+      if (s1.id === s0.id || s1.tipo === 'rincon' || s1.x2 - s1.x1 < 2 * MARGEN) continue;
+      const dy = Math.abs(s1.y - s0.y);
+      if (dy > 300) continue;
+      if (dy < 24 && s1.x1 <= s0.x2 && s1.x2 >= s0.x1) continue; // a la misma altura y pegadas: mejor andar
+      const x1 = puntoEn(s1, m.x, 200);
       const x0 = limitar(lerp(m.x, x1, 0.35), s0.x1 + MARGEN, s0.x2 - MARGEN);
-      if (Math.abs(x1 - x0) > 300) continue;
-      opciones.push({ x0, s1, x1 });
+      if (Math.abs(x1 - x0) > 240) continue;
+      opciones.push({ x0, s1, x1, peso: (s1.libres?.length ? 2 : 1) * (1.15 - dy / 300) });
     }
-    return opciones.length ? unoDe(opciones) : null;
+    if (!opciones.length) return null;
+    let r = azar() * opciones.reduce((a, o) => a + o.peso, 0);
+    for (const o of opciones) if ((r -= o.peso) <= 0) return o;
+    return opciones[opciones.length - 1];
   }
-  function saltar(destino, x1) {
+  // desde: { x, y } si no sale de su superficie sino de otro sitio (de donde estaba cuando se le fue la tarjeta).
+  function saltar(destino, x1, desde = null) {
     const PREP = 0.26, ATERRIZA = 0.32;
     let x0, y0, y1, cima, vuelo, llego = false;
     return {
       nombre: 'Salta a otra tarjeta', t: 0, interrumpible: false,
       alEmpezar() {
+        if (desde) m.x = desde.x;
         x0 = m.x;
-        y0 = sup().y;
+        y0 = desde ? desde.y : sup().y;
         y1 = destino.y;
         this.nombre = y1 < y0 ? 'Salta a la tarjeta de arriba' : 'Baja de un salto';
         cima = Math.max(Math.min(y0, y1) - (y1 < y0 ? 26 : 16), techo() + 135 * m.escala); // que no se le salga la cabeza
@@ -231,6 +257,10 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
       },
       actualizar(dt) {
         const t = (this.t += dt);
+        // si se desplaza la pantalla mientras salta, sus dos sitios van con ella
+        const d = lista().find((s) => s.id === destino.id);
+        if (d) y1 = d.y;
+        if (!desde && !llego) y0 = sup().y;
         const dir = Math.sign(x1 - x0) || 1;
         const lado = { orientacion: 80 * dir, cabezaGiro: -30 * dir };
         if (t < PREP) {
@@ -255,6 +285,7 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
         if (!llego) {
           llego = true;
           m.sup = destino.id;
+          m.llegada = m.t;
           m.x = x1;
         }
         const k = Math.sin(Math.PI * Math.min(1, (t - PREP - vuelo) / ATERRIZA));
@@ -471,7 +502,16 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
       return [vigilar()];
     }
     const salto = m.tranquila ? null : planearSalto();
-    const k = (n) => PESOS[n] * (m.pesos[n] ?? 1); // sus papeletas, con su carácter
+    // Donde no está cómoda (de pie taparía algo) no se queda: pasea o salta a otro sitio; y si se para, antes va a uno
+    // libre de su superficie.
+    const incomoda = !m.tranquila && !comodaEn(s, m.x);
+    // y cuanto más rato lleva en la misma, más ganas de irse a otra (se aburre)
+    const aburrida = Math.min(1, (m.t - m.llegada) / 20);
+    const ganas = incomoda
+      ? { quieto: 0.15, sentarse: 0.1, dormir: 0.05, pasear: 0.8, saltar: 4 * (1 + aburrida) }
+      : { saltar: 1 + 2 * aburrida, pasear: 1 + 0.5 * aburrida };
+    const aSitio = (acciones) => (incomoda && s.libres?.length ? [caminar(puntoEn(s, null, Infinity, true)), ...acciones] : acciones);
+    const k = (n) => PESOS[n] * (m.pesos[n] ?? 1) * (ganas[n] ?? 1); // sus papeletas, con su carácter
     const opciones = [
       ['quieto', k('quieto')], ['pasear', k('pasear')], ['saltar', salto ? k('saltar') : 0],
       ['sentarse', k('sentarse') * (1 + 3 * m.sueno)], ['asomarse', k('asomarse')], ['desperezarse', k('desperezarse')],
@@ -487,16 +527,16 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
     }
     m.previa = elegida;
     switch (elegida) {
-      case 'pasear': return [caminar(entre(s.x1 + MARGEN, s.x2 - MARGEN))];
+      case 'pasear': return [caminar(puntoEn(s))];
       case 'saltar': return [caminar(salto.x0), saltar(salto.s1, salto.x1)];
-      case 'sentarse': return m.sueno > 0.55 ? [sentarse(), dormir()] : [sentarse()];
-      case 'dormir': return [sentarse(entre(3, 5)), dormir()];
+      case 'sentarse': return aSitio(m.sueno > 0.55 ? [sentarse(), dormir()] : [sentarse()]);
+      case 'dormir': return aSitio([sentarse(entre(3, 5)), dormir()]);
       case 'asomarse': {
         const x = limitar(m.x, s.x1 + 34, s.x2 - 34);
         return Math.abs(x - m.x) < 1 ? [asomarse()] : [caminar(x), asomarse()];
       }
       case 'desperezarse': case 'rascarse': case 'mirarte': return [gesto(GESTOS[elegida])];
-      default: return [quieto()];
+      default: return aSitio([quieto()]);
     }
   }
 
@@ -539,11 +579,20 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
     m.destello = 0;
     if (!sup()) return null;
     if (m.perdida) {
-      // Su superficie se fue: aparece en otra (el escenario lo funde), sin arrastrar la pose ni lo que tenía pensado.
+      // Su superficie se fue. Si estaba cerca, salta desde donde estaba hasta la nueva; si no (o si estaba sintiendo
+      // algo), aparece allí fundiéndose. Lo que tenía pensado era para la otra.
       m.perdida = false;
+      const desde = m.desde;
+      m.desde = null;
       m.cola = m.cola.filter((a) => a.reaccion);
       if (m.accion && !m.accion.reaccion) m.accion = null; // también un salto a medias: iba a la otra
-      m.trans = null;
+      const s = sup();
+      if (desde && Number.isFinite(desde.y) && Math.abs(desde.y - s.y) < 700 && !m.accion) {
+        m.cola.unshift(saltar(s, puntoEn(s, desde.x, 240), desde));
+      } else {
+        m.trans = null;
+        alReubicar();
+      }
     }
     if (!m.accion || m.accion.hecha) siguiente();
     const salida = m.accion.actualizar(dt);
@@ -660,7 +709,18 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
       m.toques.push(m.t);
       if (m.accion?.dormida) reaccionar([gesto(GESTOS.saludo)]);
       else if (m.toques.length >= 2) reaccionar([gesto(GESTOS.cosquillas)]);
-      else reaccionar([gesto(GESTOS.susto), gesto(GESTOS.saludo)]);
+      else {
+        reaccionar([gesto(GESTOS.susto), gesto(GESTOS.saludo)]);
+        // y se aparta: así no se queda tapando lo que querías tocar
+        const s = sup();
+        if (!m.tranquila && s && s.tipo !== 'rincon') {
+          const p = planearSalto();
+          const lejos = m.x < (s.x1 + s.x2) / 2 ? s.x2 : s.x1;
+          const irse = p ? [caminar(p.x0), saltar(p.s1, p.x1)] : [caminar(puntoEn(s, lejos, 120))];
+          for (const a of irse) a.reaccion = true;
+          m.cola.push(...irse);
+        }
+      }
       return true;
     },
     contiene(px, py) {

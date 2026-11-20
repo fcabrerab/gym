@@ -11,10 +11,11 @@
 function luzDe({ halo, borde, bordeOscuro, cuerpo, lejos, vivo, vivoOscuro, tinta, detalle, rubor, sombra, sombraOscura }) {
   const base = { halo, cuerpo, lejos, tinta, brillo0: 'rgba(240, 253, 244, 0)' };
   return {
-    claro: { ...base, halo1: 0.14, halo2: 0.06, borde, brillo: 'rgba(240, 253, 244, 0.9)', vivo, detalle: `rgba(${detalle}, 0.5)`,
-      rubor: rubor[0], sombra: `rgba(${sombra}, 0.3)`, sombra0: `rgba(${sombra}, 0)`, hueso: '#334155' },
-    oscuro: { ...base, halo1: 0.26, halo2: 0.11, borde: bordeOscuro, brillo: 'rgba(240, 253, 244, 0.85)', vivo: vivoOscuro,
-      detalle: `rgba(${detalle}, 0.55)`, rubor: rubor[1], sombra: `rgba(${sombraOscura}, 0.4)`, sombra0: `rgba(${sombraOscura}, 0)`,
+    // en claro, más halo y una sombra oscura (sobre el blanco, la de color apenas se veía; D-134)
+    claro: { ...base, halo1: 0.2, halo2: 0.09, borde, brillo: 'rgba(240, 253, 244, 0.9)', vivo, detalle: `rgba(${detalle}, 0.5)`,
+      rubor: rubor[0], sombra: 'rgba(15, 23, 42, 0.28)', sombra0: 'rgba(15, 23, 42, 0)', hueso: '#334155' },
+    oscuro: { ...base, halo1: 0.3, halo2: 0.14, borde: bordeOscuro, brillo: 'rgba(240, 253, 244, 0.85)', vivo: vivoOscuro,
+      detalle: `rgba(${detalle}, 0.55)`, rubor: rubor[1], sombra: `rgba(${sombraOscura}, 0.45)`, sombra0: `rgba(${sombraOscura}, 0)`,
       hueso: '#e2e8f0' },
   };
 }
@@ -46,6 +47,7 @@ export function crearTrajeNeon(lienzo) {
   let ancho = 0, alto = 0, dpr = 1, huesos = false, base = 1;
   let tema = 'claro', luz = 'verde', col = LUCES.verde.claro;
   let ox = 0, oy = 0, recorte = null; // dónde cae el lienzo (px del escenario) y la franja donde se ve
+  let brillo = 1; // cuánto brilla su halo (su página de Ajustes: suave, normal o intenso)
 
   function capsula(c, a, b, r) {
     c.lineWidth = 2 * r;
@@ -93,7 +95,7 @@ export function crearTrajeNeon(lienzo) {
   function pintarHalo(f) {
     const [x0, y0, x1, y1] = caja(f), w = x1 - x0, h = y1 - y0;
     if (w <= 0 || h <= 0) return;
-    for (const [extra, alfa] of [[10, col.halo2 * (1 + 2 * f.destello)], [4.5, col.halo1 * (1 + 1.6 * f.destello)]]) {
+    for (const [extra, alfa] of [[10 * (0.8 + 0.2 * brillo), col.halo2 * (1 + 2 * f.destello) * brillo], [4.5, col.halo1 * (1 + 1.6 * f.destello) * brillo]]) {
       hctx.setTransform(dpr, 0, 0, dpr, -ox * dpr, -oy * dpr);
       hctx.clearRect(x0, y0, w, h);
       hctx.translate(f.raiz[0], f.raiz[1]);
@@ -417,6 +419,9 @@ export function crearTrajeNeon(lienzo) {
       col = LUCES[luz][tema];
     },
     get luz() { return luz; },
+    // cuánto brilla: 1, lo de siempre; más, más halo
+    set brillo(k) { brillo = Number.isFinite(k) && k > 0 ? k : 1; },
+    get brillo() { return brillo; },
     // la franja donde se ve, { y1, y2 } en px del escenario (o null: en todo el lienzo)
     set recorte(r) { recorte = r && Number.isFinite(r.y1) && Number.isFinite(r.y2) ? { y1: r.y1, y2: r.y2 } : null; },
     set huesos(si) { huesos = !!si; },

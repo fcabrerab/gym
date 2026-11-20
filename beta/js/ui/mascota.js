@@ -11,6 +11,7 @@ import { esBeta, fechaConAnio } from "../util.js";
 
 const TAMANOS = [["pequena", "Pequeña"], ["normal", "Normal"], ["grande", "Grande"]];
 const LUCES = [["verde", "Verde"], ["cian", "Cian"], ["rosa", "Rosa"], ["ambar", "Ámbar"], ["violeta", "Violeta"]];
+const BRILLOS = [["suave", "Suave"], ["normal", "Normal"], ["intenso", "Intenso"]];
 const ENTRENO = [
   ["rincon", "Quieta en un rincón", "Se asoma abajo a la derecha y desde allí siente cada serie."],
   ["escondida", "Escondida", "No sale mientras entrenas; vuelve al terminar."],
@@ -66,6 +67,7 @@ export function pintarPaginaMascota(contenedor) {
     seccion("Color de su luz", opciones(LUCES, a.luz, "mascota-luz", "Color de su luz", {
       desactivadas: fija, muestra: (valor) => h("span", { class: ["muestra-luz", `luz-${valor}`], "aria-hidden": "true" }),
     })),
+    seccion("Su brillo", opciones(BRILLOS, a.brillo, "mascota-brillo", "Su brillo", { desactivadas: fija })),
     seccion("En el entreno", opciones(ENTRENO, a.entreno, "mascota-entreno", "En el entreno", { desactivadas: fija })),
     seccion("Cómo es",
       ayuda("Su carácter le viene de nacimiento: cuánto pasea, se asoma, juega o se duerme. No habla ni te manda mensajes: mira, siente cada serie (ese músculo se le enciende un rato) y celebra tus marcas. Tócala y verás."),
@@ -88,6 +90,7 @@ export function alAccionMascota(accion, el) {
     case "mascota-tamano": return cambiar({ tamano: el.dataset.valor });
     case "mascota-luz": return cambiar({ luz: el.dataset.valor });
     case "mascota-entreno": return cambiar({ entreno: el.dataset.valor });
+    case "mascota-brillo": return cambiar({ brillo: el.dataset.valor });
     default: return undefined;
   }
 }
