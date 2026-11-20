@@ -1,25 +1,32 @@
-// Esqueleto de la mascota: medidas, poses y cinemática (de una pose a los puntos del cuerpo).
-// No dibuja nada: cada traje pinta estos puntos a su manera (D-130). Así, otro estilo es solo otro traje.
-// Unidades: las de los bocetos (la cabeza, de 17 de radio); el traje las pasa a píxeles.
-// Ángulos, en grados. En brazos y piernas, positivo es hacia fuera del cuerpo, igual en los dos lados.
-// «I» y «D»: el lado izquierdo y el derecho de la pantalla.
+// Esqueleto de la mascota (D-130): medidas, volúmenes, poses y cinemática, en 3D.
+// De una pose (ángulos) a los volúmenes del cuerpo ya vistos desde la pantalla: cápsulas (palitos con grosor)
+// y manchas (la barriga, cada músculo). No pinta nada: cada traje los pinta a su manera.
+// Unidades: las de los bocetos (la cabeza, de 17 de radio). Ángulos, en grados.
+// Ejes del cuerpo: x a la derecha de la pantalla (cuando nos mira), y hacia abajo, z hacia nosotros (su delante).
+// «I» y «D»: el lado izquierdo y el derecho de la pantalla, cuando nos mira.
+// En brazos y piernas, «brazo», «codo», «muslo» y «rodilla» abren hacia fuera (igual en los dos lados);
+// los «…Ad», hacia delante (doblar la rodilla es «rodillaAd» negativo).
 
 export const MEDIDAS = Object.freeze({
-  cadera: 4, lumbar: 21, pecho: 21, cuello: 4, cabeza: 17,
-  hombroBajo: 5, brazo: 22, antebrazo: 21, muslo: 26.5, pierna: 25,
+  cadera: 4.5, lumbar: 19, pecho: 20, cuello: 3, cabeza: 17, hombroBajo: 5,
+  brazo: 20, antebrazo: 19, muslo: 24, pierna: 22, pie: 6,
+  rTronco: 7.5, rHombros: 6, rBrazo: 4.1, rPierna: 4.7, rPie: 3.6,
 });
 
-// De pie y tranquila, como el boceto 7.
 export const POSE_BASE = Object.freeze({
-  giro: 0,                       // todo el cuerpo, alrededor de la pelvis (positivo: como las agujas del reloj)
-  lumbar: 0, pecho: 0, cabeza: 0, // inclinación de cada tramo (positivo: hacia la derecha)
-  hombros: 0,                    // encogerlos (unidades hacia arriba)
-  brazoI: 14, codoI: -10, brazoD: 14, codoD: -10,
-  musloI: 7, rodillaI: 0, musloD: 7, rodillaD: 0,
-  escTronco: 1, escMusloI: 1, escMusloD: 1, escPiernaI: 1, escPiernaD: 1, // escorzo: el largo aparente
-  espaldas: 0,                   // 0 de frente, 1 de espaldas, 2 de frente otra vez (una vuelta entera)
-  estirar: 0,                    // estirarse (+) o aplastarse (−) desde donde se apoya
-  alto: 0,                       // despegue del suelo, en unidades (saltos)
+  orientacion: 0,   // hacia dónde mira el cuerpo: 0 a nosotros, 90 a la derecha, 180 de espaldas, −90 a la izquierda
+  giro: 0,          // todo el cuerpo en el plano de la pantalla, alrededor de la pelvis (positivo: como el reloj)
+  inclinar: 0,      // el tronco, hacia delante (positivo) o hacia atrás
+  lumbar: 0, pecho: 0, cabeza: 0, // cada tramo, hacia un lado (positivo: a la derecha)
+  cabezaGiro: 0, cabezaAd: 0,     // la cabeza: girarla (como «orientacion») y asentir (positivo: mira abajo)
+  hombros: 0,       // encogerlos (unidades hacia arriba)
+  brazoI: 10, brazoAdI: 0, codoI: -6, codoAdI: 14,
+  brazoD: 10, brazoAdD: 0, codoD: -6, codoAdD: 14,
+  musloI: 4, musloAdI: 0, rodillaI: 0, rodillaAdI: -4,
+  musloD: 4, musloAdD: 0, rodillaD: 0, rodillaAdD: -4,
+  puntillas: 0,     // de 0 (pies planos) a 1 (de puntillas)
+  estirar: 0,       // estirarse (+) o aplastarse (−) desde donde se apoya
+  alto: 0,          // despegue del suelo, en unidades (saltos)
 });
 export const CAMPOS = Object.keys(POSE_BASE);
 
@@ -27,145 +34,192 @@ export const lerp = (a, b, t) => a + (b - a) * t;
 export const limitar = (v, a, b) => (v < a ? a : v > b ? b : v);
 export const suave = (t) => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t));
 export const tramo = (v, a, b) => suave((v - a) / (b - a)); // 0 antes de a, 1 después de b
+const vuelta = (g) => ((g % 360) + 540) % 360 - 180;       // a [−180, 180)
 
-export function mezclar(a, b, t) {
+// Con «corto», la orientación va por el lado más corto (para pasar de una acción a otra).
+export function mezclar(a, b, t, corto = false) {
   const r = {};
-  for (const k of CAMPOS) r[k] = a[k] + (b[k] - a[k]) * t;
+  for (const k of CAMPOS) r[k] = a[k] + (corto && k === 'orientacion' ? vuelta(b[k] - a[k]) : b[k] - a[k]) * t;
   return r;
 }
-
-// Una vuelta entera (espaldas 2) es lo mismo que de frente (0): así una mezcla no da la vuelta al revés.
+// Una vuelta entera (360) es lo mismo que de frente (0).
 export function normalizar(pose) {
-  let e = pose.espaldas % 2;
-  if (e >= 1.5) e -= 2;
-  return e === pose.espaldas ? pose : { ...pose, espaldas: e };
+  const o = vuelta(pose.orientacion);
+  return o === pose.orientacion ? pose : { ...pose, orientacion: o };
 }
 
 const RAD = Math.PI / 180;
-const hacia = (phi) => [Math.sin(phi * RAD), Math.cos(phi * RAD)]; // 0 abajo, 90 derecha, 180 arriba
-const mas = (a, v, k) => [a[0] + v[0] * k, a[1] + v[1] * k];
-const entre = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
-
-/**
- * De una pose a los puntos del cuerpo, con la pelvis en (0, 0) y la y hacia abajo.
- * cuerpo: { anchoHombros, vientre (radio de la barriga, 0 sin barriga), bultos: { clave: unidades } }.
- * Devuelve { p (puntos), c (controles de las curvas: los bultos de los músculos), frente, ladeo, ángulos… }.
- */
-export function cinematica(pose, cuerpo, { espejo = false, apoyo = 'pies' } = {}) {
-  const M = MEDIDAS;
-  const b = cuerpo.bultos || {};
-  const p = {};
-  const c = {};
-  const aL = pose.lumbar, aP = aL + pose.pecho, aC = aP + pose.cabeza;
-  const arriba = (a) => hacia(180 - a);
-  const derecha = (a) => hacia(90 - a);
-  const et = pose.escTronco;
-
-  p.pelvis = [0, 0];
-  p.lumbar = mas(p.pelvis, arriba(aL), M.lumbar * et);
-  p.cuello = mas(p.lumbar, arriba(aP), M.pecho * et);
-  p.cabeza = mas(p.cuello, arriba(aC), M.cuello + M.cabeza);
-  // x hacia la derecha; y hacia abajo, desde el cuello (pecho) o desde la pelvis (lumbar)
-  const enPecho = (x, y) => mas(mas(p.cuello, derecha(aP), x), arriba(aP), -y * et);
-  const enLumbar = (x, y) => mas(mas(p.pelvis, derecha(aL), x), arriba(aL), -y * et);
-
-  const ancho = cuerpo.anchoHombros;
-  for (const [lado, s] of [['I', -1], ['D', 1]]) {
-    // brazo
-    const H = mas(mas(p.cuello, derecha(aP), s * ancho), arriba(aP), pose.hombros - M.hombroBajo * et);
-    const phiB = -aP + s * pose['brazo' + lado];
-    const phiA = phiB + s * pose['codo' + lado];
-    const E = mas(H, hacia(phiB), M.brazo);
-    p['hombro' + lado] = H;
-    p['codo' + lado] = E;
-    p['mano' + lado] = mas(E, hacia(phiA), M.antebrazo);
-    const lat = hacia(phiB + s * 90); // el lado de fuera del brazo
-    const flex = Math.sign(pose['codo' + lado]) || -1; // hacia dónde se dobla el codo
-    const bultoB = (b['biceps' + lado] || 0) - (b['triceps' + lado] || 0);
-    c['brazo' + lado] = mas(entre(H, E, 0.5), lat, 2 * flex * bultoB);
-    // deltoides: una tapa por fuera del hombro
-    const dt = b['deltoides' + lado] || 0;
-    const u = hacia(phiB);
-    p['deltA' + lado] = mas(mas(H, u, -1.4), lat, -0.4);
-    c['delt' + lado] = mas(mas(H, lat, 3.2 + 2.2 * dt), u, 1.4);
-    p['deltB' + lado] = mas(mas(H, u, 6.5 + 1.4 * dt), lat, 1.9);
-
-    // pierna
-    const Hc = [s * M.cadera, 0];
-    const phiM = s * pose['muslo' + lado];
-    const phiP = phiM + s * pose['rodilla' + lado];
-    const K = mas(Hc, hacia(phiM), M.muslo * pose['escMuslo' + lado]);
-    const F = mas(K, hacia(phiP), M.pierna * pose['escPierna' + lado]);
-    p['cadera' + lado] = Hc;
-    p['rodilla' + lado] = K;
-    p['pie' + lado] = F;
-    const flexR = Math.sign(pose['rodilla' + lado]) || -1;
-    const bultoM = (b['isquios' + lado] || 0) - (b['cuadriceps' + lado] || 0);
-    c['muslo' + lado] = mas(entre(Hc, K, 0.5), hacia(phiM + s * 90), 2 * flexR * bultoM);
-    c['pierna' + lado] = mas(entre(K, F, 0.34), hacia(phiP + s * 90), 2 * (b['gemelos' + lado] || 0));
-
-    // pectoral: la línea de debajo
-    const pc = b['pecho' + lado] || 0;
-    p['pecA' + lado] = enPecho(s * 1.3, M.hombroBajo + 1.6);
-    c['pec' + lado] = enPecho(s * ancho * 0.55, M.hombroBajo + 7.6 + 2.4 * pc);
-    p['pecB' + lado] = enPecho(s * (ancho - 0.6), M.hombroBajo + 3.2);
-    // la V de la espalda, del hombro a la cintura
-    p['cintura' + lado] = enLumbar(s * 5.2, -5);
-    c['dorsal' + lado] = mas(entre(H, p['cintura' + lado], 0.45), derecha(aP), s * (1.2 + 2 * (b.dorsales || 0)));
-    // glúteos y lumbares (se ven de espaldas)
-    const gl = b.gluteos || 0;
-    p['glA' + lado] = enLumbar(s * 0.9, -4.5);
-    c['gl' + lado] = enLumbar(s * (9 + 1.6 * gl), -4.5 - 0.6 * gl);
-    p['glB' + lado] = enLumbar(s * (4.2 + 0.4 * gl), 4.8 + 0.9 * gl);
-    p['lbA' + lado] = enLumbar(s * 2.8, -17.5);
-    c['lb' + lado] = enLumbar(s * (3.4 + 1.3 * (b.lumbares || 0)), -12);
-    p['lbB' + lado] = enLumbar(s * 2.8, -6.5);
+const sen = (g) => Math.sin(g * RAD), cos = (g) => Math.cos(g * RAD);
+// la dirección de un tramo: «abajo», girada hacia delante f grados y hacia el lado a grados
+const dir = (a, f) => [cos(f) * sen(a), cos(f) * cos(a), sen(f)];
+// «arriba» del tronco, inclinado a un lado (a) y hacia delante (i)
+const arriba = (a, i) => [sen(a) * cos(i), -cos(a) * cos(i), sen(i)];
+const mas = (p, v, k) => [p[0] + v[0] * k, p[1] + v[1] * k, p[2] + v[2] * k];
+const entre = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+const cruz = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+const unidad = (v) => {
+  const l = Math.hypot(v[0], v[1], v[2]) || 1;
+  return [v[0] / l, v[1] / l, v[2] / l];
+};
+// Lo que tiene el primer candidato de perpendicular a u (o el siguiente, si va casi igual que u).
+function perpendicular(u, ...candidatos) {
+  for (const v of [...candidatos, [0, -1, 0], [1, 0, 0]]) {
+    const k = v[0] * u[0] + v[1] * u[1] + v[2] * u[2];
+    const w = [v[0] - u[0] * k, v[1] - u[1] * k, v[2] - u[2] * k], l = Math.hypot(w[0], w[1], w[2]);
+    if (l > 0.3) return [w[0] / l, w[1] / l, w[2] / l];
   }
-  // abdominales: tres filas de dos rayitas, a los lados de la columna
-  const filas = [[enPecho(0, 14.5), derecha(aP)], [enLumbar(0, -14.5), derecha(aL)], [enLumbar(0, -8), derecha(aL)]];
-  filas.forEach(([centro, dir], i) => {
-    p[`abs${i + 1}Ia`] = mas(centro, dir, -4.6);
-    p[`abs${i + 1}Ib`] = mas(centro, dir, -1.5);
-    p[`abs${i + 1}Da`] = mas(centro, dir, 1.5);
-    p[`abs${i + 1}Db`] = mas(centro, dir, 4.6);
-  });
-  // barriga (gordito): un óvalo apoyado en la pelvis
-  p.vientre = enLumbar(0, -cuerpo.vientre * 0.9);
-
-  // girarse (de espaldas), espejo, estirarse y el giro de todo el cuerpo
-  const vuelta = Math.cos(Math.PI * pose.espaldas); // 1 de frente, −1 de espaldas
-  const sx = (0.3 + 0.7 * Math.abs(vuelta)) * (espejo ? -1 : 1);
-  const e = pose.estirar;
-  const cy = apoyo === 'pies' ? Math.max(p.pieI[1], p.pieD[1]) : 0;
-  const giro = espejo ? -pose.giro : pose.giro;
-  const cg = Math.cos(giro * RAD), sg = Math.sin(giro * RAD);
-  const mover = (q) => {
-    const x = q[0] * sx * (1 - e * 0.5);
-    const y = cy + (q[1] - cy) * (1 + e);
-    return [x * cg - y * sg, x * sg + y * cg];
-  };
-  for (const k in p) p[k] = mover(p[k]);
-  for (const k in c) c[k] = mover(c[k]);
-
-  const signo = espejo ? -1 : 1;
-  return {
-    p, c,
-    frente: vuelta,                                  // > 0: se le ve la cara
-    ladeo: -Math.sin(Math.PI * pose.espaldas) * signo, // hacia dónde se le va la cara al girarse
-    angCabeza: signo * aC + giro,
-    angLumbar: signo * aL + giro,
-    anchoX: Math.abs(sx) * (1 - e * 0.5),
-    altoY: 1 + e,
-    vientre: cuerpo.vientre,
-  };
+  return [0, 0, 1];
 }
 
-// El punto más bajo del cuerpo (para apoyarlo tumbado), en unidades.
-export function masBajo(cin) {
-  let y = cin.p.cabeza[1] + MEDIDAS.cabeza;
-  for (const k of ['pieI', 'pieD', 'rodillaI', 'rodillaD', 'manoI', 'manoD', 'codoI', 'codoD', 'caderaI', 'caderaD', 'pelvis', 'cuello']) {
-    if (cin.p[k][1] > y) y = cin.p[k][1];
+/**
+ * De una pose a los volúmenes del cuerpo, con la pelvis en (0, 0) y la y hacia abajo.
+ * cuerpo: { anchoHombros, vientre (radio de la barriga), gordo (0 a 1), bultos: {músculo: unidades}, ver: {músculo: 0 a 1} }.
+ * Devuelve { p (puntos: x, y y la profundidad z, hacia nosotros), partes (por orden: lo de detrás, primero),
+ * detalles (las líneas de un cuerpo definido), cara(x, y) (un punto de la cara), frente, pies, bajo, radios }.
+ */
+export function cinematica(pose, cuerpo, { espejo = false, apoyo = 'pies' } = {}) {
+  const M = MEDIDAS, b = cuerpo.bultos || {}, ver = cuerpo.ver || {}, g = cuerpo.gordo || 0;
+  const rT = M.rTronco + 1.4 * g, rB = M.rBrazo + 0.5 * g, rPi = M.rPierna + 0.6 * g, w = cuerpo.anchoHombros;
+  const aL = pose.lumbar, aP = aL + pose.pecho, aC = aP + pose.cabeza;
+  const iL = pose.inclinar * 0.45, iP = pose.inclinar;
+  const q = {}, manchas = [], detalles = [];
+  const mancha = (parte, musculos, c, eje, largo, ancho) => manchas.push({ parte, musculos, c, eje, largo, ancho });
+
+  q.pelvis = [0, 0, 0];
+  const uL = arriba(aL, iL), uP = arriba(aP, iP);
+  const dL = [cos(aL), sen(aL), 0], dP = [cos(aP), sen(aP), 0];
+  const fL = cruz(uL, dL), fP = cruz(uP, dP); // su delante
+  q.lumbar = mas(q.pelvis, uL, M.lumbar);
+  q.cuello = mas(q.lumbar, uP, M.pecho);
+  q.cabeza = mas(q.cuello, arriba(aC, iP * 0.8 + pose.cabezaAd * 0.2), M.cuello + M.cabeza);
+  // un punto del tronco: x a su derecha, y hacia abajo desde el cuello, z hacia su delante
+  const enTronco = (x, y, z) => (y <= M.pecho
+    ? mas(mas(mas(q.cuello, dP, x), uP, -y), fP, z)
+    : mas(mas(mas(q.pelvis, dL, x), uL, M.pecho + M.lumbar - y), fL, z));
+
+  for (const [l, s] of [['I', -1], ['D', 1]]) {
+    // brazo
+    const H = mas(mas(q.cuello, dP, s * w), uP, pose.hombros - M.hombroBajo);
+    const a0 = -aP, f0 = -iP;
+    const dB = dir(a0 + s * pose['brazo' + l], f0 + pose['brazoAd' + l]);
+    const dA = dir(a0 + s * (pose['brazo' + l] + pose['codo' + l]), f0 + pose['brazoAd' + l] + pose['codoAd' + l]);
+    const E = mas(H, dB, M.brazo);
+    q['hombro' + l] = H;
+    q['codo' + l] = E;
+    q['mano' + l] = mas(E, dA, M.antebrazo);
+    const nB = perpendicular(dB, dA, fP);                  // hacia donde se dobla el codo: el bíceps
+    const lat = perpendicular(dB, [s, 0, 0], [0, -1, 0]); // por fuera: el deltoides
+    const bi = b['biceps' + l] || 0, tr = b['triceps' + l] || 0, de = b['deltoides' + l] || 0;
+    if (bi > 0.12) mancha('brazo' + l, ['biceps' + l], mas(entre(H, E, 0.52), nB, rB * 0.4 + bi * 0.35), dB, 6 + bi * 0.6, rB * 0.7 + bi * 0.55);
+    if (tr > 0.12) mancha('brazo' + l, ['triceps' + l], mas(entre(H, E, 0.45), nB, -(rB * 0.4 + tr * 0.35)), dB, 6 + tr * 0.6, rB * 0.7 + tr * 0.5);
+    if (de > 0.12) mancha('brazo' + l, ['hombros' + l, 'hombrosPost' + l], mas(mas(H, lat, rB * 0.45 + de * 0.35), dB, 2.5), dB, 4.5 + de * 0.5, rB * 0.8 + de * 0.55);
+
+    // pierna; el pie, plano en el suelo salvo con la pierna muy doblada (entonces sigue a la espinilla)
+    const Hc = [s * M.cadera, 0, 0];
+    const aR = s * (pose['muslo' + l] + pose['rodilla' + l]);
+    const fM = pose['musloAd' + l], fR = fM + pose['rodillaAd' + l];
+    const dM = dir(s * pose['muslo' + l], fM), dS = dir(aR, fR);
+    const kPie = limitar((Math.abs(fR) - 45) / 30, 0, 1);
+    const plano = dir(aR, 90 - 55 * pose.puntillas), sigue = dir(aR, fR + 90 - 55 * pose.puntillas);
+    const dF = unidad(entre(plano, sigue, kPie));
+    const K = mas(Hc, dM, M.muslo), A = mas(K, dS, M.pierna);
+    q['cadera' + l] = Hc;
+    q['rodilla' + l] = K;
+    q['tobillo' + l] = A;
+    q['punta' + l] = mas(A, dF, M.pie);
+    const nK = perpendicular(dM, dS, [0, 0, -1]);               // hacia donde se dobla la rodilla
+    const nC = perpendicular(dS, dF.map((v) => -v), [0, 0, -1]); // la pantorrilla: al revés de la punta del pie
+    const cu = b['cuadriceps' + l] || 0, is = b['isquios' + l] || 0, ge = b['gemelos' + l] || 0;
+    if (cu > 0.12) mancha('pierna' + l, ['cuadriceps' + l], mas(entre(Hc, K, 0.45), nK, -(rPi * 0.4 + cu * 0.35)), dM, 8 + cu * 0.6, rPi * 0.7 + cu * 0.55);
+    if (is > 0.12) mancha('pierna' + l, ['isquios' + l], mas(entre(Hc, K, 0.5), nK, rPi * 0.4 + is * 0.35), dM, 8 + is * 0.6, rPi * 0.7 + is * 0.5);
+    if (ge > 0.12) mancha('pierna' + l, ['gemelos' + l], mas(entre(K, A, 0.3), nC, rPi * 0.35 + ge * 0.3), dS, 6 + ge * 0.5, rPi * 0.7 + ge * 0.5);
+
+    // tronco: pectoral, dorsal y glúteo de este lado
+    const pc = b['pecho' + l] || 0, dl = b.dorsales || 0, gl = b.gluteos || 0;
+    if (pc > 0.12) mancha('tronco', ['pecho' + l], enTronco(s * w * 0.42, 9.5, rT * 0.55), dP, w * 0.4 + pc * 0.3, 3.2 + pc * 0.7);
+    if (dl > 0.12) {
+      const a1 = enTronco(s * rT * 0.8, 9, -0.5), a2 = enTronco(s * rT * 0.5, 25, -0.5);
+      mancha('tronco', ['dorsales'], mas(entre(a1, a2, 0.4), dP, s * dl * 0.45), unidad(entre(a2, a1, 1).map((v, i) => v - a2[i])), 8 + dl * 0.4, 2.2 + dl * 0.9);
+    }
+    mancha('tronco', ['gluteos'], enTronco(s * 3.3, M.pecho + M.lumbar + 1.5, -(rT * 0.55 + gl * 0.3)), dL, 3.6 + gl * 0.4, 3.6 + gl * 0.65);
+
+    // las líneas de un cuerpo definido (de frente o de espaldas)
+    const vp = ver['pecho' + l] || 0;
+    if (vp > 0.03) detalles.push({ cara: 1, fuerza: vp, puntos: [enTronco(s * 1.2, 12.5, rT), enTronco(s * w * 0.45, 15, rT * 0.95), enTronco(s * w * 0.85, 11, rT * 0.6)] });
+    [16.5, 22, 27.5].forEach((y, i) => {
+      const va = ver['abs' + (i + 1)] || 0;
+      if (va > 0.03) detalles.push({ cara: 1, fuerza: va, puntos: [enTronco(s * 1.4, y, rT * 0.98), enTronco(s * 4.6, y, rT * 0.9)] });
+    });
+    const vl = ver.lumbares || 0;
+    if (vl > 0.03) detalles.push({ cara: -1, fuerza: vl, puntos: [enTronco(s * 2.6, 25, -rT), enTronco(s * 2.6, 34, -rT)] });
   }
-  if (cin.vientre > 0.5) y = Math.max(y, cin.p.vientre[1] + cin.vientre * cin.altoY);
-  return y;
+  const vc = Math.max(ver.abs1 || 0, ver.pechoI || 0, ver.pechoD || 0);
+  if (vc > 0.03) detalles.push({ cara: 1, fuerza: vc, puntos: [enTronco(0, 12.5, rT), enTronco(0, 31, rT * 0.98)] });
+  if ((ver.gluteos || 0) > 0.03) detalles.push({ cara: -1, fuerza: ver.gluteos, puntos: [enTronco(0, M.pecho + M.lumbar - 2, -rT), enTronco(0, M.pecho + M.lumbar + 5, -rT * 0.8)] });
+  // la barriga (gordito), hacia delante
+  const r = cuerpo.vientre;
+  if (r > 2) mancha('tronco', [], mas(mas(q.pelvis, uL, r * 0.85), fL, r * 0.42), uL, r, r * 1.05);
+
+  // Visto desde la pantalla: girado hacia donde mira, en espejo, estirado y girado en el plano.
+  const ct = cos(pose.orientacion), st = sen(pose.orientacion);
+  const e = pose.estirar;
+  const gi = espejo ? -pose.giro : pose.giro, cg = cos(gi), sg = sen(gi);
+  const cy = apoyo === 'pies' ? Math.max(q.tobilloI[1], q.tobilloD[1], q.puntaI[1], q.puntaD[1]) : 0;
+  const vista = ([x, y, z]) => {
+    let X = (x * ct + z * st) * (1 - e * 0.5);
+    if (espejo) X = -X;
+    const Y = cy + (y - cy) * (1 + e);
+    return [X * cg - Y * sg, X * sg + Y * cg, (-x * st + z * ct) * (1 - e * 0.5)];
+  };
+  const p = {};
+  for (const k in q) p[k] = vista(q[k]);
+
+  // las partes, cada una con sus cápsulas y sus manchas, y su profundidad para ordenarlas
+  const media = (...ks) => ks.reduce((a, k) => a + p[k][2], 0) / ks.length;
+  const partes = [
+    { nombre: 'tronco', clave: -1, segmentos: [[p.cuello, p.pelvis, rT], [p.hombroI, p.hombroD, M.rHombros + 0.6 * g]], manchas: [] },
+    { nombre: 'cabeza', clave: p.cabeza[2] - 0.5, segmentos: [], manchas: [], centro: p.cabeza, radio: M.cabeza },
+  ];
+  for (const l of ['I', 'D']) {
+    partes.push({ nombre: 'brazo' + l, clave: media('hombro' + l, 'codo' + l, 'mano' + l),
+      segmentos: [[p['hombro' + l], p['codo' + l], rB], [p['codo' + l], p['mano' + l], rB * 0.92]], manchas: [] });
+    partes.push({ nombre: 'pierna' + l, clave: media('cadera' + l, 'rodilla' + l, 'tobillo' + l) - 1.5,
+      segmentos: [[p['cadera' + l], p['rodilla' + l], rPi], [p['rodilla' + l], p['tobillo' + l], rPi * 0.92],
+        [p['tobillo' + l], p['punta' + l], M.rPie]], manchas: [] });
+  }
+  const porNombre = Object.fromEntries(partes.map((x) => [x.nombre, x]));
+  for (const m of manchas) {
+    const c = vista(m.c), a = vista(mas(m.c, m.eje, m.largo)), z = vista(mas(m.c, m.eje, -m.largo));
+    const dx = a[0] - z[0], dy = a[1] - z[1];
+    porNombre[m.parte].manchas.push({ c, rx: Math.max(Math.hypot(dx, dy) / 2, m.ancho * 0.9), ry: m.ancho,
+      rot: Math.atan2(dy, dx), musculos: m.musculos });
+  }
+  partes.sort((x, y) => x.clave - y.clave);
+
+  // un punto de la cara (x a la derecha, y hacia abajo, desde el centro de la cabeza), ya visto desde la pantalla
+  const asiente = pose.cabezaAd + iP * 0.5, girada = pose.cabezaGiro;
+  const cara = (x, y, encima = 0.4) => {
+    const R = M.cabeza + encima;
+    let z = Math.sqrt(Math.max(0, R * R - x * x - y * y));
+    let yy = y * cos(asiente) + z * sen(asiente);
+    z = -y * sen(asiente) + z * cos(asiente);
+    const xx = x * cos(aC) - yy * sen(aC);
+    yy = x * sen(aC) + yy * cos(aC);
+    const x2 = xx * cos(girada) + z * sen(girada);
+    z = -xx * sen(girada) + z * cos(girada);
+    return vista([q.cabeza[0] + x2, q.cabeza[1] + yy, q.cabeza[2] + z]);
+  };
+
+  let bajo = p.cabeza[1] + M.cabeza;
+  for (const parte of partes) {
+    for (const [a, z, rr] of parte.segmentos) bajo = Math.max(bajo, a[1] + rr, z[1] + rr);
+    for (const m of parte.manchas) bajo = Math.max(bajo, m.c[1] + Math.max(m.rx, m.ry) * 0.8);
+  }
+  const frente = vista(mas(q.cuello, fP, 1))[2] - p.cuello[2]; // 1 si nos mira de frente, −1 de espaldas
+  return {
+    p, partes, cara, frente, bajo,
+    detalles: detalles.map((d) => ({ ...d, puntos: d.puntos.map(vista) })),
+    pies: Math.max(p.tobilloI[1], p.tobilloD[1], p.puntaI[1], p.puntaD[1]) + M.rPie,
+    radios: { tronco: rT, brazo: rB, pierna: rPi },
+  };
 }

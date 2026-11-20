@@ -3,7 +3,7 @@
 // una serie acabada, un récord, un toque. No dibuja: cada paso devuelve un «fotograma» que pinta el traje.
 // Nunca toca la app: solo mira las superficies.
 
-import { POSE_BASE, MEDIDAS, mezclar, normalizar, cinematica, masBajo, lerp, limitar, suave, tramo } from './esqueleto.js';
+import { POSE_BASE, MEDIDAS, mezclar, normalizar, cinematica, lerp, limitar, suave, tramo } from './esqueleto.js';
 import { GESTOS, GRUPOS, CARAS, MUSCULOS } from './gestos.js';
 
 const MARGEN = 14;        // px que deja hasta el borde de una tarjeta
@@ -11,7 +11,7 @@ const VELOCIDAD = 34;     // px por segundo al pasear
 const TRANSICION = 0.28;  // s para pasar de una acción a otra
 const SUENO_TRAS = 50;    // s sin que le pase nada hasta tener sueño del todo
 const BOMBEO_DURA = 150;  // s que tarda en irse el bombeo (en la app de verdad, unas horas)
-const MEDIO_TUBO = 2.4;   // unidades: lo que sobresale el tubo por debajo de los pies
+const PASO = 22;          // grados que abre cada pierna al andar
 
 // La cara se enciende como un tubo de neón (parpadea y se queda) y se apaga igual.
 const ENCENDER = [[0, 0], [0.04, 0.85], [0.08, 0.2], [0.13, 0.95], [0.18, 0.5], [0.24, 1]];
@@ -105,8 +105,8 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
 
   // El cuerpo según la forma de fondo (gordito → definido) y cómo está cada músculo.
   function cuerpoDe(resp = 0) {
-    const def = tramo(m.forma, 0.5, 1);    // definido: de la mitad para arriba
-    const gord = tramo(m.forma, 0.45, 0.05); // gordito: de la mitad para abajo
+    const def = tramo(m.forma, 0.5, 1);      // definido: de la mitad para arriba
+    const gordo = tramo(m.forma, 0.45, 0.05); // gordito: de la mitad para abajo
     const bultos = {}, ver = {}, luz = {};
     for (const k in MUSCULOS) {
       const [a, b, c] = MUSCULOS[k], s = m.musc[k];
@@ -116,7 +116,7 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
       luz[k] = s.contr;
     }
     for (const l of ['I', 'D']) bultos['deltoides' + l] = Math.max(bultos['hombros' + l], bultos['hombrosPost' + l]);
-    return { anchoHombros: 8.5 + 3.5 * def, vientre: gord * (13 + 0.9 * resp), bultos, ver, luz, tubo: 4.6 + 1.1 * gord };
+    return { anchoHombros: 8.5 + 3.5 * def, vientre: gordo * (12 + 0.9 * resp), gordo, bultos, ver, luz };
   }
 
   // ——— Las acciones ———
@@ -131,16 +131,18 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
         this.t += dt;
         if (m.t > m.mirada.hasta) mirarAlAzar();
         const s = Math.sin(0.9 * m.t + fase);
-        return { pose: { ...POSE_BASE, lumbar: 1.8 * s, musloI: 7 + 1.2 * s, musloD: 7 - 1.2 * s }, apoyo: 'pies', x: m.x, y: sup().y };
+        return { pose: { ...POSE_BASE, lumbar: 1.8 * s, musloI: 4 + 1.2 * s, musloD: 4 - 1.2 * s }, apoyo: 'pies', x: m.x, y: sup().y };
       },
       get hecha() { return this.t >= dur; },
     };
   }
 
+  // Pasea de perfil, mirando hacia donde va, con la cabeza un poco girada hacia nosotros.
   function caminar(destino) {
     let v = 0, fase = 0;
+    const zancada = () => 4 * (MEDIDAS.muslo + MEDIDAS.pierna) * Math.sin((PASO * Math.PI) / 180) * m.escala;
     return {
-      nombre: 'Pasea', t: 0,
+      nombre: 'Pasea', t: 0, transicion: 0.35,
       alEmpezar() {
         const s = sup();
         destino = limitar(destino, s.x1 + MARGEN, s.x2 - MARGEN);
@@ -150,18 +152,17 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
         const falta = destino - m.x, dir = Math.sign(falta) || 1;
         v = lerp(v, Math.min(VELOCIDAD, Math.abs(falta) * 3 + 5), Math.min(1, dt * 6));
         m.x += dir * Math.min(Math.abs(falta), v * dt);
-        const ritmo = Math.min(1, v / VELOCIDAD);
-        fase += dt * 2 * Math.PI * 1.25 * ritmo;
-        const sn = Math.sin(fase);
-        const levI = Math.max(0, sn) * ritmo, levD = Math.max(0, -sn) * ritmo;
-        mirarCara(3.8 * dir, 0.8, 0.2);
+        fase += (dt * 2 * Math.PI * v) / zancada();
+        const ritmo = Math.min(1, v / VELOCIDAD), sn = Math.sin(fase), cs = Math.cos(fase);
+        mirarCara(3 * dir, 0.6, 0.2);
         return {
           pose: {
-            ...POSE_BASE,
-            musloI: 6 + 12 * levI, rodillaI: -46 * levI, escPiernaI: 1 - 0.1 * levI,
-            musloD: 6 + 12 * levD, rodillaD: -46 * levD, escPiernaD: 1 - 0.1 * levD,
-            brazoI: 14 + 9 * sn * ritmo, codoI: -16, brazoD: 14 - 9 * sn * ritmo, codoD: -16,
-            lumbar: 3.5 * dir * ritmo, giro: 2.2 * sn * ritmo, estirar: 0.012 * Math.abs(Math.cos(fase)) * ritmo,
+            ...POSE_BASE, orientacion: 90 * dir, cabezaGiro: -38 * dir, inclinar: 5 * ritmo,
+            musloI: 2, musloD: 2,
+            musloAdI: PASO * sn * ritmo, rodillaAdI: -(5 + 50 * Math.max(0, cs) * ritmo),
+            musloAdD: -PASO * sn * ritmo, rodillaAdD: -(5 + 50 * Math.max(0, -cs) * ritmo),
+            brazoI: 6, brazoD: 6, brazoAdI: -24 * sn * ritmo, brazoAdD: 24 * sn * ritmo, codoAdI: 28, codoAdD: 28,
+            estirar: 0.012 * Math.abs(cs) * ritmo,
           },
           apoyo: 'pies', x: m.x, y: sup().y,
         };
@@ -191,7 +192,7 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
     return opciones.length ? unoDe(opciones) : null;
   }
   function saltar(destino, x1) {
-    const PREP = 0.24, ATERRIZA = 0.3;
+    const PREP = 0.26, ATERRIZA = 0.32;
     let x0, y0, y1, cima, vuelo, llego = false;
     return {
       nombre: 'Salta a otra tarjeta', t: 0, interrumpible: false,
@@ -200,18 +201,19 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
         y0 = sup().y;
         y1 = destino.y;
         this.nombre = y1 < y0 ? 'Salta a la tarjeta de arriba' : 'Baja de un salto';
-        cima = Math.max(Math.min(y0, y1) - (y1 < y0 ? 26 : 16), 140 * m.escala); // que no se le salga la cabeza por arriba
+        cima = Math.max(Math.min(y0, y1) - (y1 < y0 ? 26 : 16), 135 * m.escala); // que no se le salga la cabeza
         vuelo = 0.42 + Math.min(0.35, Math.abs(y0 - y1) / 600 + Math.abs(x1 - x0) / 900);
       },
       actualizar(dt) {
         const t = (this.t += dt);
         const dir = Math.sign(x1 - x0) || 1;
+        const lado = { orientacion: 80 * dir, cabezaGiro: -30 * dir };
         if (t < PREP) {
           const u = suave(t / PREP);
           mirarCara(3 * dir, y1 < y0 ? -2.6 : 2.6, 0.3);
           return {
-            pose: { ...POSE_BASE, musloI: 7 + 23 * u, rodillaI: -58 * u, musloD: 7 + 23 * u, rodillaD: -58 * u,
-              brazoI: 14 + 26 * u, brazoD: 14 + 26 * u, codoI: -30, codoD: -30, estirar: -0.04 * u },
+            pose: { ...POSE_BASE, ...lado, inclinar: 22 * u, musloAdI: 50 * u, rodillaAdI: -85 * u,
+              musloAdD: 50 * u, rodillaAdD: -85 * u, brazoAdI: -40 * u, brazoAdD: -40 * u, estirar: -0.04 * u },
             apoyo: 'pies', x: x0, y: y0,
           };
         }
@@ -219,8 +221,9 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
           const u = (t - PREP) / vuelo, r = Math.sin(Math.PI * u);
           const y = lerp(y0, y1, u) - 4 * ((y0 + y1) / 2 - cima) * u * (1 - u);
           return {
-            pose: { ...POSE_BASE, musloI: 8 + 14 * r, rodillaI: -95 * r, escMusloI: 1 - 0.3 * r, musloD: 5, rodillaD: -12 * r,
-              brazoI: 60 + 90 * r, brazoD: 60 + 90 * r, codoI: 10, codoD: 10, estirar: 0.06 * (1 - r) }, // una rodilla arriba
+            pose: { ...POSE_BASE, ...lado, inclinar: 8 * r, musloAdI: 60 * r, rodillaAdI: -70 * r,
+              musloAdD: -28 * r, rodillaAdD: -50 * r, brazoAdI: 150 * r, brazoAdD: 120 * r, codoAdI: 10, codoAdD: 10,
+              estirar: 0.06 * (1 - r) },
             apoyo: 'pies', x: lerp(x0, x1, u), y,
           };
         }
@@ -231,8 +234,8 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
         }
         const k = Math.sin(Math.PI * Math.min(1, (t - PREP - vuelo) / ATERRIZA));
         return {
-          pose: { ...POSE_BASE, musloI: 7 + 22 * k, rodillaI: -48 * k, musloD: 7 + 22 * k, rodillaD: -48 * k,
-            brazoI: 14 + 30 * k, brazoD: 14 + 30 * k, estirar: -0.06 * k },
+          pose: { ...POSE_BASE, ...lado, inclinar: 18 * k, musloAdI: 45 * k, rodillaAdI: -78 * k,
+            musloAdD: 45 * k, rodillaAdD: -78 * k, brazoAdI: 30 * k, brazoAdD: 30 * k, estirar: -0.05 * k },
           apoyo: 'pies', x: x1, y: y1,
         };
       },
@@ -240,8 +243,9 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
     };
   }
 
+  // Sentada en el borde de la tarjeta: los muslos hacia delante y las piernas colgando por delante.
   function sentarse(dur = entre(6, 11)) {
-    const fase = entre(0, 6);
+    const fase = entre(0, 6), lado = azar() < 0.5 ? -1 : 1;
     return {
       nombre: 'Se sienta en el borde', t: 0, transicion: 0.45,
       actualizar(dt) {
@@ -253,10 +257,10 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
         if (modorra > 0.5) this.nombre = 'Le entra sueño';
         return {
           pose: {
-            ...POSE_BASE,
-            musloI: 10, escMusloI: 0.3, rodillaI: -10 + 14 * col, musloD: 10, escMusloD: 0.3, rodillaD: -10 - 14 * col,
-            brazoI: 34, codoI: -12, brazoD: 34, codoD: -12, hombros: 0.6 - modorra,
-            cabeza: 10 * modorra * (0.55 + 0.45 * Math.sin(this.t * 1.4)),
+            ...POSE_BASE, orientacion: 18 * lado, cabezaGiro: -10 * lado, inclinar: -4 + 8 * modorra,
+            musloI: 7, musloD: 7, musloAdI: 84, musloAdD: 84, rodillaAdI: -84 + 16 * col, rodillaAdD: -84 - 16 * col,
+            brazoI: 26, brazoD: 26, brazoAdI: 6, brazoAdD: 6, codoAdI: 6, codoAdD: 6, hombros: 0.6 - modorra,
+            cabeza: 8 * modorra * (0.55 + 0.45 * Math.sin(this.t * 1.4)), cabezaAd: 22 * modorra,
           },
           apoyo: 'cadera', x: m.x, y: sup().y,
           ojos: modorra > 0.6 ? Math.max(0.12, 1 - (modorra - 0.6) * 2.2) : 1,
@@ -266,7 +270,7 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
     };
   }
 
-  // Duerme tumbada boca arriba, con las piernas cruzadas y una mano detrás de la cabeza.
+  // Duerme tumbada boca arriba, con las rodillas dobladas y las manos detrás de la cabeza.
   function dormir(dur = entre(12, 22)) {
     const espejo = azar() < 0.5;
     let proxZ = 1;
@@ -274,8 +278,8 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
       nombre: 'Duerme', t: 0, transicion: 0.9, dormida: true,
       alEmpezar() {
         m.cara = null;
-        const s = sup(), largo = 80 * m.escala, cola = 40 * m.escala; // hacia la cabeza y hacia los pies
-        m.x = espejo ? limitar(m.x, s.x1 + largo, s.x2 - cola) : limitar(m.x, s.x1 + cola, s.x2 - largo);
+        const s = sup(), cabeza = 70 * m.escala, pies = 55 * m.escala;
+        m.x = espejo ? limitar(m.x, s.x1 + pies, s.x2 - cabeza) : limitar(m.x, s.x1 + cabeza, s.x2 - pies);
       },
       actualizar(dt) {
         this.t += dt;
@@ -286,9 +290,9 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
         const r = Math.sin((this.t * 2 * Math.PI) / 4.6);
         return {
           pose: {
-            ...POSE_BASE, giro: 90, lumbar: -14, pecho: -2, cabeza: -6 + 1.2 * r,
-            musloI: 60, rodillaI: -98, musloD: -50, rodillaD: 98,
-            brazoI: 150, codoI: 70, brazoD: -10, codoD: 0,
+            ...POSE_BASE, orientacion: 90, giro: -90, cabezaGiro: -40, cabezaAd: -8, inclinar: -4, hombros: 0.6 * r,
+            musloAdI: 58, rodillaAdI: -108, musloAdD: 76, rodillaAdD: -62, musloD: -4,
+            brazoI: 16, brazoD: 16, brazoAdI: 166, brazoAdD: 166, codoAdI: 100, codoAdD: 100,
           },
           apoyo: 'tumbado', x: m.x, y: sup().y, espejo, cara: 'dormida', respira: 4.6,
         };
@@ -309,9 +313,8 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
       alEmpezar() {
         s = sup();
         const cin = cinematica(POSE_BASE, cuerpoDe(0));
-        const pies = Math.max(cin.p.pieI[1], cin.p.pieD[1]) + MEDIO_TUBO;
-        ojos = (pies - (cin.p.cabeza[1] - 1)) * m.escala;
-        todo = (pies - (cin.p.cabeza[1] - MEDIDAS.cabeza - MEDIO_TUBO)) * m.escala + 4;
+        ojos = (cin.pies - (cin.p.cabeza[1] - 1)) * m.escala;
+        todo = (cin.pies - (cin.p.cabeza[1] - MEDIDAS.cabeza)) * m.escala + 6;
       },
       actualizar(dt) {
         const t = (this.t += dt);
@@ -319,14 +322,14 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
         let hundir = 0, pose = POSE_BASE, dx = 0;
         if (t < 0.3) {
           const u = suave(t / 0.3);
-          pose = { ...POSE_BASE, musloI: 7 + 18 * u, rodillaI: -34 * u, musloD: 7 + 18 * u, rodillaD: -34 * u, estirar: -0.03 * u };
+          pose = { ...POSE_BASE, musloAdI: 40 * u, rodillaAdI: -70 * u, musloAdD: 40 * u, rodillaAdD: -70 * u, inclinar: 12 * u };
         } else if (t < 0.62) {
           hundir = todo * suave((t - 0.3) / 0.32);
         } else if (t < 1.6) {
           hundir = todo;
         } else if (t < 4.0) {
           hundir = lerp(todo, asomado, suave((t - 1.6) / 0.6));
-          pose = { ...POSE_BASE, brazoI: 110, codoI: 105, brazoD: 110, codoD: 105 }; // las manos, a los lados de la cara
+          pose = { ...POSE_BASE, brazoI: 110, codoI: 105, brazoD: 110, codoD: 105, codoAdI: 0, codoAdD: 0 };
           if (t > 1.8 && this.nombre !== 'Se asoma') {
             this.nombre = 'Se asoma';
             ponerCara('curiosa', 2.1);
@@ -338,8 +341,8 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
           const u = Math.min(1, (t - 4.0) / 0.42);
           hundir = asomado * (1 - u) - (asomado / 2 + 14) * 4 * u * (1 - u);
           const r = Math.sin(Math.PI * u);
-          pose = { ...POSE_BASE, brazoI: 14 + 120 * r, brazoD: 14 + 120 * r, codoI: 10, codoD: 10,
-            musloI: 7 + 14 * r, rodillaI: -30 * r, musloD: 7 + 14 * r, rodillaD: -30 * r };
+          pose = { ...POSE_BASE, brazoI: 10 + 120 * r, brazoD: 10 + 120 * r, codoI: 10, codoD: 10,
+            musloAdI: 30 * r, rodillaAdI: -50 * r, musloAdD: 30 * r, rodillaAdD: -50 * r };
         }
         return {
           pose, apoyo: 'pies', x: m.x + dx, y: s.y + hundir,
@@ -491,19 +494,19 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
     pose.cabeza += m.ladeo;
     pose = normalizar(pose);
 
-    // de la acción anterior a esta, sin saltos
+    // de la acción anterior a esta, sin saltos (la orientación, por el lado más corto)
     let u = 1;
     if (m.trans) {
       m.trans.t += dt;
       u = suave(m.trans.t / m.trans.dur);
-      pose = mezclar(m.trans.pose, pose, u);
+      pose = mezclar(m.trans.pose, pose, u, true);
     }
     const cuerpo = cuerpoDe(salida.dormida ? r : r * 0.4);
     const cin = cinematica(pose, cuerpo, { espejo: !!salida.espejo, apoyo: salida.apoyo });
     let abajo;
-    if (salida.apoyo === 'pies') abajo = Math.max(cin.p.pieI[1], cin.p.pieD[1]) + MEDIO_TUBO;
-    else if (salida.apoyo === 'cadera') abajo = 3;
-    else abajo = masBajo(cin) + MEDIO_TUBO;
+    if (salida.apoyo === 'pies') abajo = cin.pies;
+    else if (salida.apoyo === 'cadera') abajo = cin.p.pelvis[1] + cin.radios.tronco * 0.7;
+    else abajo = cin.bajo;
     let raiz = [salida.x, salida.y - (pose.alto + abajo) * m.escala];
     let ocultar = salida.ocultar || null;
     if (m.trans) {
@@ -546,11 +549,11 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
     const pies = raiz[1] + (pose.alto + abajo) * m.escala;
     let sombra = null;
     if (salida.sombra !== false) {
-      const cx = salida.apoyo === 'tumbado' ? raiz[0] + ((cin.p.cabeza[0] + cin.p.pieD[0]) / 2) * m.escala : raiz[0];
+      const cx = salida.apoyo === 'tumbado' ? raiz[0] + ((cin.p.cabeza[0] + cin.p.tobilloD[0]) / 2) * m.escala : raiz[0];
       const s = debajo(cx, pies - 3);
       if (s) {
         const h = Math.max(0, s.y - pies);
-        sombra = { x: cx, y: s.y, rx: (salida.apoyo === 'tumbado' ? 62 : 26) * m.escala * (1 - 0.5 * Math.min(1, h / 120)),
+        sombra = { x: cx, y: s.y, rx: (salida.apoyo === 'tumbado' ? 64 : 28) * m.escala * (1 - 0.5 * Math.min(1, h / 120)),
           fuerza: 1 - Math.min(1, h / 140) };
       }
     }
@@ -596,11 +599,9 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
       const f = m.ultimo;
       if (!f) return false;
       if (f.ocultar && py > f.ocultar.y && px > f.ocultar.x1 && px < f.ocultar.x2) return false;
-      const P = f.cin.p, q = [(px - f.raiz[0]) / m.escala, (py - f.raiz[1]) / m.escala];
-      if (Math.hypot(q[0] - P.cabeza[0], q[1] - P.cabeza[1]) < MEDIDAS.cabeza + 10) return true;
-      const tramos = [['pelvis', 'cuello'], ['hombroI', 'codoI'], ['codoI', 'manoI'], ['hombroD', 'codoD'], ['codoD', 'manoD'],
-        ['caderaI', 'rodillaI'], ['rodillaI', 'pieI'], ['caderaD', 'rodillaD'], ['rodillaD', 'pieD']];
-      return tramos.some(([a, b]) => distSeg(q, P[a], P[b]) < 12);
+      const q = [(px - f.raiz[0]) / m.escala, (py - f.raiz[1]) / m.escala];
+      if (Math.hypot(q[0] - f.cin.p.cabeza[0], q[1] - f.cin.p.cabeza[1]) < MEDIDAS.cabeza + 9) return true;
+      return f.cin.partes.some((parte) => parte.segmentos.some(([a, b, r]) => distSeg(q, a, b) < r + 8));
     },
     // Para probar: hacer una cosa ya («dormir», «sentarse», «asomarse», «pasear», «saltar» o un gesto).
     hacer(nombre) {

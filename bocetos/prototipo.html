@@ -71,7 +71,7 @@ button[aria-pressed="true"] { background: var(--acento); color: var(--sobre-acen
   <div class="tarjeta"><b>Curl de bíceps en banco inclinado</b><span>3 × 12 · 12,5 kg</span></div>
   <div class="tarjeta"><b>Prensa de piernas sentada</b><span>4 × 12 · 110 kg</span></div>
   <div class="tarjeta"><b>Remo sentado en polea baja</b><span>4 × 10 · 45 kg</span></div>
-  <svg id="capa" aria-hidden="true"></svg>
+  <canvas id="capa" aria-hidden="true"></canvas>
 </main>
 <section class="mandos">
   <h2>Acaba una serie de…</h2>
@@ -136,8 +136,7 @@ function colocar() {
     Object.assign(t.style, { left: `${x * W}px`, width: `${w * W}px`, top: `${y}px` });
     return { id: 'abc'[i], x1: x * W, x2: (x + w) * W, y };
   });
-  capa.setAttribute('viewBox', `0 0 ${W} ${H}`);
-  traje.medidas(W, H);
+  traje.medidas(W, H, Math.min(3, window.devicePixelRatio || 1)); // nítido en la pantalla del móvil
   mascota?.reubicar();
   if (mascota && pausado) traje.dibujar(mascota.paso(0));
 }
@@ -161,7 +160,10 @@ function ponerTema() {
   if (t) document.documentElement.dataset.tema = t;
   else delete document.documentElement.dataset.tema;
   $('tema').textContent = texto;
+  traje.tema = t || (matchMedia('(prefers-color-scheme: dark)').matches ? 'oscuro' : 'claro');
+  if (pausado) traje.dibujar(mascota.paso(0));
 }
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', ponerTema);
 ponerTema();
 $('tema').onclick = () => { tema = (tema + 1) % TEMAS.length; ponerTema(); };
 
