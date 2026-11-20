@@ -71,7 +71,7 @@ export function crearTrajeNeon(lienzo) {
     for (const p of f.cin.partes) {
       if (p.centro) disco(c, p.centro[0], p.centro[1], p.radio + extra);
       for (const [a, b, r] of p.segmentos) capsula(c, a, b, r + extra);
-      for (const m of p.manchas) ovalo(c, m, extra);
+      for (const m of p.manchas) if (!m.detras) ovalo(c, m, extra);
     }
   }
   // dónde está, en px del escenario, con margen para el halo
@@ -129,12 +129,13 @@ export function crearTrajeNeon(lienzo) {
     // el borde, el cuerpo (más oscuro si está detrás) y el brillo
     ctx.strokeStyle = ctx.fillStyle = col.borde;
     for (const [a, b, r] of parte.segmentos) capsula(ctx, a, b, r + BORDE);
-    for (const m of parte.manchas) ovalo(ctx, m, BORDE);
+    for (const m of parte.manchas) if (!m.detras) ovalo(ctx, m, BORDE);
     ctx.strokeStyle = ctx.fillStyle = parte.clave < -3 ? col.lejos : col.cuerpo;
     for (const [a, b, r] of parte.segmentos) capsula(ctx, a, b, r);
-    for (const m of parte.manchas) ovalo(ctx, m, 0);
+    for (const m of parte.manchas) if (!m.detras) ovalo(ctx, m, 0);
     // el músculo que siente: se le enciende y late
     for (const m of parte.manchas) {
+      if (m.detras) continue;
       const i = Math.max(0, ...m.musculos.map((k) => f.cuerpo.luz[k] || 0));
       if (i < 0.04) continue;
       const late = i * (0.7 + 0.3 * Math.sin(f.t * TAU * 3.2));
@@ -153,6 +154,7 @@ export function crearTrajeNeon(lienzo) {
       capsula(ctx, [a[0] + dx * k + ox, a[1] + dy * k + oy], [b[0] - dx * k + ox, b[1] - dy * k + oy], r * 0.2);
     }
     for (const m of parte.manchas) {
+      if (m.detras) continue;
       const r = Math.min(m.rx, m.ry);
       ctx.beginPath();
       ctx.ellipse(m.c[0] - 0.3 * r, m.c[1] - 0.36 * r, m.rx * 0.4, m.ry * 0.28, m.rot, 0, TAU);

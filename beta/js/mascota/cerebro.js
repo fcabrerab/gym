@@ -63,7 +63,7 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
 
   const m = {
     t: 0, x: 0, sup: null, ultY: null, perdida: false, desde: null, llegada: 0, forma: 0.25, escala,
-    descanso: null, rest: null, carga: 1, flash: -9,
+    descanso: null, rest: null, carga: 1, flash: -9, destinoSalto: null,
     pesos: {}, tranquila: false, suenoTras, bombeoDura,
     sueno: 0, accion: null, cola: [], previa: null, avisado: '',
     musc: Object.fromEntries(Object.keys(MUSCULOS).map((k) => [k, { bombeo: 0, contr: 0 }])),
@@ -87,6 +87,14 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
       // La suya ya no está (se fue de la pantalla o cambió): la más cercana a donde estaba (la primera vez, la de más
       // arriba). Cómo llega (de un salto desde donde estaba o fundiéndose), lo decide paso().
       const y = m.ultY;
+      // ¿La misma, rehecha? (la app volvió a pintar esa tarjeta: otro elemento, el mismo sitio). Entonces sigue ahí, sin
+      // saltos ni fundidos.
+      const misma = y != null && l.find((a) => Math.abs(a.y - y) < 8 && m.x >= a.x1 - 6 && m.x <= a.x2 + 6);
+      if (misma) {
+        m.sup = misma.id;
+        m.ultY = misma.y;
+        return misma;
+      }
       const lejania = (a) => Math.abs(a.y - y) + 0.3 * Math.abs(limitar(m.x, a.x1, a.x2) - m.x);
       s = y == null ? [...l].sort((a, b) => a.y - b.y)[0] : l.reduce((a, b) => (lejania(b) < lejania(a) ? b : a));
       if (m.sup != null && y != null) {
@@ -249,6 +257,7 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
       nombre: 'Salta a otra tarjeta', t: 0, interrumpible: false,
       alEmpezar() {
         if (desde) m.x = desde.x;
+        m.destinoSalto = destino.id;
         x0 = m.x;
         y0 = desde ? desde.y : sup().y;
         y1 = destino.y;
@@ -286,6 +295,7 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
         if (!llego) {
           llego = true;
           m.sup = destino.id;
+          m.destinoSalto = null;
           m.llegada = m.t;
           m.x = x1;
         }
@@ -429,9 +439,12 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
       efecto('chispas');
     }
     if (m.tranquila || d.pausa) return;
+    // le han sumado tiempo: calentará (y se pondrá en guardia) más tarde
+    if (m.rest.calentando && !m.rest.guardia && d.quedan > 12) m.rest.calentando = false;
+    if (m.rest.guardia && d.quedan > 5) m.rest.guardia = false;
     if (!m.rest.calentando && d.quedan <= 10 && d.quedan > 3) {
       m.rest.calentando = m.rest.recuperada = true;
-      reaccionar([calentar(d.grupoSiguiente)]);
+      reaccionar(calentar(d.grupoSiguiente));
     }
     if (!m.rest.guardia && d.quedan <= 3) {
       m.rest.guardia = m.rest.calentando = m.rest.recuperada = true;
@@ -481,29 +494,38 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
       get hecha() { return this.t >= 2.2; },
     };
   }
-  // Calienta para el siguiente ejercicio: saltitos y brazos sueltos, y ese músculo se le enciende a ratos.
+  // Calienta para el siguiente ejercicio, un movimiento tras otro (los brazos, las rodillas, el tronco), y ese músculo
+  // se le enciende a ratos. Cada movimiento para en cuanto ya no toca calentar (calentarSobra).
   function calentar(grupo) {
     const musculos = GRUPOS[grupo]?.musculos || [];
-    return {
-      nombre: 'Calienta para la siguiente', t: 0,
+    const W = 2 * Math.PI;
+    const mov = (nombre, pose) => ({
+      nombre, t: 0,
       actualizar(dt) {
         const t = (this.t += dt);
-        const s = Math.sin(t * 2 * Math.PI * 2.2);
-        const c = Math.cos(t * 2 * Math.PI * 1.1);
         for (const k of musculos) m.musc[k].contr = Math.max(m.musc[k].contr, 0.3 + 0.4 * Math.max(0, Math.sin(t * 5)));
         if (m.t > m.mirada.hasta) mirarAlAzar();
-        return {
-          pose: {
-            ...POSE_BASE, alto: 3 * Math.max(0, s), musloAdI: 6 * s, musloAdD: -6 * s,
-            rodillaAdI: -10 - 8 * Math.max(0, s), rodillaAdD: -10 - 8 * Math.max(0, -s),
-            brazoI: 30 + 20 * c, brazoD: 30 - 20 * c, brazoAdI: 25 * c, brazoAdD: -25 * c, codoI: 20, codoD: 20,
-          },
-          apoyo: 'pies', x: m.x, y: sup().y, cara: 'esfuerzo',
-        };
+        return { pose: { ...POSE_BASE, ...pose(t) }, apoyo: 'pies', x: m.x, y: sup().y, cara: 'esfuerzo' };
       },
-      get hecha() { return this.t >= 30; }, // hasta que se ponga en guardia (o se acabe el descanso)
-    };
+      get hecha() { return this.t >= 2.4 || calentarSobra(); },
+    });
+    const movimientos = [
+      mov('Calienta los brazos', (t) => {
+        const c = Math.cos(t * W * 1.1);
+        return { brazoI: 30 + 22 * c, brazoD: 30 - 22 * c, brazoAdI: 28 * c, brazoAdD: -28 * c, codoI: 20, codoD: 20, alto: 2 * Math.max(0, Math.sin(t * W * 2.2)) };
+      }),
+      mov('Calienta las rodillas', (t) => {
+        const s = Math.sin(t * W * 1.25);
+        return { musloAdI: 55 * Math.max(0, s), rodillaAdI: -70 * Math.max(0, s), musloAdD: 55 * Math.max(0, -s), rodillaAdD: -70 * Math.max(0, -s),
+          brazoI: 20, brazoD: 20, codoI: 60, codoD: 60 };
+      }),
+      mov('Calienta el tronco', (t) => ({ orientacion: 35 * Math.sin(t * W * 0.9), brazoI: 75, brazoD: 75, codoI: 70, codoD: 70, inclinar: 4 })),
+    ];
+    const primero = Math.floor(azar() * movimientos.length);
+    return [...movimientos.slice(primero), ...movimientos.slice(0, primero)];
   }
+  // ¿Ya no toca calentar? Se acabó el descanso, falta muy poco (se pone en guardia) o le han sumado tiempo.
+  const calentarSobra = () => !m.descanso || m.descanso.quedan <= 3 || m.descanso.quedan > 12;
   // ¡Lista para la siguiente!: los puños arriba, un poco agachada y botando.
   function enGuardia() {
     return {
@@ -520,7 +542,7 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
           apoyo: 'pies', x: m.x, y: sup().y, cara: 'esfuerzo',
         };
       },
-      get hecha() { return this.t >= 8; },
+      get hecha() { return this.t >= 4.5 || !m.descanso; }, // hasta que acaba el descanso
     };
   }
 
@@ -669,6 +691,7 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
   }
   function siguiente() {
     if (m.accion?.hecha) m.accion.alTerminar?.();
+    while (m.cola.length && m.cola[0].hecha) m.cola.shift(); // lo que ya no toca (un calentamiento, si se acabó el descanso)
     if (!m.cola.length) m.cola = autonoma ? elegir() : [quieto(1e9)];
     empezar(m.cola.shift());
   }
@@ -704,8 +727,9 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
       m.perdida = false;
       const desde = m.desde;
       m.desde = null;
-      m.cola = m.cola.filter((a) => a.reaccion);
-      if (m.accion && !m.accion.reaccion) m.accion = null; // también un salto a medias: iba a la otra
+      m.cola = m.cola.filter((a) => a.reaccion && !a.hecha);
+      m.destinoSalto = null;
+      if (m.accion && (!m.accion.reaccion || m.accion.hecha)) m.accion = null; // un salto a medias (iba a la otra) o algo que ya acabó
       const s = sup();
       if (desde && Number.isFinite(desde.y) && Math.abs(desde.y - s.y) < 700 && !m.accion) {
         m.cola.unshift(saltar(s, puntoEn(s, desde.x, 240), desde));
@@ -897,6 +921,8 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
     get calma() { return Boolean(m.accion?.calma); },
     get dormida() { return Boolean(m.accion?.dormida); },
     get superficie() { return m.sup; },
+    // Adónde salta (mientras salta), o null.
+    get destino() { return m.destinoSalto; },
     // El descanso de la app ({ id, quedan, fraccion, pausa, grupoSiguiente }) o null.
     set descanso(d) { m.descanso = d || null; },
     get descanso() { return m.descanso; },
