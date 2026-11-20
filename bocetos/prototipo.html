@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>La mascota · prototipo · Gym</title>
+<style>
+:root {
+  color-scheme: light dark;
+  --fondo: light-dark(#f5f7fb, #0b1220);
+  --superficie: light-dark(#ffffff, #131c2e);
+  --borde: light-dark(#d5dce8, #2a3654);
+  --texto: light-dark(#0f172a, #e8eef8);
+  --suave: light-dark(#64748b, #94a3b8);
+  --acento: light-dark(#15803d, #22c55e);
+  --sobre-acento: light-dark(#ffffff, #052e16);
+}
+[data-tema="claro"] { color-scheme: light; }
+[data-tema="oscuro"] { color-scheme: dark; }
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--fondo); color: var(--texto); min-height: 100dvh; display: flex; flex-direction: column;
+  font: 15px/1.35 system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", sans-serif; -webkit-tap-highlight-color: transparent;
+}
+header { display: flex; align-items: center; gap: 6px; padding: 10px 12px 4px; flex-wrap: wrap; }
+h1 { font-size: 1.05rem; margin: 0 auto 0 0; }
+button {
+  font: inherit; color: var(--texto); background: var(--superficie); border: 1px solid var(--borde);
+  border-radius: 999px; padding: 5px 12px; min-height: 36px; cursor: pointer;
+}
+button[aria-pressed="true"] { background: var(--acento); color: var(--sobre-acento); border-color: var(--acento); }
+#escenario { position: relative; flex: 1 1 auto; min-height: 470px; margin: 0 12px; overflow: hidden; touch-action: manipulation; }
+.tarjeta {
+  position: absolute; height: 52px; padding: 6px 12px; display: flex; flex-direction: column; justify-content: center;
+  background: var(--superficie); border: 1px solid var(--borde); border-radius: 14px; overflow: hidden;
+}
+.tarjeta b { font-size: .9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tarjeta span { font-size: .8rem; color: var(--suave); }
+#capa { position: absolute; inset: 0; width: 100%; height: 100%; }
+#ahora { position: absolute; left: 2px; top: 4px; margin: 0; font-size: .85rem; color: var(--suave); }
+.mandos { padding: 6px 12px 16px; }
+.mandos h2 { font-size: .85rem; font-weight: 600; color: var(--suave); margin: 0 0 6px; }
+.grupos { display: flex; flex-wrap: wrap; gap: 6px; }
+.grupos button { padding: 4px 10px; min-height: 34px; font-size: .88rem; }
+.grupos .record { border-color: var(--acento); color: var(--acento); font-weight: 600; }
+.forma { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: .88rem; }
+.forma input { flex: 1; accent-color: var(--acento); }
+.nota { font-size: .8rem; color: var(--suave); margin: 8px 0 0; }
+.solo header, .solo .mandos { display: none; }
+.solo #escenario { margin: 0; }
+#error { color: light-dark(#b91c1c, #f87171); font-size: .85rem; white-space: pre-wrap; margin: 8px 0 0; }
+</style>
+<script>
+  // Si algo falla, que se vea en la página (es una prueba).
+  addEventListener('error', (e) => { const p = document.getElementById('error'); if (p) { p.hidden = false; p.textContent += (e.message || 'Error') + '\n'; } });
+  addEventListener('unhandledrejection', (e) => { const p = document.getElementById('error'); if (p) { p.hidden = false; p.textContent += String(e.reason) + '\n'; } });
+</script>
+</head>
+<body>
+<header>
+  <h1>La mascota · prototipo</h1>
+  <button type="button" id="tema">Tema: el del móvil</button>
+  <button type="button" id="lupa" aria-pressed="false">Lupa</button>
+  <button type="button" id="huesos" aria-pressed="false">Esqueleto</button>
+  <button type="button" id="pausa" aria-pressed="false">Pausa</button>
+</header>
+<main id="escenario">
+  <p id="ahora" aria-live="polite"></p>
+  <div class="tarjeta"><b>Curl de bíceps en banco inclinado</b><span>3 × 12 · 12,5 kg</span></div>
+  <div class="tarjeta"><b>Prensa de piernas sentada</b><span>4 × 12 · 110 kg</span></div>
+  <div class="tarjeta"><b>Remo sentado en polea baja</b><span>4 × 10 · 45 kg</span></div>
+  <svg id="capa" aria-hidden="true"></svg>
+</main>
+<section class="mandos">
+  <h2>Acaba una serie de…</h2>
+  <div class="grupos" id="grupos"></div>
+  <label class="forma">Gordito <input type="range" id="forma" min="0" max="100" value="25" aria-label="Forma: de gordito a definido"> Definido</label>
+  <p class="nota">Tócala. Si la dejas, vive sola: pasea, salta, se sienta, se asoma y, al rato, se duerme.
+    Cada serie, además, «bombea» ese músculo un rato (aquí, un par de minutos; en la app, unas horas).
+    Es una página de prueba, aparte de la app: no lee ni guarda nada.</p>
+  <p id="error" hidden></p>
+</section>
+<script type="module">
+import { crearMascota } from './mascota/cerebro.js';
+import { crearTrajeNeon } from './mascota/traje-neon.js';
+import { GRUPOS } from './mascota/gestos.js';
+
+// Para probar: ?solo · ?tema=claro|oscuro · ?forma=0..1 · ?huesos · ?quieta (sin vida propia) · ?semilla=n
+// · ?escala=0.55 · ?accion=<grupo, «record» o «dormir», «sentarse», «asomarse», «pasear», «saltar»> · ?t=<s> (y se congela ahí)
+const q = new URLSearchParams(location.search);
+if (q.has('solo')) document.body.classList.add('solo'); // solo el escenario (para las capturas)
+const $ = (id) => document.getElementById(id);
+const escenario = $('escenario'), capa = $('capa'), tarjetas = [...escenario.querySelectorAll('.tarjeta')];
+
+function aleatorio(a) { // mulberry32: el mismo azar con la misma semilla
+  return () => {
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// Los grupos de la app y el récord
+const ORDEN = ['Pecho', 'Espalda', 'Hombro', 'Hombro posterior', 'Bíceps', 'Tríceps', 'Abdominales',
+  'Cuádriceps', 'Isquios', 'Cadena posterior', 'Gemelos'];
+for (const g of ORDEN.filter((g) => GRUPOS[g])) {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.textContent = g;
+  b.onclick = () => mascota.serie(g);
+  $('grupos').append(b);
+}
+const rec = document.createElement('button');
+rec.type = 'button';
+rec.className = 'record';
+rec.textContent = '¡Récord!';
+rec.onclick = () => mascota.record();
+$('grupos').append(rec);
+
+const ESCALA = Number(q.get('escala')) || 0.55, LUPA = 0.8; // 0.55: como sería en la app
+const traje = crearTrajeNeon(capa);
+let superficies = [], mascota = null, pausado = false;
+function colocar() {
+  // entre tarjeta y tarjeta, sitio para que quepa de pie (más con la lupa)
+  const alto = 52, minimo = Math.max(96, 135 * (mascota?.escala ?? ESCALA) + 26);
+  escenario.style.minHeight = `${3 * alto + 2 * minimo + 110}px`;
+  const W = escenario.clientWidth, H = escenario.clientHeight;
+  const hueco = Math.min(Math.max(150, minimo), Math.max(minimo, (H - 10 - 3 * alto - 100) / 2));
+  const yC = H - alto - 10, yB = yC - alto - hueco, yA = yB - alto - hueco;
+  const sitio = [[0.03, 0.6, yA], [0.37, 0.6, yB], [0.03, 0.94, yC]];
+  superficies = tarjetas.map((t, i) => {
+    const [x, w, y] = sitio[i];
+    Object.assign(t.style, { left: `${x * W}px`, width: `${w * W}px`, top: `${y}px` });
+    return { id: 'abc'[i], x1: x * W, x2: (x + w) * W, y };
+  });
+  capa.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  traje.medidas(W, H);
+  mascota?.reubicar();
+  if (mascota && pausado) traje.dibujar(mascota.paso(0));
+}
+colocar();
+new ResizeObserver(colocar).observe(escenario);
+
+mascota = crearMascota({
+  superficies: () => superficies,
+  escala: ESCALA,
+  azar: q.has('semilla') ? aleatorio(Number(q.get('semilla')) || 1) : Math.random,
+  alCambiar: (texto) => { $('ahora').textContent = texto; },
+  autonoma: !q.has('quieta'),
+});
+window.__mascota = mascota;
+
+// Tema
+const TEMAS = [['', 'Tema: el del móvil'], ['claro', 'Tema: claro'], ['oscuro', 'Tema: oscuro']];
+let tema = Math.max(0, TEMAS.findIndex(([t]) => t === (q.get('tema') || '')));
+function ponerTema() {
+  const [t, texto] = TEMAS[tema];
+  if (t) document.documentElement.dataset.tema = t;
+  else delete document.documentElement.dataset.tema;
+  $('tema').textContent = texto;
+}
+ponerTema();
+$('tema').onclick = () => { tema = (tema + 1) % TEMAS.length; ponerTema(); };
+
+// Esqueleto y pausa
+const pulsado = (b, si) => b.setAttribute('aria-pressed', String(si));
+$('huesos').onclick = () => { traje.huesos = !traje.huesos; pulsado($('huesos'), traje.huesos); };
+$('lupa').onclick = () => {
+  mascota.escala = mascota.escala > ESCALA ? ESCALA : Math.max(LUPA, ESCALA);
+  pulsado($('lupa'), mascota.escala > ESCALA);
+  colocar();
+};
+$('pausa').onclick = () => { pausado = !pausado; pulsado($('pausa'), pausado); };
+if (q.has('huesos')) $('huesos').click();
+
+// La forma de fondo
+const forma = $('forma');
+if (q.has('forma')) forma.value = Math.round(Number(q.get('forma')) * 100);
+const ponerForma = () => { mascota.forma = forma.value / 100; };
+forma.oninput = ponerForma;
+ponerForma();
+
+// Tocar el escenario: si es a ella, reacciona; si no, mira hacia allí
+escenario.addEventListener('pointerdown', (e) => {
+  const r = escenario.getBoundingClientRect();
+  mascota.tocar(e.clientX - r.left, e.clientY - r.top);
+});
+
+// Arranque (y, para probar, una acción y un momento congelado)
+traje.dibujar(mascota.paso(1 / 60));
+const accion = q.get('accion');
+if (accion) {
+  if (GRUPOS[accion]) mascota.serie(accion);
+  else if (accion === 'record') mascota.record();
+  else mascota.hacer(accion);
+}
+if (q.has('t')) {
+  // con ?eventos, cada 6 s le pasa algo al azar (una serie, un récord o un toque): para cazar errores
+  const pasos = Math.round(Number(q.get('t')) * 60), vistas = new Set(), azar = aleatorio(7);
+  const grupos = Object.keys(GRUPOS);
+  for (let i = 0; i < pasos; i++) {
+    if (q.has('eventos') && i % 360 === 359) {
+      const r = azar();
+      if (r < 0.6) mascota.serie(grupos[Math.floor(azar() * grupos.length)]);
+      else if (r < 0.7) mascota.record();
+      else if (r < 0.85) mascota.tocar(...mascota.cabeza); // a ella
+      else mascota.tocar(azar() * escenario.clientWidth, azar() * escenario.clientHeight);
+    }
+    mascota.paso(1 / 60);
+    vistas.add(mascota.accion);
+  }
+  document.title = [...vistas].join(' · ');
+  traje.dibujar(mascota.paso(1 / 60));
+  pausado = true;
+  pulsado($('pausa'), true);
+}
+let antes = performance.now();
+function bucle(ahora) {
+  const dt = Math.min(0.05, Math.max(0, (ahora - antes) / 1000));
+  antes = ahora;
+  if (!pausado) traje.dibujar(mascota.paso(dt));
+  requestAnimationFrame(bucle);
+}
+requestAnimationFrame(bucle);
+</script>
+</body>
+</html>
