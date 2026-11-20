@@ -384,8 +384,11 @@
       }
 
       // W12 beta/index.html lleva a la app con lo que traiga detrás: el enlace de los avisos del PC («#avisos-pc=…»)
-      // llega a la app y deja puesta la dirección del PC.
-      try {
+      // llega a la app y deja puesta la dirección del PC. Con una beta en marcha en beta/ (D-124), allí está la beta y
+      // no lleva a ningún sitio: entonces no se mira (se ve por su js/version.js, que la que solo lleva no tiene).
+      const conBeta = (await real(fetch("/beta/js/version.js", { cache: "no-store" }).catch(() => null)))?.ok;
+      if (conBeta) nota("W12 no se mira: en beta/ hay una beta en marcha (D-124), no la que solo lleva a la app");
+      else try {
         await limpiarBeta();
         guardar("gym-beta-datos", await datosBeta());
         const f2 = document.createElement("iframe");

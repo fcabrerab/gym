@@ -13,6 +13,7 @@ import { escuchar } from "../sucesos.js";
 import { esBeta, esLocal, parametroLocal } from "../util.js";
 
 export const ESCALAS = { pequena: 0.45, normal: 0.55, grande: 0.68 };
+export const BRILLOS = { suave: 0.6, normal: 1, intenso: 1.7 };
 const ALTO_DE_PIE = 135;  // lo que mide de pie, en unidades del esqueleto (con la cabeza)
 const BOMBEO_HORAS = 3;   // lo que tarda en irse el bombeo de cada serie (D-128: unas horas)
 const FORMA = 0.3;        // de 0 (gordito) a 1 (definido); en la fase 2, de tus entrenos
@@ -144,8 +145,9 @@ function nacer(ficha) {
       traje.dibujar(null);
       return;
     }
-    const origen = escenario.colocar(f);
-    traje.recorte = escenario.region();
+    // encima de una tarjeta, pegada a la página (al desplazarla va con ella, sin tirones); en la barra de abajo, a la pantalla
+    const s = escenario.superficies().find((x) => x.id === cerebro.superficie);
+    const origen = escenario.colocar(f, { pegadaAPagina: Boolean(s && s.yDoc != null) });
     traje.dibujar(f, origen);
   }
 
@@ -189,6 +191,7 @@ function nacer(ficha) {
     ajustar(f) {
       cerebro.escala = ESCALAS[f.ajustes.tamano] || ESCALAS.normal;
       traje.luz = f.ajustes.luz;
+      traje.brillo = BRILLOS[f.ajustes.brillo] ?? 1;
       entreno = f.ajustes.entreno;
       modo();
       escenario.pedir(0); // con otro tamaño, otro sitio
@@ -216,6 +219,8 @@ if (esLocal()) {
     get escala() { return viva?.cerebro.escala ?? null; },
     get luz() { return viva?.traje.luz ?? null; },
     get oculta() { return Boolean(viva?.oculta); },
+    get enPagina() { return Boolean(viva?.escenario.enPagina); },
+    get brillo() { return viva?.traje.brillo ?? null; },
     get cabeza() { return viva?.cerebro.cabeza ?? null; },
     get rasgos() { return viva?.rasgos ?? null; },
     avanzar(segundos) { viva?.avanzar(segundos); },

@@ -9,6 +9,7 @@ import * as borrador from "./borrador.js";
 import * as descanso from "./descanso.js";
 import * as avisosPc from "./avisos-pc.js";
 import * as copiaPc from "./copia-pc.js";
+import * as beta from "./beta.js";
 import { copiarDesdeNormal, leerTemaNormal } from "./normal.js";
 import { guardarCopiaAuto, listarCopiasAuto } from "./copias.js";
 import { diaPorId } from "./modelo.js";
@@ -384,7 +385,17 @@ function alCambioAlmacen(e) {
 
 // La beta (D-124) lo dice arriba, junto al nombre, con un enlace a la app normal (la carpeta de arriba).
 function marcarBeta() {
-  if (!esBeta()) return;
+  if (!esBeta()) {
+    // La app normal: si hay una beta más nueva en beta/, lo dice arriba, con un enlace a ella (D-134).
+    beta.buscar().then((b) => {
+      if (!b || document.querySelector(".marca-beta")) return;
+      document.querySelector(".marca")?.append(h("a", {
+        class: "marca-beta marca-ir-beta", href: "./beta/", title: `Hay una beta, la ${b.version}: toca para probarla`, "aria-label": `Hay una beta, la ${b.version}. Ir a la beta`,
+      }, "BETA ›"));
+      if (modo === "app" && rutaActual?.tab === "ajustes") repintar();
+    });
+    return;
+  }
   document.title = "Gym Beta";
   document.documentElement.dataset.canal = "beta";
   document.querySelector(".marca")?.append(h("a", {

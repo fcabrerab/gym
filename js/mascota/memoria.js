@@ -14,9 +14,10 @@ export const OPCIONES = {
   tamano: ["pequena", "normal", "grande"],
   luz: ["verde", "cian", "rosa", "ambar", "violeta"],
   entreno: ["rincon", "escondida"],
+  brillo: ["suave", "normal", "intenso"],
 };
 // «encendida: null» es lo de la app: en la beta, sí; en la normal, todavía no (D-133).
-export const AJUSTES = { encendida: null, tamano: "normal", luz: "verde", entreno: "rincon", nombre: "" };
+export const AJUSTES = { encendida: null, tamano: "normal", luz: "verde", entreno: "rincon", nombre: "", brillo: "normal" };
 
 function semillaNueva() {
   try {

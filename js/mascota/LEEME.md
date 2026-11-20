@@ -11,7 +11,7 @@ Un monigote de luz que vive en la app (D-133 del proyecto). Nació como prototip
 | `esqueleto.js` | **Cómo se mueve**: medidas, poses en 3D y cinemática. |
 | `gestos.js` | Los gestos, solo datos: uno por grupo muscular de la app (`GRUPOS`, con el `muscleGroup` de `data/exercises.json`), más el récord, el saludo y los demás. También las caras (`CARAS`) y los músculos (`MUSCULOS`). |
 | `traje-neon.js` | **Cómo se pinta**: tubos de luz con volumen, en un canvas, con el color de su luz (`LUCES`). Otro estilo sería otro traje. |
-| `escenario.js` | **Dónde se pone y cuándo se ve**. Sus superficies son los tramos libres del borde de arriba de las tarjetas, donde de pie no tapa nada. Si no hay ninguno, o estás entrenando, usa el rincón de abajo a la derecha (y allí se asoma). También lleva su lienzo, pequeño y que va con ella, y los toques. |
+| `escenario.js` | **Dónde se pone y cuándo se ve**. Sus superficies son el borde de arriba de cada tarjeta y de cada cosa con caja (botones, opciones…), y el de la barra de abajo. En cada una apunta sus tramos «libres», donde de pie no tapa nada: pasea y salta por todas, pero para quedarse quieta busca uno libre. En el entreno usa el rincón de abajo a la derecha, y allí se asoma. Su lienzo, pequeño, va con ella: encima de una tarjeta, pegado a la página (al desplazarla no da tirones); en la barra de abajo, pegado a la pantalla. También lleva los toques. |
 | `memoria.js` | **Lo que recuerda**: su ficha, en la clave `gym-beta-mascota`, aparte de tus datos. Guarda sus ajustes, cuándo nació, su semilla, cuándo te vio y cuántas veces la has tocado. Tiene versión: una ficha más nueva no se pisa. |
 | `caracter.js` | **Cómo es**: curiosidad, pereza y juego, de 0 a 1, sacados de su semilla. Cambian sus papeletas y cuánto tarda en entrarle sueño. |
 
@@ -24,7 +24,8 @@ Fuera de esta carpeta:
 
 - **Con la app abierta**: pinta 30 fotogramas por segundo si se mueve, 20 si está tranquila y 12 si duerme. Si una hoja la tapa, sigue viviendo pero no se pinta.
 - **Con la app oculta**: el navegador para los fotogramas, así que no gasta nada.
-- **Cuando la pantalla se desplaza**: va con su tarjeta. Al pararse, se vuelve a mirar dónde hay sitio. Si su tarjeta ya no vale, aparece en la más cercana, fundiéndose.
+- **Cuando la pantalla se desplaza**: va con su tarjeta, pegada a la página (la mueve el navegador, sin tirones). Al pararse, se vuelve a mirar dónde hay sitio. Si su tarjeta se ha ido, salta a la más cercana; si está muy lejos, aparece allí fundiéndose.
+- **Si la tocas**: se asusta, te saluda y se aparta, para no tapar lo que querías tocar.
 - **En el entreno** (en su pantalla y con una sesión en marcha): se pone tranquila en el rincón (o se esconde, si así lo eliges). Al apuntar una serie, siente ese músculo. Con una marca nueva, la celebra.
 - **«Reducir movimiento»** del móvil: siempre tranquila, sin pasear ni saltar.
 

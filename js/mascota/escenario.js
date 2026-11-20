@@ -1,20 +1,24 @@
-// El escenario de la mascota en la app (D-133): dónde puede ponerse y cómo se la ve.
-// - Sus superficies: los tramos libres del borde de arriba de cada tarjeta, donde, de pie, no tapa nada (ni texto, ni
-//   botones, ni otra tarjeta). Si no hay ninguno, o se está entrenando (el «rincón»), el de abajo a la derecha, encima de
-//   la barra de abajo (la del descanso, si se ve; si no, la de las pestañas): allí se asoma y casi no tapa nada.
-// - La franja donde se ve: entre la cabecera y esa barra (fuera de ella queda detrás, como si pasara por debajo).
-// - Su lienzo: pequeño, encima de la app (por debajo de las hojas y los avisos), y va con ella.
+// El escenario de la mascota en la app (D-133, D-134): dónde puede ponerse y cómo se la ve.
+// - Sus superficies: el borde de arriba de cada tarjeta y de cada cosa con caja de la pantalla (los botones, las
+//   opciones…) y el de la barra de abajo. En cada una, sus tramos «libres»: donde, de pie, no tapa nada (ni texto, ni
+//   botones, ni otra tarjeta). Pasea y salta por todas, pero para quedarse quieta busca un tramo libre (el cerebro).
+//   En el entreno (el «rincón»), solo el rincón de abajo a la derecha, encima de la barra de abajo: allí se asoma.
+// - Su lienzo: pequeño y va con ella. Encima de una tarjeta, pegado a la página: al desplazarla va con ella, sin
+//   tirones (lo mueve el navegador, no JavaScript); en la barra de abajo o en el rincón, pegado a la pantalla. Queda
+//   por debajo de la cabecera, las barras de abajo, las hojas y los avisos: lo que pasa por detrás de ellos se tapa.
 // - Los toques: si la tocas a ella, el toque es suyo (no pulsa lo que haya debajo); si no, solo mira hacia allí.
 // No decide qué hace (eso es el cerebro) y nunca toca la app: solo la mira.
 
-// Las tarjetas de la app: las de fuera (una dentro de otra no cuenta).
-export const SUELOS = ".tarjeta, .seccion, .ej, .fila, .fila-con-boton, .fila-estatica, .fila-superset, .tarjeta-destacada";
-// Lo que, fuera de una tarjeta, no hay que tapar (además del texto).
+// Las tarjetas de la app y las cosas con caja donde puede ponerse (también una dentro de otra).
+export const SUELOS = ".tarjeta, .seccion, .ej, .fila, .fila-con-boton, .fila-estatica, .fila-superset, .tarjeta-destacada, .vacio, .opcion, .boton";
+// Lo que no hay que tapar al quedarse quieta (además del texto y de las tarjetas).
 export const CONTROLES = "button, a[href], input, select, textarea, label, img, svg, canvas, video, [role='button']";
+// Las barras de abajo, de la de más arriba a la de más abajo: la primera que se vea hace de suelo.
+const BARRAS = [".barra-borrador", "#barra-descanso", "#nav"];
 // Lo que queda por encima de ella: un toque ahí no es para ella.
-const TAPAN = ".capa-hoja, .capa-fin, .avisos, .nav, .cabecera, .barra-descanso";
-const AIRE = 6;       // px entre ella y lo que no tapa
-const RINCON = 96;    // px de ancho del rincón
+const TAPAN = ".capa-hoja, .capa-fin, .avisos, .nav, .cabecera, .barra-descanso, .barra-borrador";
+const AIRE = 6;        // px entre ella y lo que no tapa
+const RINCON = 96;     // px de ancho del rincón
 const DESPLAZAR = 280; // ms quieta la pantalla antes de volver a mirar dónde hay sitio
 
 // ¿Se ve la caja de este control (fondo, borde o sombra), o solo lo que lleva dentro? Las imágenes y los campos, siempre.
@@ -26,44 +30,43 @@ function conCaja(el) {
     || ["Top", "Right", "Bottom", "Left"].some((l) => parseFloat(cs[`border${l}Width`]) > 0 && cs[`border${l}Style`] !== "none" && !transparente(cs[`border${l}Color`]));
 }
 
-// Las superficies libres, en px de la ventana. raiz: donde están las pantallas (#pantalla); abajo: la barra de abajo
-// (su borde de arriba también es suelo si encima no hay nada); region: { y1, y2 }, donde se ve; alto: lo que mide de
-// pie, en px; idDe(el): un número fijo por elemento (para que su superficie siga siendo la misma).
-export function calcularSuperficies({ raiz, abajo = null, region, alto, anchoMin = 46, idDe }) {
+// Las superficies, en px de la ventana: [{ id, el, x1, x2, y, yDoc, c1, c2, tipo, libres }]. raiz: donde están las
+// pantallas (#pantalla); abajo: la barra de abajo que se ve; region: { y1, y2 }, la franja entre la cabecera y esa
+// barra; alto: lo que mide de pie, en px; idDe(el): un número fijo por elemento; scrollY: lo desplazada que está la
+// página (yDoc = y + scrollY: la «y» en la página, que no cambia al desplazarla). libres: los tramos [x1, x2] donde,
+// de pie, no tapa nada.
+export function calcularSuperficies({ raiz, abajo = null, region, alto, anchoMin = 46, idDe, scrollY = 0 }) {
   const visible = (r) => r.width > 0 && r.height > 0 && r.bottom > region.y1 - alto && r.top < region.y2 + alto;
   const caja = (el, r) => ({ el, l: r.left, r: r.right, t: r.top, b: r.bottom });
   const obstaculos = [];
-  const tarjetas = [];
+  const candidatas = [];
   const rango = raiz.ownerDocument.createRange();
-  // Las tarjetas (las de fuera) cuentan enteras; fuera de ellas, cada línea de texto y cada control.
+  // Todo lo que se ve: las cajas (tarjetas, botones, opciones…), cada línea de texto y cada control con caja.
   const recorrer = (padre) => {
     for (let n = padre.firstChild; n; n = n.nextSibling) {
       if (n.nodeType === 3) {
         if (!n.nodeValue.trim()) continue;
         rango.selectNodeContents(n);
         for (const r of rango.getClientRects()) if (visible(r)) obstaculos.push(caja(null, r));
-      } else if (n.nodeType === 1) {
-        const r = n.getBoundingClientRect();
-        if (n.matches(SUELOS)) {
-          if (!visible(r)) continue;
-          obstaculos.push(caja(n, r));
-          tarjetas.push({ el: n, r });
-        } else if (n.matches(CONTROLES)) {
-          if (!visible(r)) continue;
-          // Un botón o un enlace sin fondo ni borde (como un texto): cuenta lo que lleva dentro, no su caja entera.
-          if (conCaja(n)) obstaculos.push(caja(n, r));
-          else recorrer(n);
-        } else if (visible(r) || (r.width === 0 && r.height === 0)) {
-          recorrer(n);
-        }
+        continue;
       }
+      if (n.nodeType !== 1 || n.hidden) continue;
+      const r = n.getBoundingClientRect();
+      if ((r.width > 0 || r.height > 0) && !visible(r)) continue; // fuera de la vista: ni ella ni lo de dentro
+      if (n.matches(SUELOS)) {
+        obstaculos.push(caja(n, r));
+        candidatas.push({ el: n, r });
+      } else if (n.matches(CONTROLES) && conCaja(n)) {
+        obstaculos.push(caja(n, r));
+      }
+      if (!n.matches("svg, img, canvas, video, input, select, textarea")) recorrer(n);
     }
   };
   recorrer(raiz);
+  // Una caja dentro de otra con el mismo borde de arriba (una fila que empieza donde su tarjeta): solo la de fuera.
+  const unicas = candidatas.filter((c) => !candidatas.some((o) => o !== c && o.el.contains(c.el) && Math.abs(o.r.top - c.r.top) < 3));
 
-  const superficies = [];
-  const tramos = (el, y, x1, x2, c1, c2, tipo) => {
-    if (y - alto < region.y1 || y > region.y2 + 0.5) return; // de pie, se le saldría la cabeza por arriba
+  const libresDe = (el, y, x1, x2) => {
     let libres = [[x1, x2]];
     for (const o of obstaculos) {
       if (o.el && (o.el === el || o.el.contains(el))) continue;
@@ -71,16 +74,23 @@ export function calcularSuperficies({ raiz, abajo = null, region, alto, anchoMin
       const a = o.l - AIRE;
       const b = o.r + AIRE;
       libres = libres.flatMap(([p, q]) => (b <= p || a >= q ? [[p, q]] : [[p, Math.min(q, a)], [Math.max(p, b), q]].filter(([u, v]) => v - u > 0)));
-      if (!libres.length) return;
+      if (!libres.length) break;
     }
-    libres.forEach(([p, q], i) => {
-      if (q - p >= anchoMin) superficies.push({ id: `${tipo}-${idDe(el)}-${i}`, el, x1: p, x2: q, y, c1, c2, tipo });
-    });
+    return libres.filter(([p, q]) => q - p >= anchoMin);
   };
-  for (const { el, r } of tarjetas) tramos(el, r.top, r.left + 8, r.right - 8, r.left, r.right, "tarjeta");
+  const superficies = [];
+  const poner = (el, r, tipo, fija) => {
+    const y = r.top;
+    if (y < region.y1 + alto * 0.5 || y > region.y2 + 0.5) return; // que se le vea al menos medio cuerpo
+    const x1 = r.left + 8;
+    const x2 = r.right - 8;
+    if (x2 - x1 < anchoMin) return;
+    superficies.push({ id: `${tipo}-${idDe(el)}`, el, x1, x2, y, yDoc: fija ? null : y + scrollY, c1: r.left, c2: r.right, tipo, libres: libresDe(el, y, x1, x2) });
+  };
+  for (const { el, r } of unicas) poner(el, r, "tarjeta", false);
   if (abajo) {
     const r = abajo.getBoundingClientRect();
-    if (r.height > 0) tramos(abajo, r.top, r.left + 12, r.right - 12, r.left, r.right, "abajo");
+    if (r.height > 0) poner(abajo, { top: r.top, left: r.left + 4, right: r.right - 4 }, "abajo", true);
   }
   return superficies;
 }
@@ -89,8 +99,6 @@ export function calcularSuperficies({ raiz, abajo = null, region, alto, anchoMin
 export function crearEscenario({ doc = document, win = window, alto, anchoMin = 46 } = {}) {
   const pantalla = doc.getElementById("pantalla");
   const cabecera = doc.getElementById("cabecera");
-  const nav = doc.getElementById("nav");
-  const barra = doc.getElementById("barra-descanso");
   const lienzo = doc.createElement("canvas");
   lienzo.className = "mascota-capa";
   lienzo.setAttribute("aria-hidden", "true");
@@ -106,36 +114,43 @@ export function crearEscenario({ doc = document, win = window, alto, anchoMin = 
   let lista = [];
   let rincon = false;
   let region = { y1: 0, y2: win.innerHeight };
+  let pagina = { ancho: 0, alto: 0 };
   let pendiente = 0;
   let desplazando = 0;
   let lado = 0;
   let dpr = 1;
   let colocado = null;
+  let enPagina = false;
   let alCalcular = () => {};
   const quitar = [];
 
-  const barraAbajo = () => (barra && !barra.hidden && barra.offsetHeight > 0 ? barra : nav);
-  function medirRegion() {
+  const barraAbajo = () => {
+    for (const sel of BARRAS) {
+      const b = doc.querySelector(sel);
+      if (b && !b.hidden && b.offsetHeight > 0) return b;
+    }
+    return null;
+  };
+  function medir() {
     const c = cabecera?.getBoundingClientRect();
     const b = barraAbajo()?.getBoundingClientRect();
     region = { y1: Math.max(0, c && c.height ? c.bottom : 0), y2: b && b.height ? b.top : win.innerHeight };
-    return region;
+    pagina = { ancho: doc.documentElement.clientWidth, alto: doc.documentElement.scrollHeight };
   }
   function rinconAhora() {
     const b = barraAbajo()?.getBoundingClientRect();
-    const ancho = doc.documentElement.clientWidth;
-    const der = (b && b.width ? b.right : ancho) - 10;
-    return { id: "rincon", el: null, x1: der - RINCON, x2: der, y: region.y2, c1: 0, c2: ancho, tipo: "rincon" };
+    const der = (b && b.width ? b.right : pagina.ancho) - 10;
+    return { id: "rincon", el: null, x1: der - RINCON, x2: der, y: region.y2, yDoc: null, c1: 0, c2: pagina.ancho, tipo: "rincon", libres: [[der - RINCON, der]] };
   }
   function calcular() {
     win.clearTimeout(pendiente);
     pendiente = 0;
-    medirRegion();
-    let libres = [];
+    medir();
+    let todas = [];
     if (!rincon && pantalla) {
-      libres = calcularSuperficies({ raiz: pantalla, abajo: barraAbajo(), region, alto: alto(), anchoMin, idDe });
+      todas = calcularSuperficies({ raiz: pantalla, abajo: barraAbajo(), region, alto: alto(), anchoMin, idDe, scrollY: win.scrollY });
     }
-    lista = libres.length ? libres : [rinconAhora()];
+    lista = todas.length ? todas : [rinconAhora()];
     alCalcular(lista);
   }
   // Volver a mirar dónde hay sitio, dentro de «ms» (si ya está pedido, vale ese).
@@ -143,17 +158,17 @@ export function crearEscenario({ doc = document, win = window, alto, anchoMin = 
     if (pendiente) return;
     pendiente = win.setTimeout(calcular, ms);
   }
-  // En cada fotograma: la franja y la «y» de cada superficie, al día (si se desplaza la pantalla, van con su tarjeta).
+  // En cada fotograma: la «y» de las de la página, con lo desplazada que está (sin medir nada: no cuesta).
   function ponerAlDia() {
-    medirRegion();
+    const sy = win.scrollY;
     let falta = false;
     for (const s of lista) {
-      if (s.tipo === "rincon") s.y = region.y2;
-      else if (s.el?.isConnected) s.y = s.el.getBoundingClientRect().top;
+      if (s.yDoc == null) continue;
+      if (s.el?.isConnected) s.y = s.yDoc - sy;
       else falta = true;
     }
     if (falta) {
-      lista = lista.filter((s) => s.tipo === "rincon" || s.el?.isConnected);
+      lista = lista.filter((s) => s.yDoc == null || s.el?.isConnected);
       if (!lista.length) lista = [rinconAhora()];
       pedir(0);
     }
@@ -175,8 +190,11 @@ export function crearEscenario({ doc = document, win = window, alto, anchoMin = 
     if (!desplazando) pedir(150);
   });
   if (pantalla) vigia.observe(pantalla, { childList: true, subtree: true, attributes: true, attributeFilter: ["class", "hidden", "open", "aria-expanded"] });
-  if (barra) vigia.observe(barra, { attributes: true, attributeFilter: ["hidden"] });
-  vigia.observe(doc.body, { attributes: true, attributeFilter: ["data-pantalla"] });
+  vigia.observe(doc.body, { childList: true, attributes: true, attributeFilter: ["data-pantalla", "class"] });
+  for (const sel of BARRAS) {
+    const b = doc.querySelector(sel);
+    if (b) vigia.observe(b, { attributes: true, attributeFilter: ["hidden"] });
+  }
   quitar.push(() => vigia.disconnect());
   // Por si algo cambia sin avisar (una animación que acaba, una imagen que carga): cada 2 s, otra vez.
   const cada = win.setInterval(() => {
@@ -230,8 +248,9 @@ export function crearEscenario({ doc = document, win = window, alto, anchoMin = 
     lienzo.style.height = `${l}px`;
     traje.medidas(l, l, r);
   }
-  // Pone el lienzo donde está ella (centrado en su cuerpo) y devuelve dónde cae su esquina, en px de la ventana.
-  function colocar(f) {
+  // Pone el lienzo donde está ella (centrado en su cuerpo): pegado a la página (en una tarjeta) o a la pantalla (en la
+  // barra de abajo o en el rincón). Devuelve dónde cae su esquina, en px de la ventana.
+  function colocar(f, { pegadaAPagina = true } = {}) {
     let x0 = Infinity;
     let y0 = Infinity;
     let x1 = -Infinity;
@@ -243,14 +262,30 @@ export function crearEscenario({ doc = document, win = window, alto, anchoMin = 
       if (py < y0) y0 = py;
       if (py > y1) y1 = py;
     }
-    const cx = f.raiz[0] + ((x0 + x1) / 2) * f.escala;
-    const cy = f.raiz[1] + ((y0 + y1) / 2) * f.escala;
-    const origen = [Math.round(cx - lado / 2), Math.round(cy - lado / 2)];
-    if (!colocado || colocado[0] !== origen[0] || colocado[1] !== origen[1]) {
-      lienzo.style.transform = `translate3d(${origen[0]}px, ${origen[1]}px, 0)`;
-      colocado = origen;
+    const ox = Math.round(f.raiz[0] + ((x0 + x1) / 2) * f.escala - lado / 2);
+    const oy = Math.round(f.raiz[1] + ((y0 + y1) / 2) * f.escala - lado / 2);
+    if (pegadaAPagina) {
+      // en la página, sin salirse de ella (si no, la haría más ancha o más larga)
+      const sx = win.scrollX;
+      const sy = win.scrollY;
+      const px = Math.max(0, Math.min(ox + sx, pagina.ancho - lado));
+      const py = Math.max(0, Math.min(oy + sy, pagina.alto - lado));
+      ponerLienzo(true, px, py);
+      return [px - sx, py - sy];
     }
-    return origen;
+    ponerLienzo(false, ox, oy);
+    return [ox, oy];
+  }
+  function ponerLienzo(pagina_, x, y) {
+    if (pagina_ !== enPagina) {
+      lienzo.classList.toggle("en-pagina", pagina_);
+      enPagina = pagina_;
+      colocado = null;
+    }
+    if (!colocado || colocado[0] !== x || colocado[1] !== y) {
+      lienzo.style.transform = `translate3d(${x}px, ${y}px, 0)`;
+      colocado = [x, y];
+    }
   }
 
   calcular();
@@ -264,6 +299,7 @@ export function crearEscenario({ doc = document, win = window, alto, anchoMin = 
     escucharToques,
     medirLienzo,
     colocar,
+    get enPagina() { return enPagina; },
     set alCalcular(fn) { alCalcular = fn || (() => {}); },
     // En el entreno: solo el rincón.
     get rincon() { return rincon; },

@@ -862,9 +862,12 @@ body.con-borrador:not(.con-descanso):not(.con-hoja) .avisos { bottom: calc(var(-
   background: var(--aviso-fondo); color: var(--aviso-texto); font-size: 13px; font-weight: 800; letter-spacing: .06em; text-decoration: none;
 }
 
-/* La mascota (D-133): su lienzo, pequeño, va con ella por encima de la app (por debajo de las hojas, los avisos y la
-   capa de fin de descanso) y no recibe toques: los mira js/mascota/escenario.js. */
-.mascota-capa { position: fixed; left: 0; top: 0; z-index: 40; pointer-events: none; will-change: transform; }
+/* La mascota (D-133, D-134): su lienzo, pequeño, va con ella encima del contenido y por debajo de la cabecera, las barras
+   de abajo, las hojas y los avisos (lo que pasa por detrás de ellos se tapa). Encima de una tarjeta va pegado a la
+   página («en-pagina»: al desplazarla, lo mueve el navegador, sin tirones); en la barra de abajo, a la pantalla. No
+   recibe toques: los mira js/mascota/escenario.js. */
+.mascota-capa { position: fixed; left: 0; top: 0; z-index: 15; pointer-events: none; will-change: transform; }
+.mascota-capa.en-pagina { position: absolute; }
 .mascota-capa[hidden] { display: none; }
 /* Su página en Ajustes: el color de cada luz junto a su nombre */
 .opcion-textos { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
@@ -874,3 +877,5 @@ body.con-borrador:not(.con-descanso):not(.con-hoja) .avisos { bottom: calc(var(-
 .luz-rosa { background: #f472b6; box-shadow: 0 0 6px #f472b6; }
 .luz-ambar { background: #fbbf24; box-shadow: 0 0 6px #fbbf24; }
 .luz-violeta { background: #a78bfa; box-shadow: 0 0 6px #a78bfa; }
+/* En la app normal, si hay una beta más nueva (D-134): «BETA ›», un enlace a ella, con borde en vez de fondo. */
+.marca-ir-beta { background: transparent; border: 1.5px solid currentColor; }

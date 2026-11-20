@@ -41,7 +41,7 @@ export function pesosDe({ curiosidad = 0.5, pereza = 0.5, juego = 0.5 } = {}) {
 }
 
 // Segundos sin que le pase nada hasta tener sueño del todo: a la perezosa, antes.
-export function suenoDe({ pereza = 0.5 } = {}, base = 90) {
+export function suenoDe({ pereza = 0.5 } = {}, base = 120) {
   return Math.round(base * (1.45 - 0.9 * pereza));
 }
 

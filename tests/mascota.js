@@ -100,8 +100,13 @@ export async function ejecutar(c) {
     m.tranquila = false;
     const antes = m.superficie;
     sups = sups.filter((s) => s.id !== antes);
-    m.paso(1 / 30);
-    caso(m.superficie !== antes && reubicada >= 1, "MA8 si su tarjeta se va, aparece en otra (y lo dice, para fundirla)");
+    const tras = new Set();
+    for (let i = 0; i < 60; i++) {
+      m.paso(1 / 30);
+      tras.add(m.accion);
+    }
+    caso(m.superficie !== antes && ([...tras].some((x) => /Salta|Baja de un salto/.test(x)) || reubicada >= 1),
+      `MA8 si su tarjeta se va, salta a otra (o, si estaba sintiendo algo, aparece allí fundiéndose): ${[...tras].join(", ")}`);
     sups = [{ id: "rincon", tipo: "rincon", x1: 300, x2: 396, y: 800, c1: 0, c2: 412 }];
     const enRincon = new Set();
     for (let i = 0; i < 30 * 60; i++) {
@@ -131,10 +136,12 @@ export async function ejecutar(c) {
     const sups = calcularSuperficies({ raiz: caja, region: { y1: 40, y2: 690 }, alto: 82, idDe });
     caja.remove();
     const en = (y) => sups.filter((s) => Math.round(s.y) === y);
-    const texto = sups.map((s) => `${Math.round(s.x1)}-${Math.round(s.x2)}@${Math.round(s.y)}`).join(" ");
-    caso(en(200).length === 1 && en(200)[0].x1 > 60 && en(268).length === 0 && en(500).length === 1 && en(500)[0].x1 > 30
-      && en(500)[0].x1 < 70 && en(500)[0].x2 - en(500)[0].x1 > 250 && sups.length === 2,
-    `MA9 solo donde, de pie, no tapa nada: junto a un título, no entre dos tarjetas pegadas, y junto a un botón sin caja (${texto})`);
+    const libres = (y) => en(y)[0]?.libres || [];
+    const texto = sups.map((s) => `@${Math.round(s.y)}: ${s.libres.map(([a, b]) => `${Math.round(a)}-${Math.round(b)}`).join(" ") || "—"}`).join(" · ");
+    caso(sups.length === 3 && en(200).length === 1 && en(268).length === 1 && en(500).length === 1
+      && libres(200).length === 1 && libres(200)[0][0] > 60 && libres(268).length === 0
+      && libres(500).length === 1 && libres(500)[0][0] > 30 && libres(500)[0][0] < 70 && libres(500)[0][1] - libres(500)[0][0] > 250,
+    `MA9 puede ponerse en todas las tarjetas (una fila que empieza donde su tarjeta, no cuenta aparte); sus tramos libres (de pie, no tapa nada): junto a un título o a un botón sin caja, y ninguno entre dos tarjetas pegadas (${texto})`);
   }
 
   const preparar = async () => {
@@ -153,15 +160,25 @@ export async function ejecutar(c) {
       "MA10 en la beta sale de entrada (y nace: su ficha, aparte de tus datos)");
     m?.calcular();
     m?.avanzar(1);
-    caso(m?.superficies.length >= 1 && m?.superficie != null, `MA10 tiene dónde ponerse (${m?.superficies.map((s) => s.id).join(", ")})`);
+    caso(m?.superficies.length >= 3 && m?.superficie != null, `MA10 tiene dónde ponerse: en cada tarjeta (${m?.superficies.length})`);
+    const capa = () => b.d.querySelector(".mascota-capa");
+    const enTarjeta = { sup: m?.superficie, pos: capa() && b.w.getComputedStyle(capa()).position };
 
     pulsar(b.d, "abrir-ejercicio", "pec-deck");
     await esperar(200);
     pulsar(b.d, "serie-hecha", "pec-deck");
     await esperar(200);
-    m?.avanzar(1);
+    // si estaba lejos del rincón, primero salta hasta él; luego siente el músculo
+    const vistas = [];
+    do {
+      m?.avanzar(0.25);
+      vistas.push(m?.accion);
+    } while (!/pecho/i.test(m?.accion) && vistas.length < 16);
+    const enRincon = capa() && b.w.getComputedStyle(capa()).position;
+    caso(/^tarjeta/.test(enTarjeta.sup) && enTarjeta.pos === "absolute" && enRincon === "fixed",
+      `MA16 encima de una tarjeta, su lienzo va pegado a la página (${enTarjeta.pos}: al desplazarla, sin tirones); en el rincón, a la pantalla (${enRincon})`);
     caso(/pecho/i.test(m?.accion) && m?.tranquila && m?.superficie === "rincon",
-      `MA11 al apuntar una serie de pecho la siente, quieta en el rincón del entreno (${m?.accion}, ${m?.superficie})`);
+      `MA11 al apuntar una serie de pecho va a su rincón del entreno y la siente (${[...new Set(vistas)].join(" → ")}, ${m?.superficie})`);
 
     m?.avanzar(6); // ya asomada
     const [hx, hy] = (m?.cabeza || [0, 0]).map(Math.round);
@@ -188,12 +205,15 @@ export async function ejecutar(c) {
     await esperar(50);
     b.d.querySelector('[data-accion="mascota-luz"][data-valor="violeta"]')?.click();
     await esperar(50);
+    b.d.querySelector('[data-accion="mascota-brillo"][data-valor="intenso"]')?.click();
+    await esperar(50);
     teclear(b.d, b.d.querySelector('[data-campo="mascota-nombre"]'), "Chispa");
     await esperar(50);
     const ficha = leerJson(memoria.CLAVE);
     caso(titulo === "Tu mascota" && ficha?.ajustes.tamano === "grande" && ficha?.ajustes.luz === "violeta" && ficha?.ajustes.nombre === "Chispa"
-      && m?.escala === 0.68 && m?.luz === "violeta" && b.d.querySelector(".pantalla-mascota .titulo-pantalla")?.textContent === "Chispa",
-    "MA13 su página en Ajustes: su tamaño, su luz y su nombre, al momento");
+      && ficha?.ajustes.brillo === "intenso" && m?.escala === 0.68 && m?.luz === "violeta" && m?.brillo === 1.7
+      && b.d.querySelector(".pantalla-mascota .titulo-pantalla")?.textContent === "Chispa",
+    "MA13 su página en Ajustes: su tamaño, su luz, su brillo y su nombre, al momento");
 
     b.d.querySelector('[data-ajuste="mascota-encendida"]')?.click();
     await esperar(100);
