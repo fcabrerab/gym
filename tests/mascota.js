@@ -408,6 +408,30 @@ export async function ejecutar(c) {
       `MA30 en el descanso, a veces imita tu ejercicio, una vez como mucho (en 8 descansos de 90 s: ${veces.join(", ")}); y su cinta, mientras hay sesión`);
   }
 
+  // MA32 Entiende el grupo muscular como lo escribas (D-136): sin mirar mayúsculas, tildes ni signos, con sinónimos y en
+  // otros idiomas; lo más concreto primero; y lo que no entiende, ninguno
+  {
+    const { grupoDe } = await import("/js/mascota/grupos.js");
+    const casos = {
+      "Pecho": "Pecho", "pecho": "Pecho", "PECHO": "Pecho", "Pectorales": "Pecho", "Chest": "Pecho", "Peito": "Pecho", "Brust": "Pecho",
+      "Biceps": "Bíceps", "bíceps": "Bíceps", "Bíceps femoral": "Isquios", "Isquiotibiales": "Isquios", "hamstrings": "Isquios",
+      "TRÍCEPS": "Tríceps", "Hombros": "Hombro", "Deltoides": "Hombro", "shoulders": "Hombro", "Schultern": "Hombro",
+      "Hombro (posterior)": "Hombro posterior", "Rear delts": "Hombro posterior", "Deltoides posterior": "Hombro posterior",
+      "Dorsales": "Espalda", "Rücken": "Espalda", "lats": "Espalda", "Espalda baja": "Cadena posterior", "Lower back": "Cadena posterior",
+      "Glúteos": "Cadena posterior", "Gesäß": "Cadena posterior", "Abs": "Abdominales", "core": "Abdominales", "Oblicuos": "Abdominales",
+      "Cuádriceps": "Cuádriceps", "quads": "Cuádriceps", "Piernas": "Cuádriceps", "Pantorrillas": "Gemelos", "Gemelo": "Gemelos",
+      "calves": "Gemelos", "Pecho y tríceps": "Pecho", "Cardio": "", "": "", "Cuello": "",
+    };
+    const mal = Object.entries(casos).filter(([t, g]) => grupoDe(t) !== g).map(([t, g]) => `«${t}» → «${grupoDe(t)}» (y no «${g}»)`);
+    const conOtroNombre = { ...d.ejercicios, "pec-deck": { ...d.ejercicios["pec-deck"], muscleGroup: "chest" } };
+    const T0 = T - HORA;
+    const sesion = { id: "s-chest", diaId: "tuesday-push", inicio: T0, fin: T0 + 6 * 60000, seriesPlan: 2,
+      ejercicios: [{ exerciseId: "pec-deck", nombre: "Pec deck", tipo: "peso", plan: null, series: [1, 2].map((i) => ({ kg: 40, reps: 10, t: T0 + i * 120000 })) }] };
+    const b = forma.cuerpoDeTusEntrenos({ dias: d.dias, sesiones: [sesion], ejercicios: conOtroNombre }, T);
+    caso(mal.length === 0 && Object.keys(GRUPOS).every((g) => grupoDe(g) === g) && b.bombeo.pechoI > 0.3 && b.bombeados.join() === "Pecho",
+      `MA32 entiende el grupo muscular como lo escribas: sin mayúsculas ni tildes, con sinónimos y en otros idiomas (${Object.keys(casos).length} casos), también para su cuerpo${mal.length ? `; mal: ${mal.join(", ")}` : ""}`);
+  }
+
   // MA17 El descanso (D-135): se recupera, descansa, calienta a los 10 s y se pone en guardia a los 3; su luz se recarga;
   // y si la tocas, choca los cinco
   {
@@ -766,6 +790,31 @@ export async function ejecutar(c) {
       `MA31 con una sesión en marcha lleva su cinta (antes: ${sinSesion}; durante: ${conSesion}; al terminar: ${tras}) y en el descanso sabe qué acabas de hacer (${grupo})`);
     sinErrores(b, "MA31");
     quitar(b);
+  }
+
+  // MA33 En la app (D-136): un ejercicio con el grupo escrito a tu manera («Chest») lo entiende: siente el pecho, y en el
+  // descanso sabe que fue pecho
+  {
+    await limpiarBeta();
+    guardar("gym-beta-datos", await datosBeta({ cambios: (x) => { x.ejercicios["pec-deck"].muscleGroup = "Chest"; } }));
+    guardar("gym-beta-ui", { versionVista: VERSION, versionVistaBeta: VERSION, ayudaSerieVista: true });
+    const b = await cargarBeta({ canal: "beta" });
+    await hastaQue(() => b.w.__gymMascota?.viva, 200);
+    const m = b.w.__gymMascota;
+    pulsar(b.d, "abrir-ejercicio", "pec-deck");
+    await esperar(150);
+    pulsar(b.d, "serie-hecha", "pec-deck");
+    await esperar(200);
+    const vistas = [];
+    for (let i = 0; i < 12; i++) {
+      m.avanzar(0.25);
+      vistas.push(m.accion);
+    }
+    caso(vistas.includes("Siente el pecho") && m.descanso?.grupo === "Pecho",
+      `MA33 un ejercicio con el grupo «Chest»: siente el pecho (${[...new Set(vistas)].join(" → ")}) y en el descanso sabe que fue ${m.descanso?.grupo}`);
+    sinErrores(b, "MA33");
+    quitar(b);
+    await limpiarBeta();
   }
 
   // MA15 En la app normal no sale ni guarda nada hasta que la enciendes en Ajustes

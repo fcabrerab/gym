@@ -12,6 +12,7 @@
 
 import { GRUPOS, MUSCULOS } from "./gestos.js";
 import { tramo, limitar } from "./esqueleto.js";
+import { grupoDe as suGrupo } from "./grupos.js";
 import { fechaLocal } from "../util.js";
 
 export const BOMBEO_HORAS = 3;     // lo que tarda en irse el bombeo entero (de 1 a 0)
@@ -50,7 +51,8 @@ export function entrenosPorSemana(dias = []) {
 // antes) va repartida entre el principio y el fin de su sesión. «primera»: cuándo empezó la primera de todas; «ultimo»:
 // cuándo acabó la última con alguna serie (la de ahora, ahora), o null si aún no hay ninguna.
 function sesionesDe({ sesiones, ejercicios, enCurso, dias } = {}, ahora) {
-  const grupoDe = (id) => (ejercicios && typeof ejercicios === "object" ? ejercicios[id]?.muscleGroup : "") || "";
+  // el grupo de cada ejercicio, como lo entiende ella (grupos.js: como lo escribas, en tu idioma; o ninguno)
+  const grupoDe = (id) => suGrupo(ejercicios && typeof ejercicios === "object" ? ejercicios[id]?.muscleGroup : "");
   const r = [];
   let primera = Infinity;
   let ultimo = null;

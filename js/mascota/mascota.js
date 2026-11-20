@@ -11,6 +11,7 @@ import { crearEscenario } from "./escenario.js";
 import * as memoria from "./memoria.js";
 import { rasgosDe, pesosDe, suenoDe } from "./caracter.js";
 import { cuerpoDeTusEntrenos, llevasDiasSin, BOMBEO_HORAS } from "./forma.js";
+import { grupoDe } from "./grupos.js";
 import { escuchar } from "../sucesos.js";
 import { ahora, esBeta, esLocal, parametroLocal } from "../util.js";
 
@@ -57,15 +58,17 @@ export function parar() {
   viva = null;
 }
 
+// El grupo de cada ejercicio, como lo entiende ella (D-136, grupos.js: como lo escribas, en tu idioma; o ninguno).
 function alSerie(d) {
   if (!viva) return;
   viva.modo();
   viva.pedirCuerpo(); // con la serie, su cuerpo (ya guardada en tu sesión)
   if (viva.oculta) return;
-  viva.grupoSiguiente = d.grupoSiguiente || d.grupo || "";
-  viva.grupoHecho = d.grupo || ""; // en el descanso, imita ese ejercicio (D-135, la 4)
-  if (GRUPOS[d.grupo]) viva.cerebro.serie(d.grupo);
-  else viva.cerebro.hacerGesto("mirarte"); // un ejercicio sin grupo (uno tuyo nuevo): te mira
+  const grupo = grupoDe(d.grupo);
+  viva.grupoSiguiente = grupoDe(d.grupoSiguiente) || grupo;
+  viva.grupoHecho = grupo; // en el descanso, imita ese ejercicio (D-135, la 4)
+  if (GRUPOS[grupo]) viva.cerebro.serie(grupo);
+  else viva.cerebro.hacerGesto("mirarte"); // un grupo que no entiende (o ninguno): te mira
   if (d.marca) viva.cerebro.record();
 }
 
@@ -81,7 +84,7 @@ function alFinSesion(d) {
 // Vas a empezar a entrenar (D-135): calienta ese grupo.
 function alPreparar(d) {
   if (!viva || viva.oculta) return;
-  viva.cerebro.calentarAntes(d.grupo || "");
+  viva.cerebro.calentarAntes(grupoDe(d.grupo));
 }
 
 // Para las pruebas (solo en local, con «?mascota-azar=n»): el mismo azar cada vez.
