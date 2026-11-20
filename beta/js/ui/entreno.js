@@ -899,7 +899,8 @@ async function serieHecha(id) {
   });
   if (marcaNueva) anunciar(`Nueva marca en ${x.name}: ${formatoKg(valores.kg)}`);
   // Para quien escuche (la mascota, D-133): la serie, con el grupo del ejercicio y si es marca nueva.
-  contar("serie", { exerciseId: id, grupo: x.muscleGroup || "", tipo: x.tipo || "peso", kg: valores.kg, reps: valores.reps, marca: marcaNueva, primera: nueva });
+  const grupoSiguiente = (siguiente ? datos.ejercicios[siguiente]?.muscleGroup : null) || "";
+  contar("serie", { exerciseId: id, grupo: x.muscleGroup || "", tipo: x.tipo || "peso", kg: valores.kg, reps: valores.reps, marca: marcaNueva, primera: nueva, grupoSiguiente, descanso: idDescanso ? segundos : 0 });
 }
 
 // Deshace un ✓ quitando justo esa serie (no vuelve a una foto de antes): si la sesión ya se terminó o es otra, no

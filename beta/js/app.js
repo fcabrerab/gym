@@ -426,7 +426,7 @@ function arrancarMascota() {
   import("./mascota/mascota.js")
     .then((m) => {
       mascota = m;
-      m.iniciar({ haySesion: haySesionViva });
+      m.iniciar({ haySesion: haySesionViva, descanso: () => descanso.estadoDescanso() });
     })
     .catch((err) => errores.push({ tipo: "mascota", mensaje: String(err?.message || err), t: Date.now() }))
     .finally(() => { cargandoMascota = false; });

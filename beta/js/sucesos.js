@@ -1,8 +1,9 @@
 // Lo que pasa en la app, contado para quien lo quiera oír (hoy, la mascota: D-133). La app lo cuenta y sigue: quien
 // escucha no le contesta ni puede cambiar nada de ella ni de tus datos (le llega una copia del detalle). Cada suceso es
 // un CustomEvent «gym:<nombre>» en document:
-//   serie         { exerciseId, grupo, tipo, kg, reps, marca, primera }  al apuntar una serie (✓ Hecha). «grupo», el
-//                 muscleGroup del ejercicio (o ""); «marca», si bate tu marca; «primera», si con ella empieza la sesión.
+//   serie         { exerciseId, grupo, tipo, kg, reps, marca, primera, grupoSiguiente, descanso }  al apuntar una serie
+//                 (✓ Hecha). «grupo», el muscleGroup del ejercicio (o ""); «marca», si bate tu marca; «primera», si con
+//                 ella empieza la sesión; «grupoSiguiente», el del ejercicio que toca después; «descanso», sus segundos.
 //   fin-sesion    { series, marcas }                                    al terminar y guardar una sesión.
 //   mascota       {}                                                    al cambiar los ajustes de la mascota.
 // Un suceso nuevo: contarlo donde pasa, apuntarlo aquí y escucharlo donde haga falta.

@@ -78,6 +78,7 @@ export function estadoDescanso() {
     id: actual.id,
     exerciseId: actual.exerciseId,
     finEn: actual.finEn,
+    duracion: actual.duracion,
   };
 }
 

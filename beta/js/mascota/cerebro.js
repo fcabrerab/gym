@@ -57,12 +57,13 @@ function distSeg(q, a, b) {
  * techo(): hasta dónde puede subir la cabeza al saltar, en px del escenario.
  */
 export function crearMascota({ superficies, escala = 0.55, azar = Math.random, alCambiar = () => {}, autonoma = true,
-  suenoTras = SUENO_TRAS, bombeoDura = BOMBEO_DURA, techo = () => 0, alReubicar = () => {} } = {}) {
+  suenoTras = SUENO_TRAS, bombeoDura = BOMBEO_DURA, techo = () => 0, alReubicar = () => {}, reloj = () => null } = {}) {
   const entre = (a, b) => a + (b - a) * azar();
   const unoDe = (lista) => lista[Math.floor(azar() * lista.length)];
 
   const m = {
     t: 0, x: 0, sup: null, ultY: null, perdida: false, desde: null, llegada: 0, forma: 0.25, escala,
+    descanso: null, rest: null, carga: 1, flash: -9,
     pesos: {}, tranquila: false, suenoTras, bombeoDura,
     sueno: 0, accion: null, cola: [], previa: null, avisado: '',
     musc: Object.fromEntries(Object.keys(MUSCULOS).map((k) => [k, { bombeo: 0, contr: 0 }])),
@@ -409,6 +410,120 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
     };
   }
 
+  // ——— El descanso (D-135) ———
+  // Por el tiempo que queda: su luz se recarga (de apagada a más brillante que nunca: «recargada»), a los 10 s calienta
+  // para el siguiente ejercicio y a los 3 se pone en guardia. m.descanso: { id, quedan, fraccion, pausa, grupoSiguiente }.
+  function ponerAlDiaDescanso(dt) {
+    const d = m.descanso;
+    if (!d) {
+      m.rest = null;
+      m.carga = lerp(m.carga, 1, Math.min(1, dt * 1.5));
+      return;
+    }
+    if (m.rest?.id !== d.id) m.rest = { id: d.id, recuperada: false, calentando: false, guardia: false, recargada: false };
+    m.sueno = Math.min(m.sueno, 0.3); // descansando contigo no le entra sueño
+    m.carga = lerp(m.carga, 0.35 + 0.95 * limitar(d.fraccion, 0, 1), Math.min(1, dt * 3));
+    if (!m.rest.recargada && d.fraccion >= 0.985) {
+      m.rest.recargada = true;
+      m.flash = m.t;
+      efecto('chispas');
+    }
+    if (m.tranquila || d.pausa) return;
+    if (!m.rest.calentando && d.quedan <= 10 && d.quedan > 3) {
+      m.rest.calentando = m.rest.recuperada = true;
+      reaccionar([calentar(d.grupoSiguiente)]);
+    }
+    if (!m.rest.guardia && d.quedan <= 3) {
+      m.rest.guardia = m.rest.calentando = m.rest.recuperada = true;
+      reaccionar([enGuardia()]);
+    }
+  }
+  // Qué hace en el descanso: primero recupera el aliento y se seca el sudor; luego descansa contigo (se sienta, bebe,
+  // mira cuánto queda, se estira…), mejor donde no tape nada.
+  function enElDescanso(s) {
+    const r = m.rest;
+    const aSitio = (acciones) => (s.libres?.length && !comodaEn(s, m.x) ? [caminar(puntoEn(s, null, Infinity, true)), ...acciones] : acciones);
+    if (r && !r.recuperada) {
+      r.recuperada = true;
+      return [gesto(GESTOS.jadear), gesto(GESTOS.secarse)];
+    }
+    const opciones = [['sentarse', 3], ['beber', 1.5], ['reloj', 1.4], ['desperezarse', 0.7], ['quieto', 1], ['mirarte', 0.8], ['pasear', 0.7]]
+      .filter(([n]) => n !== m.previa || n === 'sentarse');
+    let x = azar() * opciones.reduce((a, [, p]) => a + p, 0);
+    let elegida = opciones[0][0];
+    for (const [n, p] of opciones) {
+      if ((x -= p) <= 0) {
+        elegida = n;
+        break;
+      }
+    }
+    m.previa = elegida;
+    switch (elegida) {
+      case 'sentarse': return aSitio([sentarse(entre(5, 9))]);
+      case 'beber': return aSitio([gesto(GESTOS.beber)]);
+      case 'reloj': return [mirarReloj()];
+      case 'desperezarse': return [gesto(GESTOS.desperezarse)];
+      case 'mirarte': return [gesto(GESTOS.mirarte)];
+      case 'pasear': return [caminar(puntoEn(s))];
+      default: return aSitio([quieto()]);
+    }
+  }
+  // Mira la cuenta atrás de la barra del descanso.
+  function mirarReloj() {
+    return {
+      nombre: 'Mira cuánto queda', t: 0, calma: true,
+      actualizar(dt) {
+        this.t += dt;
+        const r = reloj();
+        if (r) mirarPunto(r[0], r[1], 0.3);
+        return { pose: { ...POSE_BASE, cabeza: 6 }, apoyo: 'pies', x: m.x, y: sup().y };
+      },
+      get hecha() { return this.t >= 2.2; },
+    };
+  }
+  // Calienta para el siguiente ejercicio: saltitos y brazos sueltos, y ese músculo se le enciende a ratos.
+  function calentar(grupo) {
+    const musculos = GRUPOS[grupo]?.musculos || [];
+    return {
+      nombre: 'Calienta para la siguiente', t: 0,
+      actualizar(dt) {
+        const t = (this.t += dt);
+        const s = Math.sin(t * 2 * Math.PI * 2.2);
+        const c = Math.cos(t * 2 * Math.PI * 1.1);
+        for (const k of musculos) m.musc[k].contr = Math.max(m.musc[k].contr, 0.3 + 0.4 * Math.max(0, Math.sin(t * 5)));
+        if (m.t > m.mirada.hasta) mirarAlAzar();
+        return {
+          pose: {
+            ...POSE_BASE, alto: 3 * Math.max(0, s), musloAdI: 6 * s, musloAdD: -6 * s,
+            rodillaAdI: -10 - 8 * Math.max(0, s), rodillaAdD: -10 - 8 * Math.max(0, -s),
+            brazoI: 30 + 20 * c, brazoD: 30 - 20 * c, brazoAdI: 25 * c, brazoAdD: -25 * c, codoI: 20, codoD: 20,
+          },
+          apoyo: 'pies', x: m.x, y: sup().y, cara: 'esfuerzo',
+        };
+      },
+      get hecha() { return this.t >= 30; }, // hasta que se ponga en guardia (o se acabe el descanso)
+    };
+  }
+  // ¡Lista para la siguiente!: los puños arriba, un poco agachada y botando.
+  function enGuardia() {
+    return {
+      nombre: '¡Lista para la siguiente!', t: 0,
+      alEmpezar() { efecto('chispas'); },
+      actualizar(dt) {
+        const t = (this.t += dt);
+        const b = Math.max(0, Math.sin(t * 2 * Math.PI * 1.6));
+        return {
+          pose: {
+            ...POSE_BASE, brazoI: 62, codoI: 115, brazoD: 62, codoD: 115, brazoAdI: 20, brazoAdD: 20,
+            musloAdI: 22, rodillaAdI: -40, musloAdD: 22, rodillaAdD: -40, inclinar: 6, alto: 2 * b,
+          },
+          apoyo: 'pies', x: m.x, y: sup().y, cara: 'esfuerzo',
+        };
+      },
+      get hecha() { return this.t >= 8; },
+    };
+  }
+
   // Asomada por el borde de la barra de abajo (en el rincón): solo los ojos y las manos por encima, así que casi no tapa
   // nada. Mira a un lado y a otro, sube y baja un poco y, si le entra sueño, se le cierran los ojos y se hunde.
   function vigilar(dur = entre(10, 22)) {
@@ -487,7 +602,10 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
           pose = { ...pose };
           for (const c in campos) pose[c] += campos[c] * k;
         }
-        return { pose, apoyo: 'pies', x: m.x, y: sup().y, espejo };
+        // lo que lleva en la mano (la botella, la toalla), en la otra si el gesto va al revés
+        const obj = (def.objeto || []).find(([a, b]) => t1 >= a && t1 < b);
+        const objeto = obj ? { tipo: obj[2], mano: espejo ? (obj[3] === 'D' ? 'I' : 'D') : obj[3] } : null;
+        return { pose, apoyo: 'pies', x: m.x, y: sup().y, espejo, objeto };
       },
       get hecha() { return this.t >= def.dur; },
     };
@@ -501,6 +619,7 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
       m.previa = 'vigilar';
       return [vigilar()];
     }
+    if (m.descanso && !m.tranquila) return enElDescanso(s);
     const salto = m.tranquila ? null : planearSalto();
     // Donde no está cómoda (de pie taparía algo) no se queda: pasea o salta a otro sitio; y si se para, antes va a uno
     // libre de su superficie.
@@ -577,6 +696,7 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
       s.bombeo = Math.max(0, s.bombeo - dt / m.bombeoDura);
     }
     m.destello = 0;
+    ponerAlDiaDescanso(dt);
     if (!sup()) return null;
     if (m.perdida) {
       // Su superficie se fue. Si estaba cerca, salta desde donde estaba hasta la nueva; si no (o si estaba sintiendo
@@ -596,6 +716,7 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
     }
     if (!m.accion || m.accion.hecha) siguiente();
     const salida = m.accion.actualizar(dt);
+    if (m.t - m.flash < 0.9) m.destello = Math.max(m.destello, 1 - (m.t - m.flash) / 0.9); // «¡recargada!»
     if (m.accion.nombre !== m.avisado) alCambiar((m.avisado = m.accion.nombre));
 
     // los ojos van rápido; la cabeza se ladea despacio hacia donde mira
@@ -678,7 +799,7 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
     const f = {
       t: m.t, cin, raiz, escala: m.escala, pose, apoyo: salida.apoyo, cuerpo, cara, abiertos,
       mirada: [m.mirada.x, m.mirada.y], efectos: m.efectos.map((e) => ({ ...e, edad: m.t - e.t0 })),
-      ocultar, sombra, destello: m.destello, accion: m.accion.nombre,
+      ocultar, sombra, destello: m.destello, accion: m.accion.nombre, carga: m.carga, objeto: salida.objeto || null,
     };
     m.ultimo = f;
     return f;
@@ -709,6 +830,7 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
       m.toques.push(m.t);
       if (m.accion?.dormida) reaccionar([gesto(GESTOS.saludo)]);
       else if (m.toques.length >= 2) reaccionar([gesto(GESTOS.cosquillas)]);
+      else if (m.descanso) reaccionar([gesto(GESTOS.chocar)]); // en el descanso, choca los cinco
       else {
         reaccionar([gesto(GESTOS.susto), gesto(GESTOS.saludo)]);
         // y se aparta: así no se queda tapando lo que querías tocar
@@ -738,6 +860,9 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
         dormir: () => [dormir(1e9)],
         sentarse: () => [sentarse(1e9)],
         asomarse: () => [asomarse()],
+        calentar: () => [calentar('Pecho')],
+        guardia: () => [enGuardia()],
+        reloj: () => [mirarReloj()],
         pasear: () => [caminar(m.x < (s.x1 + s.x2) / 2 ? s.x2 : s.x1)],
         saltar: () => {
           const p = planearSalto();
@@ -772,6 +897,13 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
     get calma() { return Boolean(m.accion?.calma); },
     get dormida() { return Boolean(m.accion?.dormida); },
     get superficie() { return m.sup; },
+    // El descanso de la app ({ id, quedan, fraccion, pausa, grupoSiguiente }) o null.
+    set descanso(d) { m.descanso = d || null; },
+    get descanso() { return m.descanso; },
+    // Su luz: 1, la de siempre; en el descanso, de 0,35 (recién acabada la serie) a 1,3 («recargada»).
+    get carga() { return m.carga; },
+    // ¿Está reaccionando a algo (una serie, un récord, un toque), o lo tiene pendiente?
+    get reaccionando() { return Boolean((m.accion?.reaccion && !m.accion.hecha) || m.cola.some((a) => a.reaccion)); },
     // Dónde tiene la cabeza, en px del escenario (para apuntarle, o para poner algo junto a ella).
     get cabeza() {
       const f = m.ultimo;

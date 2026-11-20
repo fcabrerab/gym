@@ -1,12 +1,21 @@
 // Versión de la app. La misma VERSION está en ../sw.js y en la meta «gym-beta-version» de ../index.html: cada
 // cambio en un archivo de la app obliga a subirla en los tres sitios (una prueba de tests/ comprueba que coinciden).
 // Hasta la 0.2.10 fue la beta, en beta/; desde la 1.0.0, es la app, en la dirección de siempre (D-121).
-export const VERSION = "1.3.1";
+export const VERSION = "1.3.2";
 export const FECHA_VERSION = "2026-11-20";
 
 // Novedades por versión, de la más nueva a la más vieja. Se enseñan en Ajustes → La app → Novedades y, la primera
 // vez, en «Qué tiene de nuevo».
 export const NOVEDADES = [
+  {
+    version: "1.3.2",
+    fecha: "2026-11-20",
+    cambios: [
+      "El descanso es el momento de la mascota: tras sentir la serie, recupera el aliento y se seca el sudor; luego descansa contigo (se sienta, bebe agua, mira cuánto queda) lejos del ejercicio abierto.",
+      "Su luz se recarga durante el descanso, como una batería: sin mirar el reloj, ves cuánto te queda; al llenarse, brilla más que nunca. En los últimos 10 segundos calienta para el siguiente ejercicio y a los 3 se pone en guardia.",
+      "Al empezar la serie vuelve a asomarse abajo, para no distraerte. Y si la tocas en el descanso, choca los cinco.",
+    ],
+  },
   {
     version: "1.3.1",
     fecha: "2026-11-20",
