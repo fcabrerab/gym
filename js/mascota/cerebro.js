@@ -11,7 +11,7 @@
 // le duele y se queja; con las piernas cargadas, anda más despacio y salta menos). Qué hace cada pieza y cómo añadir
 // algo, en LEEME.md.
 import { POSE_BASE, MEDIDAS, mezclar, normalizar, cinematica, lerp, limitar, suave, tramo } from './esqueleto.js';
-import { GESTOS, GRUPOS, CARAS, MUSCULOS, REGIONES } from './gestos.js';
+import { GESTOS, GRUPOS, CARAS, MUSCULOS, REGIONES, CON_TROFEO } from './gestos.js';
 import { formaVisible, BOMBEO_SERIE, GENERAL_SERIE } from './forma.js';
 
 const MARGEN = 14;        // px que deja hasta el borde de una tarjeta
@@ -22,13 +22,14 @@ const BOMBEO_DURA = 150;  // s que tarda en irse el bombeo (por defecto: en la a
 
 // Las papeletas de cada cosa en el sorteo de qué hacer (elegir()); su carácter las multiplica (caracter.js).
 // En la app salta más y se queda quieta menos que en el prototipo (D-134: que se mueva entre las tarjetas).
-// «agujetas»: las suyas con las agujetas en su punto (con menos, menos; sin, ninguna).
+// «agujetas»: las suyas con las agujetas en su punto (con menos, menos; sin, ninguna). «presumir»: solo con trofeo.
 export const PESOS = {
   quieto: 2.2, pasear: 3.2, saltar: 2.6, sentarse: 0.8, asomarse: 0.9, desperezarse: 0.4, rascarse: 0.45, mirarte: 0.7, dormir: 2.5,
-  agujetas: 1.1,
+  agujetas: 1.1, presumir: 0.9,
 };
 // En el modo tranquilo (en el entreno), solo estas: ni pasea ni salta.
-export const TRANQUILAS = new Set(['quieto', 'sentarse', 'asomarse', 'desperezarse', 'rascarse', 'mirarte', 'dormir', 'agujetas']);
+export const TRANQUILAS = new Set(['quieto', 'sentarse', 'asomarse', 'desperezarse', 'rascarse', 'mirarte', 'dormir', 'agujetas', 'presumir']);
+const CALENTAR_CADA = 600; // s: antes de empezar a entrenar, calienta como mucho una vez cada 10 min
 const PASO = 22;          // grados que abre cada pierna al andar
 
 // La cara se enciende como un tubo de neón (parpadea y se queda) y se apaga igual.
@@ -70,7 +71,7 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
   const m = {
     t: 0, x: 0, sup: null, ultY: null, perdida: false, desde: null, llegada: 0, fondo: 0.25, general: 0, escala,
     descanso: null, rest: null, carga: 1, flash: -9, destinoSalto: null,
-    pesos: {}, tranquila: false, suenoTras, bombeoDura,
+    pesos: {}, tranquila: false, suenoTras, bombeoDura, trofeo: false, calentado: -1e9, saludar: null,
     sueno: 0, accion: null, cola: [], previa: null, avisado: '',
     musc: Object.fromEntries(Object.keys(MUSCULOS).map((k) => [k, { bombeo: 0, contr: 0, agujetas: 0 }])),
     cara: null,
@@ -146,6 +147,10 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
     for (const k of claves) m.musc[k].bombeo = Math.min(1, m.musc[k].bombeo + BOMBEO_SERIE);
     m.general = Math.min(1, m.general + GENERAL_SERIE);
   }
+  // Si hoy tiene trofeo (D-135: has batido una marca entrenando), lo lleva en la mano derecha («como»: la pose de ese
+  // brazo; de serie, CON_TROFEO, delante). Lo usan quieto(), caminar() y sentarse().
+  const llevar = (pose, como = CON_TROFEO) => (m.trofeo ? { ...pose, ...como } : pose);
+  const elTrofeo = () => (m.trofeo ? { tipo: 'trofeo', mano: 'D' } : null);
   // Cuánto le duele una zona (REGIONES: brazos, tronco o piernas), de 0 a 1.
   const dolor = (zona) => Math.max(0, ...REGIONES[zona].musculos.map((k) => m.musc[k].agujetas));
   // La zona que más le duele, o null si ninguna (o casi).
@@ -184,7 +189,7 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
         this.t += dt;
         if (m.t > m.mirada.hasta) mirarAlAzar();
         const s = Math.sin(0.9 * m.t + fase);
-        return { pose: { ...POSE_BASE, lumbar: 1.8 * s, musloI: 4 + 1.2 * s, musloD: 4 - 1.2 * s }, apoyo: 'pies', x: m.x, y: sup().y };
+        return { pose: llevar({ ...POSE_BASE, lumbar: 1.8 * s, musloI: 4 + 1.2 * s, musloD: 4 - 1.2 * s }), apoyo: 'pies', x: m.x, y: sup().y, objeto: elTrofeo() };
       },
       get hecha() { return this.t >= dur; },
     };
@@ -214,15 +219,15 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
         const ritmo = Math.min(1, v / velocidad), sn = Math.sin(fase), cs = Math.cos(fase);
         mirarCara(3 * dir, 0.6, 0.2);
         return {
-          pose: {
+          pose: llevar({
             ...POSE_BASE, orientacion: 90 * dir, cabezaGiro: -38 * dir, inclinar: 5 * ritmo,
             musloI: 2, musloD: 2,
             musloAdI: paso * sn * ritmo, rodillaAdI: -(5 + rodilla * Math.max(0, cs) * ritmo),
             musloAdD: -paso * sn * ritmo, rodillaAdD: -(5 + rodilla * Math.max(0, -cs) * ritmo),
             brazoI: 6, brazoD: 6, brazoAdI: -24 * sn * ritmo, brazoAdD: 24 * sn * ritmo, codoAdI: 28, codoAdD: 28,
             estirar: 0.012 * Math.abs(cs) * ritmo,
-          },
-          apoyo: 'pies', x: m.x, y: sup().y,
+          }, { brazoD: 6, brazoAdD: 20, codoAdD: 90 }),
+          apoyo: 'pies', x: m.x, y: sup().y, objeto: elTrofeo(),
         };
       },
       get hecha() { return Math.abs(destino - m.x) < 0.5; },
@@ -344,13 +349,13 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
         if (modorra >= 0.3) mirarCara(0, 2.4, 0.3);
         if (modorra > 0.5) this.nombre = 'Le entra sueño';
         return {
-          pose: {
+          pose: llevar({
             ...POSE_BASE, orientacion: 18 * lado, cabezaGiro: -10 * lado, inclinar: -4 + 8 * modorra,
             musloI: 7, musloD: 7, musloAdI: 84, musloAdD: 84, rodillaAdI: -84 + 16 * col, rodillaAdD: -84 - 16 * col,
             brazoI: 26, brazoD: 26, brazoAdI: 6, brazoAdD: 6, codoAdI: 6, codoAdD: 6, hombros: 0.6 - modorra,
             cabeza: 8 * modorra * (0.55 + 0.45 * Math.sin(this.t * 1.4)), cabezaAd: 22 * modorra,
-          },
-          apoyo: 'cadera', x: m.x, y: sup().y,
+          }, { brazoD: 14, brazoAdD: 34, codoAdD: 64 }),
+          apoyo: 'cadera', x: m.x, y: sup().y, objeto: elTrofeo(),
           ojos: modorra > 0.6 ? Math.max(0.12, 1 - (modorra - 0.6) * 2.2) : 1,
         };
       },
@@ -358,8 +363,9 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
     };
   }
 
-  // Duerme tumbada boca arriba, con las rodillas dobladas y las manos detrás de la cabeza.
-  function dormir(dur = entre(12, 22)) {
+  // Duerme tumbada boca arriba, con las rodillas dobladas y las manos detrás de la cabeza. Al despertar, se despereza
+  // («alDespertar»: el gesto de después, o null si ya lleva otro en la cola).
+  function dormir(dur = entre(12, 22), { alDespertar = 'desperezarse' } = {}) {
     const espejo = azar() < 0.5;
     let proxZ = 1;
     return {
@@ -388,7 +394,7 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
       get hecha() { return this.t >= dur; },
       alTerminar() {
         m.sueno = 0.12;
-        m.cola.unshift(gesto(GESTOS.desperezarse));
+        if (alDespertar) m.cola.unshift(gesto(GESTOS[alDespertar]));
       },
     };
   }
@@ -516,8 +522,9 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
     };
   }
   // Calienta para el siguiente ejercicio, un movimiento tras otro (los brazos, las rodillas, el tronco), y ese músculo
-  // se le enciende a ratos. Cada movimiento para en cuanto ya no toca calentar (calentarSobra).
-  function calentar(grupo) {
+  // se le enciende a ratos. Cada movimiento para en cuanto ya no toca calentar («sobra»: en el descanso, calentarSobra;
+  // antes de empezar a entrenar, nunca: hace los tres).
+  function calentar(grupo, sobra = calentarSobra) {
     const musculos = GRUPOS[grupo]?.musculos || [];
     const W = 2 * Math.PI;
     const mov = (nombre, pose) => ({
@@ -528,7 +535,7 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
         if (m.t > m.mirada.hasta) mirarAlAzar();
         return { pose: { ...POSE_BASE, ...pose(t) }, apoyo: 'pies', x: m.x, y: sup().y, cara: 'esfuerzo' };
       },
-      get hecha() { return this.t >= 2.4 || calentarSobra(); },
+      get hecha() { return this.t >= 2.4 || sobra(); },
     });
     const movimientos = [
       mov('Calienta los brazos', (t) => {
@@ -679,7 +686,7 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
       ['quieto', k('quieto')], ['pasear', k('pasear')], ['saltar', salto ? k('saltar') * (1 - 0.6 * dolor('piernas')) : 0],
       ['sentarse', k('sentarse') * (1 + 3 * m.sueno)], ['asomarse', k('asomarse')], ['desperezarse', k('desperezarse')],
       ['rascarse', k('rascarse')], ['mirarte', k('mirarte')], ['dormir', m.sueno > 0.7 ? k('dormir') : 0],
-      ['agujetas', zona ? k('agujetas') * dolor(zona) : 0],
+      ['agujetas', zona ? k('agujetas') * dolor(zona) : 0], ['presumir', m.trofeo ? k('presumir') : 0],
     ].filter(([n, p]) => p > 0 && (n !== m.previa || n === 'quieto' || n === 'pasear') && (!m.tranquila || TRANQUILAS.has(n)));
     let r = azar() * opciones.reduce((a, [, p]) => a + p, 0);
     let elegida = opciones[0][0];
@@ -699,7 +706,7 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
         const x = limitar(m.x, s.x1 + 34, s.x2 - 34);
         return Math.abs(x - m.x) < 1 ? [asomarse()] : [caminar(x), asomarse()];
       }
-      case 'desperezarse': case 'rascarse': case 'mirarte': return [gesto(GESTOS[elegida])];
+      case 'desperezarse': case 'rascarse': case 'mirarte': case 'presumir': return [gesto(GESTOS[elegida])];
       case 'agujetas': return aSitio([gesto(GESTOS[REGIONES[zona].gesto])]);
       default: return aSitio([quieto()]);
     }
@@ -719,6 +726,23 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
     if (!m.cola.length) m.cola = autonoma ? elegir() : [quieto(1e9)];
     empezar(m.cola.shift());
   }
+  // Te ve tras un rato sin verte (D-135): te saluda; si llevas días sin entrenar, estaba dormida: se despierta de golpe
+  // y se alegra de verte, sin reproches. En su rincón del entreno o en el descanso, nada.
+  function darBienvenida({ dormida }) {
+    const s = sup();
+    if (!s || s.tipo === 'rincon' || m.descanso) return;
+    if (!dormida) {
+      reaccionar([gesto(GESTOS.saludo), gesto(GESTOS.mirarte)]);
+      return;
+    }
+    const acciones = [dormir(entre(2.5, 3.5), { alDespertar: null }), gesto(GESTOS.despertar), gesto(GESTOS.alegria),
+      gesto(GESTOS.saludo, { espejo: false }), gesto(GESTOS.mirarte)];
+    for (const a of acciones) a.reaccion = true;
+    m.cola = acciones.slice(1);
+    empezar(acciones[0]);
+    m.trans = null; // ya estaba dormida: no se tumba delante de ti
+  }
+
   // Lo que le pasa (una serie, un récord, un toque): lo hace ya o, si está a media cosa, justo después.
   function reaccionar(acciones) {
     m.sueno = 0;
@@ -746,6 +770,10 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
     m.destello = 0;
     ponerAlDiaDescanso(dt);
     if (!sup()) return null;
+    if (m.saludar) {
+      darBienvenida(m.saludar); // ya tiene dónde ponerse
+      m.saludar = null;
+    }
     if (m.perdida) {
       // Su superficie se fue. Si estaba cerca, salta desde donde estaba hasta la nueva; si no (o si estaba sintiendo
       // algo), aparece allí fundiéndose. Lo que tenía pensado era para la otra.
@@ -864,6 +892,29 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
       reaccionar([gesto(GESTOS[g.gesto])]);
     },
     record() { reaccionar([gesto(GESTOS.record)]); },
+    // Al terminar la sesión (D-135), lo celebra según cómo fue: con marcas nuevas, el récord y su trofeo; con todas las
+    // series, «¡sesión completa!»; con casi todas (el 60 % o más), «¡bien hecho!»; con menos, «algo es algo». Sin
+    // reproches.
+    finSesion({ series = 0, plan = 0, marcas = 0 } = {}) {
+      const hecho = plan > 0 ? series / plan : 1;
+      if (marcas > 0) reaccionar([gesto(GESTOS.record), gesto(GESTOS.presumir)]);
+      else if (hecho >= 1) reaccionar([gesto(GESTOS.sesionCompleta)]);
+      else if (hecho >= 0.6) reaccionar([gesto(GESTOS.bienHecho)]);
+      else reaccionar([gesto(GESTOS.algoEsAlgo)]);
+    },
+    // Vas a empezar a entrenar (abres un ejercicio sin sesión en marcha, D-135): calienta ese grupo (los tres
+    // movimientos), como mucho una vez cada 10 min.
+    calentarAntes(grupo) {
+      if (m.t - m.calentado < CALENTAR_CADA || sup()?.tipo === 'rincon') return;
+      m.calentado = m.t;
+      reaccionar(calentar(grupo, () => false));
+    },
+    // Te ve tras un rato sin verte (D-135): «dormida», si llevas días sin entrenar (la bienvenida, en cuanto tenga dónde
+    // ponerse: darBienvenida()).
+    bienvenida({ dormida = false } = {}) { m.saludar = { dormida: Boolean(dormida) }; },
+    // Su trofeo (D-135): si hoy has batido una marca entrenando, lo lleva el resto del día.
+    get trofeo() { return m.trofeo; },
+    set trofeo(v) { m.trofeo = Boolean(v); },
     // Un toque en el escenario: si es en ella, reacciona; si no, mira hacia allí (y a veces se acerca).
     tocar(px, py) {
       if (!api.contiene(px, py)) {

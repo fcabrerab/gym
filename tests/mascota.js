@@ -17,7 +17,7 @@ function azarDe(semilla) {
 }
 
 export async function ejecutar(c) {
-  const { caso, esperar, limpiarBeta, guardar, leerJson, cargarBeta, quitar, pulsar, teclear, sinErrores, hastaQue, textoDe, avisoActual, hojaAbierta } = c;
+  const { caso, esperar, limpiarBeta, guardar, leerJson, cargarBeta, quitar, pulsar, teclear, sinErrores, hastaQue, hastaQueVirtual, textoDe, avisoActual, hojaAbierta } = c;
   const { VERSION } = await import("/js/version.js");
   const memoria = await import("/js/mascota/memoria.js");
   const caracter = await import("/js/mascota/caracter.js");
@@ -276,6 +276,82 @@ export async function ejecutar(c) {
     await limpiarBeta();
   }
 
+  // MA26 Los momentos de la sesión (D-135, la 3): al terminar lo celebra según cómo fue; antes de empezar, calienta; al
+  // verte tras un rato, te saluda (y si llevas días sin entrenar, estaba dormida y se alegra); con trofeo, lo lleva
+  {
+    const sitio = () => [{ id: "a", x1: 20, x2: 380, y: 300 }];
+    const nueva = (semilla = 5) => {
+      const m = crearMascota({ superficies: sitio, azar: azarDe(semilla), autonoma: false });
+      for (let i = 0; i < 10; i++) m.paso(1 / 30);
+      return m;
+    };
+    const vive = (m, s) => {
+      const vistas = [];
+      for (let i = 0; i < Math.round(s * 30); i++) {
+        m.paso(1 / 30);
+        if (vistas[vistas.length - 1] !== m.accion) vistas.push(m.accion);
+      }
+      return vistas;
+    };
+    const fin = (d) => {
+      const m = nueva();
+      m.finSesion(d);
+      return vive(m, 8).join(" → ");
+    };
+    const conMarca = fin({ series: 10, plan: 20, marcas: 1 });
+    const completa = fin({ series: 20, plan: 20, marcas: 0 });
+    const casi = fin({ series: 14, plan: 20, marcas: 0 });
+    const poca = fin({ series: 3, plan: 20, marcas: 0 });
+    caso(/^¡Celebra el récord! → Presume de trofeo/.test(conMarca) && /^¡Sesión completa!/.test(completa) && /^¡Bien hecho!/.test(casi) && /^Algo es algo/.test(poca),
+      `MA26 al terminar lo celebra según cómo fue: con marca, ${conMarca.split(" → ").slice(0, 2).join(" y ")}; todas, ${completa.split(" → ")[0]}; casi todas, ${casi.split(" → ")[0]}; pocas, ${poca.split(" → ")[0]}`);
+    const dormida = nueva();
+    dormida.bienvenida({ dormida: true });
+    dormida.paso(1 / 30);
+    const primera = dormida.accion;
+    const conSueno = vive(dormida, 14).join(" → ");
+    const despierta = nueva();
+    despierta.bienvenida();
+    const sinSueno = vive(despierta, 6).join(" → ");
+    caso(primera === "Duerme" && /^Duerme → Se despierta de golpe → ¡Qué alegría verte! → Te saluda → Te mira/.test(conSueno) && /^Te saluda → Te mira/.test(sinSueno),
+      `MA26 al verte tras días sin entrenar, estaba dormida y se alegra (${conSueno}); si no, te saluda (${sinSueno})`);
+    const cal = nueva();
+    cal.calentarAntes("Pecho");
+    const calienta = vive(cal, 9);
+    cal.calentarAntes("Pecho");
+    const otraVez = vive(cal, 3);
+    caso(["Calienta los brazos", "Calienta las rodillas", "Calienta el tronco"].every((x) => calienta.includes(x)) && !otraVez.some((x) => /Calienta/.test(x)),
+      `MA26 vas a empezar: calienta (${calienta.filter((x) => /Calienta/.test(x)).join(", ")}), como mucho una vez cada 10 min`);
+    const conTrofeo = nueva();
+    conTrofeo.trofeo = true;
+    const f = conTrofeo.paso(1 / 30);
+    const presume = (trofeo) => {
+      const m = crearMascota({ superficies: () => [{ id: "a", x1: 20, x2: 380, y: 300 }, { id: "b", x1: 200, x2: 380, y: 520 }], azar: azarDe(13), techo: () => 60 });
+      m.trofeo = trofeo;
+      return new Set(vive(m, 600)).has("Presume de trofeo");
+    };
+    caso(f?.objeto?.tipo === "trofeo" && presume(true) && !presume(false),
+      "MA26 con trofeo, lo lleva en la mano y a ratos presume de él; sin trofeo, nunca");
+  }
+
+  // MA27 Lo que sale de tus entrenos para sus momentos (forma.js): si hoy has batido una marca entrenando (su trofeo) y
+  // si llevas días sin entrenar (más del doble de lo que suele haber entre dos entrenos de tu rutina, y 3 como poco)
+  {
+    const marca = { exerciseId: "pec-deck", kg: 50, fecha: ms("2026-11-20T10:00:00"), motivo: "sesion" };
+    const trofeo = (marcas) => forma.cuerpoDeTusEntrenos({ ...entrenos([]), marcas }, T).trofeo;
+    const hace = (dias, porSemana = null) => {
+      const s = sesionInventada(d, "tuesday-push", new Date(T - dias * DIA).toISOString(), { id: `h-${dias}` });
+      const dias3 = porSemana === 3 ? [{ id: "a", diasSemana: [1] }, { id: "b", diasSemana: [3] }, { id: "c", diasSemana: [5] }] : d.dias;
+      return forma.cuerpoDeTusEntrenos({ dias: dias3, sesiones: [s], ejercicios: d.ejercicios }, T);
+    };
+    const nada = forma.cuerpoDeTusEntrenos(entrenos([]), T);
+    caso(trofeo([marca]) && !trofeo([{ ...marca, fecha: ms("2026-11-19T20:00:00") }]) && !trofeo([{ ...marca, motivo: "a-mano" }])
+      && !trofeo([{ ...marca, fecha: T + HORA }]) && !trofeo([]),
+    "MA27 su trofeo: una marca batida hoy entrenando (no la de ayer, ni una puesta a mano)");
+    caso(forma.llevasDiasSin(hace(4)) && !forma.llevasDiasSin(hace(2)) && !forma.llevasDiasSin(hace(4, 3)) && forma.llevasDiasSin(hace(6, 3))
+      && nada.diasSin === null && !forma.llevasDiasSin(nada) && Math.abs(hace(4).diasSin - 4) < 0.1,
+    "MA27 días sin entrenar: con tu rutina (5 por semana), desde 3; con 3 por semana, desde 5; y sin ningún entreno aún, no (no hay «vuelta»)");
+  }
+
   // MA17 El descanso (D-135): se recupera, descansa, calienta a los 10 s y se pone en guardia a los 3; su luz se recarga;
   // y si la tocas, choca los cinco
   {
@@ -525,6 +601,84 @@ export async function ejecutar(c) {
     `MA25 cargar una copia que la trae: lo dice («Con tu mascota, Lumen»), vuelve ella (su semilla y su luz: ${luz}) y «Deshacer» deja la de antes`);
     sinErrores(b, "MA25");
     quitar(b);
+  }
+
+  // MA28 En la app (D-135, la 3): abres un ejercicio sin sesión en marcha y calienta; al terminar, lo celebra cuando
+  // cierras el resumen (antes no: la tapa); y con una marca de hoy, lleva su trofeo
+  {
+    await preparar();
+    const b = await cargarBeta({ canal: "beta" });
+    await hastaQue(() => b.w.__gymMascota?.viva, 200);
+    const m = b.w.__gymMascota;
+    m.avanzar(1);
+    pulsar(b.d, "abrir-ejercicio", "pec-deck");
+    await esperar(150);
+    const antes = [];
+    for (let i = 0; i < 16; i++) {
+      m.avanzar(0.25);
+      antes.push(m.accion);
+    }
+    pulsar(b.d, "serie-hecha", "pec-deck");
+    await esperar(200);
+    pulsar(b.d, "descanso-saltar");
+    await esperar(100);
+    pulsar(b.d, "terminar-sesion");
+    await esperar(50);
+    pulsar(b.d, "confirmar");
+    await hastaQueVirtual(() => textoDe(b.d, ".hoja-titulo") === "Sesión guardada", 3000);
+    const pendiente = m.celebracionPendiente;
+    m.avanzar(2);
+    const tapada = m.accion;
+    const sigue = Boolean(m.celebracionPendiente);
+    pulsar(b.d, "cerrar-hoja");
+    await hastaQueVirtual(() => !hojaAbierta(b.d), 2000);
+    const despues = [];
+    for (let i = 0; i < 12; i++) {
+      m.avanzar(0.25);
+      despues.push(m.accion);
+    }
+    caso(antes.some((x) => /^Calienta/.test(x)) && pendiente?.series === 1 && pendiente?.plan > 1 && sigue
+      && !/Algo es algo|Bien hecho|Sesión completa|Celebra el récord/.test(tapada) && despues.some((x) => /Algo es algo|Celebra el récord/.test(x)) && !m.celebracionPendiente,
+    `MA28 abres un ejercicio sin sesión en marcha y calienta (${[...new Set(antes)].filter((x) => /Calienta/.test(x)).join(", ")}); al terminar, lo celebra al cerrar el resumen, no antes (${[...new Set(despues)].join(" → ")})`);
+    sinErrores(b, "MA28");
+    quitar(b);
+    await limpiarBeta();
+    guardar("gym-beta-datos", await datosBeta({ cambios: (x) => x.marcas.push({ exerciseId: "pec-deck", kg: 60, fecha: ms("2026-11-03T12:00:00"), motivo: "sesion" }) }));
+    guardar("gym-beta-ui", { versionVista: VERSION, versionVistaBeta: VERSION, ayudaSerieVista: true });
+    const b2 = await cargarBeta({ canal: "beta" });
+    await hastaQue(() => b2.w.__gymMascota?.viva, 200);
+    caso(b2.w.__gymMascota?.trofeo === true, "MA28 con una marca batida hoy entrenando, lleva su trofeo");
+    sinErrores(b2, "MA28 (trofeo)");
+    quitar(b2);
+  }
+
+  // MA29 Tras días sin entrenar, al abrir la app estaba dormida y se alegra de verte; si entrenaste ayer, te saluda
+  {
+    const T1 = ms("2026-11-03T18:00:00");
+    const abrir = async (haceDias) => {
+      await limpiarBeta();
+      const base = await datosBeta();
+      guardar("gym-beta-datos", await datosBeta({ sesiones: [sesionInventada(base, "thursday-pull", new Date(T1 - haceDias * DIA).toISOString(), { id: "s-ultima" })] }));
+      guardar("gym-beta-ui", { versionVista: VERSION, versionVistaBeta: VERSION, ayudaSerieVista: true });
+      guardar(memoria.CLAVE, { v: 1, nacida: T1 - 20 * DIA, semilla: 7, ajustes: {}, vista: T1 - 2 * DIA, toques: 0 });
+      const b = await cargarBeta({ canal: "beta" });
+      await hastaQue(() => b.w.__gymMascota?.viva, 200);
+      const m = b.w.__gymMascota;
+      const vistas = [];
+      for (let i = 0; i < 48; i++) {
+        m.avanzar(0.25);
+        if (vistas[vistas.length - 1] !== m.accion) vistas.push(m.accion);
+      }
+      sinErrores(b, `MA29 (hace ${haceDias} días)`);
+      quitar(b);
+      return vistas;
+    };
+    const tras5 = await abrir(5);
+    const tras1 = await abrir(1);
+    caso(tras5.includes("Se despierta de golpe") && tras5.includes("¡Qué alegría verte!") && tras5.includes("Te saluda")
+      && !tras1.includes("Se despierta de golpe") && !tras1.includes("¡Qué alegría verte!") && tras1.includes("Te saluda"),
+    `MA29 tras días sin entrenar, al abrir la app estaba dormida y se alegra de verte (${tras5.slice(0, 5).join(" → ")}); si entrenaste ayer, te saluda (${tras1.slice(0, 3).join(" → ")})`);
+    await limpiarBeta();
   }
 
   // MA15 En la app normal no sale ni guarda nada hasta que la enciendes en Ajustes

@@ -5,6 +5,8 @@
 //   unas horas: como sale de la hora de cada serie, dura aunque cierres la app;
 // - y las agujetas: cada serie deja las suyas en sus músculos, de las 8 h a los 4 días, en su punto de uno a dos días
 //   después. Suaves: casi no se notan (D-133).
+// Y, para sus momentos (D-135): cuándo fue tu último entreno (si llevas días sin entrenar, al volver te espera dormida)
+// y si hoy has batido alguna marca entrenando (su trofeo, el resto del día).
 // Funciones puras: reciben tus entrenos y la hora, y no tocan nada. Para cambiar cómo cuenta algo, las constantes de
 // aquí abajo (lo que se espera de cada caso, en las pruebas MA20 a MA22 de tests/mascota.js).
 
@@ -45,16 +47,19 @@ export function entrenosPorSemana(dias = []) {
 
 // Tus entrenos, uno por sesión (las guardadas de los últimos 4 meses y la de ahora, si no está ya guardada): cuándo
 // empezó y acabó, cuántas series pedía su día y cada serie con su hora y su grupo. Una serie sin hora (de una copia de
-// antes) va repartida entre el principio y el fin de su sesión. «primera»: cuándo empezó la primera de todas.
+// antes) va repartida entre el principio y el fin de su sesión. «primera»: cuándo empezó la primera de todas; «ultimo»:
+// cuándo acabó la última con alguna serie (la de ahora, ahora), o null si aún no hay ninguna.
 function sesionesDe({ sesiones, ejercicios, enCurso, dias } = {}, ahora) {
   const grupoDe = (id) => (ejercicios && typeof ejercicios === "object" ? ejercicios[id]?.muscleGroup : "") || "";
   const r = [];
   let primera = Infinity;
+  let ultimo = null;
   for (const s of lista(sesiones)) {
     const inicio = hora(s?.inicio);
     if (inicio == null) continue;
     const fin = Math.max(inicio, hora(s.fin) ?? inicio);
     primera = Math.min(primera, inicio);
+    if (fin <= ahora && lista(s.ejercicios).some((e) => lista(e?.series).length)) ultimo = Math.max(ultimo ?? fin, fin);
     if (ahora - fin > 120 * DIA) continue;
     const todas = lista(s.ejercicios).flatMap((e) => lista(e?.series).map((x) => ({ x, grupo: grupoDe(e?.exerciseId) })));
     const series = todas.map(({ x, grupo }, i) => ({ t: hora(x?.t) ?? inicio + ((fin - inicio) * (i + 1)) / (todas.length + 1), grupo }));
@@ -67,9 +72,10 @@ function sesionesDe({ sesiones, ejercicios, enCurso, dias } = {}, ahora) {
       .flatMap(([id, l]) => lista(l).map((x) => ({ t: hora(x?.t) ?? ahora, grupo: grupoDe(id) })));
     const plan = lista(dia?.ejercicios).reduce((n, e) => n + (Number(e?.series) || 0), 0);
     primera = Math.min(primera, inicio);
+    if (series.length) ultimo = ahora;
     r.push({ id: enCurso.id, inicio, fin: Math.max(inicio, ahora), plan: plan || series.length, series });
   }
-  return { sesiones: r, primera };
+  return { sesiones: r, primera, ultimo };
 }
 
 // La constancia: tus días de entreno, cada uno con lo que hiciste (una sesión con el 70 % de sus series o más cuenta
@@ -160,7 +166,9 @@ function agujetasDe(sesiones, ahora) {
  * nació ella (sin entrenos, desde entonces se va olvidando de cómo empezó).
  * Devuelve { fondo, constancia, porSemana, ultimas4 (días que entrenaste en las últimas 4 semanas), bombeo y
  * agujetas (de 0 a 1, por músculo de gestos.js), general, bombeados y doloridos (los grupos de la app que los tienen,
- * de más a menos) }.
+ * de más a menos) } y, para sus momentos (D-135), { ultimoEntreno (cuándo acabó el último, o null), diasSin (los días
+ * que llevas sin entrenar, o null si aún no has entrenado), trofeo (si hoy has batido alguna marca entrenando) }.
+ * Para «trofeo», entrenos.marcas (tus marcas, como en tus datos).
  */
 export function cuerpoDeTusEntrenos(entrenos = {}, ahora = Date.now(), { nacida = null } = {}) {
   const porSemana = entrenosPorSemana(entrenos?.dias);
@@ -169,6 +177,7 @@ export function cuerpoDeTusEntrenos(entrenos = {}, ahora = Date.now(), { nacida 
   const b = bombeoDe(todas.sesiones, ahora);
   const a = agujetasDe(todas.sesiones, ahora);
   const orden = (g) => Object.entries(g).filter(([, v]) => v >= UMBRAL).sort((x, y) => y[1] - x[1]).map(([k]) => k);
+  const hoy = fechaLocal(ahora);
   return {
     fondo: SUELO + (TECHO - SUELO) * Math.min(1, c.valor / PLENA),
     constancia: c.valor,
@@ -179,7 +188,16 @@ export function cuerpoDeTusEntrenos(entrenos = {}, ahora = Date.now(), { nacida 
     agujetas: a.musculos,
     bombeados: orden(b.grupos),
     doloridos: orden(a.grupos),
+    ultimoEntreno: todas.ultimo,
+    diasSin: todas.ultimo == null ? null : Math.max(0, (ahora - todas.ultimo) / DIA),
+    trofeo: lista(entrenos?.marcas).some((m) => m?.motivo === "sesion" && hora(m.fecha) != null && m.fecha <= ahora && fechaLocal(m.fecha) === hoy),
   };
+}
+
+// ¿Llevas días sin entrenar? Más de los que suele haber entre dos entrenos de tu rutina (el doble), y 3 como poco: con
+// la tuya (5 por semana), 3; con 3 por semana, 5; con 1, 14. Sin ningún entreno aún, no (no hay «vuelta»).
+export function llevasDiasSin(c) {
+  return c?.diasSin != null && c.diasSin >= Math.max(3, Math.ceil(14 / (c.porSemana || 1)));
 }
 
 // La forma que se le ve: la de fondo, más definida con el bombeo general del entreno.

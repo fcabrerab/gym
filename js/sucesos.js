@@ -4,7 +4,10 @@
 //   serie         { exerciseId, grupo, tipo, kg, reps, marca, primera, grupoSiguiente, descanso }  al apuntar una serie
 //                 (✓ Hecha). «grupo», el muscleGroup del ejercicio (o ""); «marca», si bate tu marca; «primera», si con
 //                 ella empieza la sesión; «grupoSiguiente», el del ejercicio que toca después; «descanso», sus segundos.
-//   fin-sesion    { series, marcas }                                    al terminar y guardar una sesión.
+//   fin-sesion    { series, plan, marcas }                              al terminar y guardar una sesión («plan»: las
+//                 series de su día; «marcas»: cuántas nuevas).
+//   preparar      { exerciseId, grupo }                                 al abrir un ejercicio sin sesión en marcha
+//                 (vas a empezar).
 //   mascota       {}                                                    al cambiar los ajustes de la mascota.
 // Un suceso nuevo: contarlo donde pasa, apuntarlo aquí y escucharlo donde haga falta.
 

@@ -688,13 +688,15 @@ function alternarEjercicio(id) {
   const antes = fotoEntreno();
   const anterior = est.abierto;
   est.abierto = anterior === id ? null : id;
-  const { enCurso } = datosDia();
+  const { datos, sesion, enCurso } = datosDia();
   if (enCurso && enCurso.actual !== est.abierto) {
     almacen.guardarSesion({ ...enCurso, actual: est.abierto });
   }
   repintarBloques([anterior, id]);
   if (est.abierto) desplazarA(est.abierto);
   animarEntreno(antes);
+  // Para quien escuche (la mascota, D-135): abres un ejercicio sin sesión en marcha, así que vas a empezar.
+  if (est.abierto && !sesionActiva(datos, sesion)) contar("preparar", { exerciseId: id, grupo: datos.ejercicios[id]?.muscleGroup || "" });
 }
 
 function usarSugerencia(id, kg) {
@@ -1068,7 +1070,7 @@ export function terminarYGuardar(sesion, { fin } = {}) {
   est.verDias = false;
   delete est.pospuestosSin[sesion.diaId];
   delete est.elegidos[sesion.diaId];
-  contar("fin-sesion", { series: S.totalSeries(sesion), marcas: resultado.marcasNuevas?.length || 0 });
+  contar("fin-sesion", { series: S.totalSeries(sesion), plan: resultado.guardada?.seriesPlan || 0, marcas: resultado.marcasNuevas?.length || 0 });
   return resultado;
 }
 

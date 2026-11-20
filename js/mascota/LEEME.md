@@ -17,7 +17,7 @@ Un monigote de luz que vive en la app (D-133 del proyecto). Nació como prototip
 | `caracter.js` | **Cómo es**: curiosidad, pereza y juego, de 0 a 1, sacados de su semilla. Cambian sus papeletas y cuánto tarda en entrarle sueño. |
 
 Fuera de esta carpeta:
-- `js/sucesos.js`: lo que pasa en la app, contado para quien lo quiera oír (`serie`, `fin-sesion`, `mascota`).
+- `js/sucesos.js`: lo que pasa en la app, contado para quien lo quiera oír (`serie`, `fin-sesion`, `preparar`, `mascota`).
 - `js/app.js`: la carga y le da lo que lee (`haySesion`, `descanso` y `entrenos`, una copia de tus entrenos para su cuerpo).
 - `js/ui/mascota.js`: su sección y su página en Ajustes (`#/ajustes/mascota`), con «Su forma».
 - `js/copias.js` y `js/ui/ajustes.js`: su ficha en «Exportar datos» y en la copia del PC, y al cargar una copia (con «Deshacer»).
@@ -31,6 +31,7 @@ Fuera de esta carpeta:
 - **Si la tocas**: se asusta, te saluda y se aparta, para no tapar lo que querías tocar.
 - **En el entreno** (en su pantalla y con una sesión en marcha): en la serie, asomada en el rincón. Al apuntar una serie, siente ese músculo (con una marca nueva, la celebra) y, si empieza un descanso, sale (D-135): recupera el aliento, se seca con la toalla y descansa contigo (se sienta, bebe, mira la cuenta atrás) lejos del ejercicio abierto. Su luz se recarga durante el descanso (de 0,35 a 1,3: «recargada»); a los 10 s calienta para el siguiente ejercicio y a los 3 se pone en guardia; al acabar, vuelve al rincón. Si eliges «Escondida», no sale en toda la sesión.
 - **Su cuerpo** (`forma.js`, mirado al nacer, al volver a la app, tras cada serie, al terminar y cada 5 min): de fondo, según tu constancia con tu rutina (lo de los últimos 10 días cuenta más; si lo dejas un mes, gordita; una semana de vuelta y se recupera). Cada serie hincha sus músculos y la marca un poco más (el bombeo general); se le pasa en 3 h. Al día siguiente, agujetas suaves: a veces se queja de esa zona (`REGIONES` de `gestos.js`) y, con las piernas cargadas, anda más despacio y salta menos.
+- **Los momentos de la sesión** (D-135): al abrir un ejercicio sin sesión en marcha (vas a empezar), calienta ese grupo (como mucho una vez cada 10 min: `calentarAntes()`). Al terminar, lo celebra según cómo fue (`finSesion()`: con una marca nueva, el récord y su trofeo; con todas las series, «¡Sesión completa!»; con el 60 % o más, «¡Bien hecho!»; con menos, «Algo es algo»; siempre contenta), pero cuando cierras el resumen, que la tapa (`vivir()` de `mascota.js`). Con una marca batida hoy entrenando, lleva su trofeo el resto del día (quieta, paseando y sentada) y a ratos presume de él. Si llevas 6 h sin abrir la app, al volver te saluda; y si además llevas días sin entrenar (`llevasDiasSin()` de `forma.js`), te espera dormida, se despierta y se alegra de verte (`bienvenida()`), sin reproches.
 - **«Reducir movimiento»** del móvil: siempre tranquila, sin pasear ni saltar.
 
 ## Cómo añadirle cosas
@@ -48,11 +49,11 @@ Cada archivo nuevo va en `ARCHIVOS` de `sw.js`, para que funcione sin conexión,
 
 ## Lo que viene (D-133, D-135)
 
-- Hechas: la fase 1 (viva en la app), el descanso como su momento y la fase 2 (su cuerpo, de tus entrenos; su ficha, en tus copias).
-- Después, por este orden: los momentos de la sesión (calienta al empezar, celebra al terminar según cómo fue, dormida si llevas días sin venir y contenta al verte), más accesorios, tocarla más, el ritmo del día, la fase 3 y los trajes que se ganan.
+- Hechas: la fase 1 (viva en la app), el descanso como su momento, la fase 2 (su cuerpo, de tus entrenos; su ficha, en tus copias) y los momentos de la sesión (calienta, celebra, su trofeo y la bienvenida).
+- Después, por este orden: más accesorios, tocarla más, el ritmo del día, la fase 3 y los trajes que se ganan.
 - **Fase 3, se adapta a ti**: tu ritmo (te espera los días que sueles ir), cómo la tratas (más confiada si la tocas) y lo que entrenas. Todo moviendo poco a poco sus rasgos, guardados en su ficha.
 
 ## Probarla
 
 - Pruebas: `tests/?solo=mascota`.
-- Mirarla en local: con `?canal=beta` sale de entrada. Con `?mascota-azar=n`, su azar es siempre el mismo. En local, `window.__gymMascota` dice qué hace y dónde está (y su cuerpo: `forma`, `fondo`, `general`, `musculos`, `dolorida` y `cuerpo`), y `avanzar(segundos)` la hace vivir de golpe.
+- Mirarla en local: con `?canal=beta` sale de entrada. Con `?mascota-azar=n`, su azar es siempre el mismo. En local, `window.__gymMascota` dice qué hace y dónde está (y su cuerpo: `forma`, `fondo`, `general`, `musculos`, `dolorida` y `cuerpo`; su `trofeo` y la `celebracionPendiente`), y `avanzar(segundos)` la hace vivir de golpe.

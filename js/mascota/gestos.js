@@ -11,6 +11,9 @@ const piernasAd = (m, r) => ({ musloAdI: m, rodillaAdI: r, musloAdD: m, rodillaA
 const REPOSO = { ...brazos(10, -6), ...brazosAd(0, 14) };
 const DE_PIE = { ...piernas(4, 0), ...piernasAd(0, -4) };
 const EN_JARRAS = { ...brazos(52, -100), ...brazosAd(0, 0) };
+// Cómo lleva el trofeo (D-135): en la mano derecha, delante, con el codo doblado (cerebro.js lo pone al estar quieta,
+// al pasear y sentada).
+export const CON_TROFEO = { brazoD: 12, codoD: 0, brazoAdD: 18, codoAdD: 92 };
 
 // Caras del boceto del globo: los ojos, dos puntitos; las cejas y la boca solo salen al expresar algo.
 export const CARAS = {
@@ -255,6 +258,88 @@ export const GESTOS = {
     musculos: [['*', 0.45, 1.45]],
     efectos: [[0.55, 'chispas'], [1.25, 'chispas'], [2.3, 'chispas']],
     destello: [0.35, 1.7],
+  },
+
+  // ——— Al terminar la sesión, según cómo fue (D-135; cerebro.js: finSesion()). Sin reproches: siempre contenta ———
+  sesionCompleta: { // todas las series: dos saltitos con los brazos arriba y saca músculo
+    nombre: '¡Sesión completa!', dur: 3.6,
+    cuadros: [
+      [0.22, { ...piernasAd(34, -60), inclinar: 12, ...brazosAd(-20, 16), estirar: -0.04 }],
+      [0.4, { ...piernasAd(0, -4), inclinar: -4, ...brazos(150, 14), ...brazosAd(0, 0), estirar: 0.05, alto: 18 }],
+      [0.6, { ...piernasAd(30, -54), inclinar: 8, alto: 0, estirar: -0.04 }],
+      [0.78, { ...piernasAd(0, -4), inclinar: -4, ...brazos(156, 10), estirar: 0.05, alto: 16 }],
+      [0.98, { ...piernasAd(26, -46), inclinar: 6, alto: 0, estirar: -0.03 }],
+      [1.3, { ...DE_PIE, inclinar: 0, estirar: 0, ...brazos(98, 108), ...brazosAd(0, 0), hombros: 2.2 }],
+      [1.6, { ...brazos(94, 124), hombros: 2.8 }],
+      [1.9, { ...brazos(98, 108), hombros: 2.2 }],
+      [2.2, { ...brazos(94, 124), hombros: 2.8 }],
+      [2.9, { ...REPOSO, hombros: 0 }],
+      [3.6, {}],
+    ],
+    cara: [[0.15, 'risa', 1.2], [1.35, 'orgullo', 1.6]],
+    musculos: [['*', 1.3, 2.5]],
+    efectos: [[0.42, 'chispas'], [0.8, 'chispas']],
+    destello: [0.4, 1.2],
+  },
+  bienHecho: { // casi todas: el puño arriba dos veces y asiente
+    nombre: '¡Bien hecho!', dur: 2.6, espejable: true,
+    cuadros: [
+      [0.3, { brazoD: 100, codoD: 80, codoAdD: 0, inclinar: -3 }],
+      [0.5, { brazoD: 90, codoD: 104 }],
+      [0.7, { brazoD: 100, codoD: 80 }],
+      [0.9, { brazoD: 90, codoD: 104 }],
+      [1.5, { brazoD: 10, codoD: -6, codoAdD: 14, inclinar: 0 }],
+      [1.75, { cabezaAd: 12 }],
+      [2.0, { cabezaAd: -2 }],
+      [2.2, { cabezaAd: 10 }],
+      [2.6, { cabezaAd: 0 }],
+    ],
+    cara: [[0.2, 'contenta', 2.2]],
+  },
+  algoEsAlgo: { // pocas: te mira, asiente y te saluda (algo es algo)
+    nombre: 'Algo es algo', dur: 2.4, espejable: true,
+    cuadros: [
+      [0.3, { cabeza: 6 }],
+      [0.55, { cabezaAd: 12 }],
+      [0.8, { cabezaAd: -2 }],
+      [1.05, { cabezaAd: 10 }],
+      [1.3, { cabezaAd: 0, brazoD: 120, codoD: 40, codoAdD: 0 }],
+      [1.9, {}],
+      [2.4, { brazoD: 10, codoD: -6, codoAdD: 14, cabeza: 0 }],
+    ],
+    vibrar: [[1.35, 1.9, { codoD: 20 }, 2.6]],
+    mirar: [[0.1, 2.2, 0, 0]],
+    cara: [[0.2, 'tierna', 2.0]],
+  },
+  presumir: { // con una marca nueva hoy: levanta su trofeo y lo luce (y luego lo lleva el resto del día)
+    nombre: 'Presume de trofeo', dur: 3.0,
+    cuadros: [
+      [0.5, { brazoD: 160, codoD: 18, codoAdD: 0, brazoAdD: 6, inclinar: -4, hombros: 0.6 }],
+      [2.2, {}],
+      [3.0, { ...CON_TROFEO, inclinar: 0, hombros: 0 }],
+    ],
+    vibrar: [[0.6, 2.1, { brazoD: 3 }, 1.6]],
+    cara: [[0.4, 'orgullo', 1.8]],
+    efectos: [[0.55, 'chispas']],
+    destello: [0.5, 1.6],
+    objeto: [[0, 3.0, 'trofeo', 'D']],
+  },
+
+  // ——— Al volver tras días sin entrenar (D-135): dormida, se despierta y se alegra de verte. Sin reproches ———
+  alegria: {
+    nombre: '¡Qué alegría verte!', dur: 2.4,
+    cuadros: [
+      [0.2, { ...piernasAd(30, -54), inclinar: 10, ...brazosAd(-20, 16), estirar: -0.03 }],
+      [0.4, { ...piernasAd(0, -4), inclinar: -6, ...brazos(150, 20), ...brazosAd(0, 0), estirar: 0.05, alto: 16 }],
+      [0.6, { ...piernasAd(28, -50), inclinar: 6, alto: 0, estirar: -0.03 }],
+      [0.8, { ...piernasAd(0, -4), inclinar: -6, ...brazos(154, 16), estirar: 0.05, alto: 14 }],
+      [1.0, { ...piernasAd(22, -40), inclinar: 4, alto: 0, estirar: -0.02 }],
+      [1.6, { ...DE_PIE, inclinar: 0, estirar: 0, ...REPOSO }],
+      [2.4, {}],
+    ],
+    mirar: [[0.1, 2.2, 0, 0]],
+    cara: [[0.1, 'risa', 1.8]],
+    efectos: [[0.4, 'chispas']],
   },
 
   // ——— Al tocarla ———
