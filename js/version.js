@@ -1,12 +1,22 @@
 // Versión de la app. La misma VERSION está en ../sw.js y en la meta «gym-beta-version» de ../index.html: cada
 // cambio en un archivo de la app obliga a subirla en los tres sitios (una prueba de tests/ comprueba que coinciden).
 // Hasta la 0.2.10 fue la beta, en beta/; desde la 1.0.0, es la app, en la dirección de siempre (D-121).
-export const VERSION = "1.2.0";
-export const FECHA_VERSION = "2026-11-19";
+export const VERSION = "1.3.0";
+export const FECHA_VERSION = "2026-11-20";
 
 // Novedades por versión, de la más nueva a la más vieja. Se enseñan en Ajustes → La app → Novedades y, la primera
 // vez, en «Qué tiene de nuevo».
 export const NOVEDADES = [
+  {
+    version: "1.3.0",
+    fecha: "2026-11-20",
+    cambios: [
+      "Llega la mascota: un monigote de luz que vive en la app. Pasea por encima de las tarjetas, donde no tapa nada; se sienta, se esconde y se asoma, y si no pasa nada, se duerme. Tócala y verás.",
+      "Siente cada serie: al apuntarla, ese músculo se le enciende un rato. Y celebra tus marcas.",
+      "En el entreno se queda quieta, asomada abajo a la derecha, para no estorbar (o escondida, si lo prefieres).",
+      "Tiene su página en Ajustes → Mascota: encenderla o apagarla, su nombre, su tamaño, el color de su luz y qué hace en el entreno. Su carácter le viene de nacimiento. Vive solo en este móvil, en una ficha suya: nunca cambia tus datos.",
+    ],
+  },
   {
     version: "1.2.0",
     fecha: "2026-11-19",

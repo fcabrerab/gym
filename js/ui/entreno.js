@@ -19,6 +19,7 @@ import * as almacen from "../almacen.js";
 import * as borrador from "../borrador.js";
 import * as S from "../sesion.js";
 import * as descanso from "../descanso.js";
+import { contar } from "../sucesos.js";
 import * as copiaPc from "../copia-pc.js";
 import { estimarTiempo, tiempoRestante, diaPorId, agruparEjercicios, DESCANSO_SUPERSET_DEFECTO, LIMITES } from "../modelo.js";
 import { necesitaCopia, guardarCopiaAuto } from "../copias.js";
@@ -897,6 +898,8 @@ async function serieHecha(id) {
     alPulsar: () => deshacerSerie(deshacer),
   });
   if (marcaNueva) anunciar(`Nueva marca en ${x.name}: ${formatoKg(valores.kg)}`);
+  // Para quien escuche (la mascota, D-133): la serie, con el grupo del ejercicio y si es marca nueva.
+  contar("serie", { exerciseId: id, grupo: x.muscleGroup || "", tipo: x.tipo || "peso", kg: valores.kg, reps: valores.reps, marca: marcaNueva, primera: nueva });
 }
 
 // Deshace un ✓ quitando justo esa serie (no vuelve a una foto de antes): si la sesión ya se terminó o es otra, no
@@ -1064,6 +1067,7 @@ export function terminarYGuardar(sesion, { fin } = {}) {
   est.verDias = false;
   delete est.pospuestosSin[sesion.diaId];
   delete est.elegidos[sesion.diaId];
+  contar("fin-sesion", { series: S.totalSeries(sesion), marcas: resultado.marcasNuevas?.length || 0 });
   return resultado;
 }
 

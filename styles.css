@@ -861,3 +861,16 @@ body.con-borrador:not(.con-descanso):not(.con-hoja) .avisos { bottom: calc(var(-
   display: inline-flex; align-items: center; flex: none; min-height: 36px; padding: 0 12px; border-radius: 999px;
   background: var(--aviso-fondo); color: var(--aviso-texto); font-size: 13px; font-weight: 800; letter-spacing: .06em; text-decoration: none;
 }
+
+/* La mascota (D-133): su lienzo, pequeño, va con ella por encima de la app (por debajo de las hojas, los avisos y la
+   capa de fin de descanso) y no recibe toques: los mira js/mascota/escenario.js. */
+.mascota-capa { position: fixed; left: 0; top: 0; z-index: 40; pointer-events: none; will-change: transform; }
+.mascota-capa[hidden] { display: none; }
+/* Su página en Ajustes: el color de cada luz junto a su nombre */
+.opcion-textos { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.muestra-luz { flex: none; width: 18px; height: 18px; border-radius: 50%; }
+.luz-verde { background: #22c55e; box-shadow: 0 0 6px #22c55e; }
+.luz-cian { background: #22d3ee; box-shadow: 0 0 6px #22d3ee; }
+.luz-rosa { background: #f472b6; box-shadow: 0 0 6px #f472b6; }
+.luz-ambar { background: #fbbf24; box-shadow: 0 0 6px #fbbf24; }
+.luz-violeta { background: #a78bfa; box-shadow: 0 0 6px #a78bfa; }

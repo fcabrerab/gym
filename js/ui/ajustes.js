@@ -8,6 +8,7 @@ import { avisar, avisarDeshacer, cerrarAviso, confirmar, abrirHoja } from "./avi
 import { ctx } from "./contexto.js";
 import { boton, control, ponerErrorControl, interruptor, seccion, ayuda } from "./piezas.js";
 import { terminarYGuardar } from "./entreno.js";
+import { seccionMascota, alAccionMascota, alCampoMascota } from "./mascota.js";
 import * as almacen from "../almacen.js";
 import * as descanso from "../descanso.js";
 import * as avisosPc from "../avisos-pc.js";
@@ -214,6 +215,7 @@ export function pintarAjustes(contenedor) {
   vaciar(contenedor).append(h("div", { class: "pantalla-ajustes" },
     h("h1", { class: "titulo-pantalla" }, "Ajustes"),
     seccion("Aspecto", h("p", { class: "campo-rotulo" }, "Tema"), temas),
+    seccionMascota(),
     seccion("Descanso",
       interruptor({ ajuste: "timerAlert", rotulo: "Aviso a pantalla completa", marcado: a.timerAlert }),
       interruptor({ ajuste: "timerSound", rotulo: "Sonido", marcado: a.timerSound }),
@@ -312,6 +314,11 @@ function cambiarAjuste(clave, valor) {
 
 export function alCampoAjustes(ev) {
   const el = ev.target;
+  // La mascota (D-133) guarda lo suyo en su ficha, no en los ajustes de los datos.
+  if (el?.dataset?.ajuste?.startsWith("mascota-") || el?.dataset?.campo?.startsWith("mascota-")) {
+    alCampoMascota(el, ev);
+    return;
+  }
   // «Copia en el PC» se guarda solo en este móvil (copia-pc.js), no en los ajustes de los datos.
   if (el?.dataset?.ajuste === "copia-pc") {
     if (ev.type === "change") {
@@ -366,6 +373,7 @@ export function pedirPermisoNotificaciones() {
 }
 
 export function alAccionAjustes(accion, el) {
+  if (accion === "ir-mascota" || accion.startsWith("mascota-")) return alAccionMascota(accion, el);
   const pantalla = el.closest("#pantalla") || document;
   switch (accion) {
     case "tema": {

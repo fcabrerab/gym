@@ -32,6 +32,8 @@ import {
 } from "./ui/ajustes.js";
 import * as arranque from "./ui/arranque.js";
 import { montarBrillo } from "./ui/brillo.js";
+import { pintarPaginaMascota } from "./ui/mascota.js";
+import * as memoriaMascota from "./mascota/memoria.js";
 
 const raiz = document.documentElement;
 // Para js/vigia.js: los módulos han llegado (si no llegan, el vigía lo dice en vez de dejar «Cargando…»).
@@ -89,6 +91,7 @@ const RUTAS = [
   [/^#\/rutina$/, "rutina", "rutina"],
   [/^#\/rutina\/dia\/(.+)$/, "dia", "rutina"],
   [/^#\/ajustes$/, "ajustes", "ajustes"],
+  [/^#\/ajustes\/mascota$/, "mascota", "ajustes"],
 ];
 
 function leerRuta(hash) {
@@ -195,7 +198,10 @@ function pintarRuta({ arriba = false } = {}) {
     switch (ruta.tab) {
       case "historial": pintarHistorial(pantalla, ruta); break;
       case "rutina": pintarRutina(pantalla, ruta); break;
-      case "ajustes": pintarAjustes(pantalla); break;
+      case "ajustes":
+        if (ruta.nombre === "mascota") pintarPaginaMascota(pantalla);
+        else pintarAjustes(pantalla);
+        break;
       default: desplazado = pintarEntreno(pantalla, { desplazar: arriba || primera });
     }
   } catch (err) {
@@ -386,9 +392,39 @@ function marcarBeta() {
   }, "BETA"));
 }
 
+// Solo cuenta una sesión que sigue viva: no abandonada y de un día que existe.
+function haySesionViva() {
+  const s = almacen.leerSesion();
+  const datos = almacen.datos();
+  return Boolean(s) && !abandonada(s, ahora()) && Boolean(datos && diaPorId(datos, s.diaId));
+}
+
+// La mascota (D-133): aparte, cargada cuando la app ya ha arrancado y solo si está encendida (en la beta, de entrada).
+// Si algo suyo falla, la app sigue igual (y se apunta). Se llama otra vez al cambiar sus ajustes: entonces llega, se
+// pone al día o se va.
+let mascota = null;
+let cargandoMascota = false;
+function arrancarMascota() {
+  if (modo !== "app") return;
+  if (mascota) {
+    mascota.aplicar();
+    return;
+  }
+  if (cargandoMascota || !memoriaMascota.encendida(memoriaMascota.leer(), { beta: esBeta() })) return;
+  cargandoMascota = true;
+  import("./mascota/mascota.js")
+    .then((m) => {
+      mascota = m;
+      m.iniciar({ haySesion: haySesionViva });
+    })
+    .catch((err) => errores.push({ tipo: "mascota", mensaje: String(err?.message || err), t: Date.now() }))
+    .finally(() => { cargandoMascota = false; });
+}
+
 function montar() {
   marcarBeta();
   ctx.irA = irA;
+  ctx.mascota = arrancarMascota;
   ctx.repintar = repintar;
   ctx.aplicarTema = aplicarTema;
   ctx.pantalla = () => rutaActual?.tab ?? "entreno";
@@ -397,12 +433,7 @@ function montar() {
   montarAvisos(document.getElementById("avisos"), document.getElementById("anuncios"));
   descanso.configurarDescanso({
     ajustes: () => almacen.datos()?.ajustes || {},
-    // Solo cuenta una sesión que sigue viva: no abandonada y de un día que existe.
-    haySesion: () => {
-      const s = almacen.leerSesion();
-      const datos = almacen.datos();
-      return Boolean(s) && !abandonada(s, ahora()) && Boolean(datos && diaPorId(datos, s.diaId));
-    },
+    haySesion: haySesionViva,
     anunciar,
     mostrarCapa,
     // Un aviso que puede esperar (el del sonido de fondo) no tapa el «Deshacer» de la serie recién apuntada: sale
@@ -462,6 +493,7 @@ function iniciarApp(avisos = []) {
   history.replaceState({ nivel: 0 }, "", "#/entreno");
   pintarRuta();
   listo("1");
+  arrancarMascota();
   if (avisos.length) avisar({ texto: avisos.join(" ") });
   avisoVersion();
   registrarSW();

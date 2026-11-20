@@ -1,0 +1,727 @@
+// Cerebro de la mascota: qué hace en cada momento y cómo pasa de una cosa a otra.
+// Vive sola sobre las superficies que le dan (el borde de arriba de cada tarjeta) y reacciona a lo que pasa:
+// una serie acabada, un récord, un toque. No dibuja: cada paso devuelve un «fotograma» que pinta el traje.
+// Nunca toca la app: solo mira las superficies.
+
+// En la app (D-133), lo del prototipo (bocetos/mascota/v3/) y, además: su carácter (cuántas papeletas tiene cada cosa
+// en el sorteo de qué hacer: «pesos», de caracter.js), el modo tranquilo (en el entreno: sin pasear ni saltar), saltos
+// entre tramos libres de las tarjetas (no solo de borde a borde), un techo para la cabeza y qué hacer si su superficie
+// se va de la pantalla. Qué hace cada pieza y cómo añadir algo, en LEEME.md.
+import { POSE_BASE, MEDIDAS, mezclar, normalizar, cinematica, lerp, limitar, suave, tramo } from './esqueleto.js';
+import { GESTOS, GRUPOS, CARAS, MUSCULOS } from './gestos.js';
+
+const MARGEN = 14;        // px que deja hasta el borde de una tarjeta
+const VELOCIDAD = 34;     // px por segundo al pasear
+const TRANSICION = 0.28;  // s para pasar de una acción a otra
+const SUENO_TRAS = 50;    // s sin que le pase nada hasta tener sueño del todo (por defecto: la app le da el suyo)
+const BOMBEO_DURA = 150;  // s que tarda en irse el bombeo (por defecto: en la app, unas horas)
+
+// Las papeletas de cada cosa en el sorteo de qué hacer (elegir()); su carácter las multiplica (caracter.js).
+export const PESOS = {
+  quieto: 3, pasear: 3.2, saltar: 1.8, sentarse: 1, asomarse: 0.9, desperezarse: 0.45, rascarse: 0.45, mirarte: 0.7, dormir: 3,
+};
+// En el modo tranquilo (en el entreno), solo estas: ni pasea ni salta.
+export const TRANQUILAS = new Set(['quieto', 'sentarse', 'asomarse', 'desperezarse', 'rascarse', 'mirarte', 'dormir']);
+const PASO = 22;          // grados que abre cada pierna al andar
+
+// La cara se enciende como un tubo de neón (parpadea y se queda) y se apaga igual.
+const ENCENDER = [[0, 0], [0.04, 0.85], [0.08, 0.2], [0.13, 0.95], [0.18, 0.5], [0.24, 1]];
+const APAGAR = [[0, 1], [0.1, 0.45], [0.15, 0.8], [0.3, 0]];
+function tabla(puntos, x) {
+  for (let i = 1; i < puntos.length; i++) {
+    const [x1, y1] = puntos[i];
+    if (x <= x1) {
+      const [x0, y0] = puntos[i - 1];
+      return lerp(y0, y1, (x - x0) / (x1 - x0));
+    }
+  }
+  return puntos[puntos.length - 1][1];
+}
+function encendido(e, dur) {
+  const fin = dur - 0.3;
+  if (e < 0.24) return tabla(ENCENDER, e);
+  return e < fin ? 1 : tabla(APAGAR, e - fin);
+}
+function distSeg(q, a, b) {
+  const dx = b[0] - a[0], dy = b[1] - a[1];
+  const t = limitar(((q[0] - a[0]) * dx + (q[1] - a[1]) * dy) / (dx * dx + dy * dy || 1), 0, 1);
+  return Math.hypot(q[0] - a[0] - dx * t, q[1] - a[1] - dy * t);
+}
+
+/**
+ * superficies(): [{ id, x1, x2, y, c1?, c2? }] en píxeles del escenario: el tramo libre (de x1 a x2) del borde de
+ *   arriba de una tarjeta (y) y los lados de esa tarjeta (c1 y c2; si faltan, los del tramo).
+ * alCambiar(texto): lo que hace ahora, para enseñarlo.
+ * alReubicar(): su superficie ya no está (se fue de la pantalla o cambió) y aparece en otra.
+ * techo(): hasta dónde puede subir la cabeza al saltar, en px del escenario.
+ */
+export function crearMascota({ superficies, escala = 0.55, azar = Math.random, alCambiar = () => {}, autonoma = true,
+  suenoTras = SUENO_TRAS, bombeoDura = BOMBEO_DURA, techo = () => 0, alReubicar = () => {} } = {}) {
+  const entre = (a, b) => a + (b - a) * azar();
+  const unoDe = (lista) => lista[Math.floor(azar() * lista.length)];
+
+  const m = {
+    t: 0, x: 0, sup: null, ultY: null, perdida: false, forma: 0.25, escala,
+    pesos: {}, tranquila: false, suenoTras, bombeoDura,
+    sueno: 0, accion: null, cola: [], previa: null, avisado: '',
+    musc: Object.fromEntries(Object.keys(MUSCULOS).map((k) => [k, { bombeo: 0, contr: 0 }])),
+    cara: null,
+    mirada: { x: 0, y: 0, ox: 0, oy: 0, hasta: 0 },
+    ladeo: 0,
+    parpadeo: { proximo: 1.2, t0: -9, doble: 0 },
+    efectos: [],
+    trans: null,
+    ultimo: null,
+    destello: 0,
+    toques: [],
+  };
+
+  // ——— Dónde está ———
+  const lista = () => superficies() || [];
+  function sup() {
+    const l = lista();
+    let s = l.find((x) => x.id === m.sup);
+    if (!s && l.length) {
+      // La suya ya no está: la más cercana a donde estaba (la primera vez, la de más arriba), y en el mismo sitio si
+      // cabe. Lo que hacía y lo que tenía pensado eran para la otra: paso() lo deja.
+      const y = m.ultY;
+      s = y == null ? [...l].sort((a, b) => a.y - b.y)[0] : l.reduce((a, b) => (Math.abs(b.y - y) < Math.abs(a.y - y) ? b : a));
+      const antes = m.sup;
+      m.sup = s.id;
+      m.x = s.x2 - s.x1 < 2 * MARGEN ? (s.x1 + s.x2) / 2 : limitar(m.x || (s.x1 + s.x2) / 2, s.x1 + MARGEN, s.x2 - MARGEN);
+      if (antes != null) {
+        m.perdida = true;
+        alReubicar();
+      }
+    }
+    if (s) m.ultY = s.y;
+    return s;
+  }
+  // La superficie que hay debajo de un punto (para la sombra)
+  function debajo(x, y) {
+    let mejor = null;
+    for (const s of lista()) if (x >= s.x1 && x <= s.x2 && s.y >= y && (!mejor || s.y < mejor.y)) mejor = s;
+    return mejor;
+  }
+
+  // ——— Mirar, caras, efectos, músculos ———
+  function mirarCara(ox, oy, dur) {
+    m.mirada.ox = ox;
+    m.mirada.oy = oy;
+    m.mirada.hasta = m.t + dur;
+  }
+  function mirarAlAzar() {
+    const [ox, oy] = unoDe([[0, 0], [0, 0], [-4, 0.5], [4, 0.5], [-3.5, 2.6], [3.5, 2.6], [0, 3], [-3, -2.2], [3, -2.2]]);
+    mirarCara(ox, oy, entre(0.8, 2.6));
+  }
+  function mirarPunto(px, py, dur = 1.8) {
+    const f = m.ultimo;
+    if (!f) return;
+    const cx = f.raiz[0] + f.cin.p.cabeza[0] * m.escala, cy = f.raiz[1] + f.cin.p.cabeza[1] * m.escala;
+    const dx = px - cx, dy = py - cy, d = Math.hypot(dx, dy) || 1, k = Math.min(1, d / 50);
+    mirarCara((4.3 * k * dx) / d, (3.2 * k * dy) / d, dur);
+  }
+  const ponerCara = (nombre, dur) => { m.cara = { nombre, t0: m.t, dur }; };
+  const efecto = (tipo) => m.efectos.push({ tipo, t0: m.t, dur: { z: 2.4, chispas: 1.1 }[tipo] || 1, giro: entre(0, 60) });
+  function bombear(claves) {
+    for (const k of claves) m.musc[k].bombeo = Math.min(1, m.musc[k].bombeo + 0.4);
+  }
+
+  // El cuerpo según la forma de fondo (gordito → definido) y cómo está cada músculo.
+  function cuerpoDe(resp = 0) {
+    const def = tramo(m.forma, 0.5, 1);      // definido: de la mitad para arriba
+    const gordo = tramo(m.forma, 0.45, 0.05); // gordito: de la mitad para abajo
+    const bultos = {}, ver = {}, luz = {};
+    for (const k in MUSCULOS) {
+      const [a, b, c] = MUSCULOS[k], s = m.musc[k];
+      const d = k.startsWith('abs') ? def * def : def;
+      bultos[k] = a * d + b * s.bombeo + c * s.contr;
+      ver[k] = Math.max(d, s.bombeo * 0.85, s.contr);
+      luz[k] = s.contr;
+    }
+    for (const l of ['I', 'D']) bultos['deltoides' + l] = Math.max(bultos['hombros' + l], bultos['hombrosPost' + l]);
+    return { anchoHombros: 8.5 + 3.5 * def, vientre: gordo * (12 + 0.9 * resp), gordo, bultos, ver, luz };
+  }
+
+  // ——— Las acciones ———
+  // Cada una: { nombre, actualizar(dt) → salida, hecha, … }. La salida: la pose, en qué se apoya
+  // («pies», «cadera» o «tumbado») y el punto del mundo donde se apoya (x, y), más lo que haga falta.
+
+  function quieto(dur = entre(2, 5)) {
+    const fase = entre(0, 6);
+    return {
+      nombre: 'Mira a su alrededor', t: 0, calma: true,
+      actualizar(dt) {
+        this.t += dt;
+        if (m.t > m.mirada.hasta) mirarAlAzar();
+        const s = Math.sin(0.9 * m.t + fase);
+        return { pose: { ...POSE_BASE, lumbar: 1.8 * s, musloI: 4 + 1.2 * s, musloD: 4 - 1.2 * s }, apoyo: 'pies', x: m.x, y: sup().y };
+      },
+      get hecha() { return this.t >= dur; },
+    };
+  }
+
+  // Pasea de perfil, mirando hacia donde va, con la cabeza un poco girada hacia nosotros.
+  function caminar(destino) {
+    let v = 0, fase = 0;
+    const zancada = () => 4 * (MEDIDAS.muslo + MEDIDAS.pierna) * Math.sin((PASO * Math.PI) / 180) * m.escala;
+    return {
+      nombre: 'Pasea', t: 0, transicion: 0.35,
+      alEmpezar() {
+        const s = sup();
+        destino = limitar(destino, s.x1 + MARGEN, s.x2 - MARGEN);
+      },
+      actualizar(dt) {
+        this.t += dt;
+        const s = sup(); // si su tramo libre ha encogido (la app cambió), no se sale de él
+        destino = limitar(destino, s.x1 + MARGEN, s.x2 - MARGEN);
+        const falta = destino - m.x, dir = Math.sign(falta) || 1;
+        v = lerp(v, Math.min(VELOCIDAD, Math.abs(falta) * 3 + 5), Math.min(1, dt * 6));
+        m.x += dir * Math.min(Math.abs(falta), v * dt);
+        fase += (dt * 2 * Math.PI * v) / zancada();
+        const ritmo = Math.min(1, v / VELOCIDAD), sn = Math.sin(fase), cs = Math.cos(fase);
+        mirarCara(3 * dir, 0.6, 0.2);
+        return {
+          pose: {
+            ...POSE_BASE, orientacion: 90 * dir, cabezaGiro: -38 * dir, inclinar: 5 * ritmo,
+            musloI: 2, musloD: 2,
+            musloAdI: PASO * sn * ritmo, rodillaAdI: -(5 + 50 * Math.max(0, cs) * ritmo),
+            musloAdD: -PASO * sn * ritmo, rodillaAdD: -(5 + 50 * Math.max(0, -cs) * ritmo),
+            brazoI: 6, brazoD: 6, brazoAdI: -24 * sn * ritmo, brazoAdD: 24 * sn * ritmo, codoAdI: 28, codoAdD: 28,
+            estirar: 0.012 * Math.abs(cs) * ritmo,
+          },
+          apoyo: 'pies', x: m.x, y: sup().y,
+        };
+      },
+      get hecha() { return Math.abs(destino - m.x) < 0.5; },
+    };
+  }
+
+  // Salta a la superficie de arriba o a la de abajo (o a otro tramo libre de la misma tarjeta): desde donde está, o un
+  // poco más allá, hasta un punto de ese tramo. En la app los tramos libres no siempre llegan al borde de la tarjeta,
+  // así que salta por delante de ellas.
+  function planearSalto() {
+    const s0 = sup();
+    if (!s0) return null;
+    const orden = [...lista()].sort((a, b) => a.y - b.y || a.x1 - b.x1);
+    const i = orden.findIndex((s) => s.id === s0.id);
+    const opciones = [];
+    for (const s1 of [orden[i - 1], orden[i + 1]].filter(Boolean)) {
+      if (s1.x2 - s1.x1 < 2 * MARGEN) continue;
+      if (Math.abs(s1.y - s0.y) < 24 && s1.x1 <= s0.x2 && s1.x2 >= s0.x1) continue; // a la misma altura y pegadas: anda
+      const x1 = limitar(m.x + entre(-70, 70), s1.x1 + MARGEN, s1.x2 - MARGEN);
+      const x0 = limitar(lerp(m.x, x1, 0.35), s0.x1 + MARGEN, s0.x2 - MARGEN);
+      if (Math.abs(x1 - x0) > 300) continue;
+      opciones.push({ x0, s1, x1 });
+    }
+    return opciones.length ? unoDe(opciones) : null;
+  }
+  function saltar(destino, x1) {
+    const PREP = 0.26, ATERRIZA = 0.32;
+    let x0, y0, y1, cima, vuelo, llego = false;
+    return {
+      nombre: 'Salta a otra tarjeta', t: 0, interrumpible: false,
+      alEmpezar() {
+        x0 = m.x;
+        y0 = sup().y;
+        y1 = destino.y;
+        this.nombre = y1 < y0 ? 'Salta a la tarjeta de arriba' : 'Baja de un salto';
+        cima = Math.max(Math.min(y0, y1) - (y1 < y0 ? 26 : 16), techo() + 135 * m.escala); // que no se le salga la cabeza
+        vuelo = 0.42 + Math.min(0.55, Math.abs(y0 - y1) / 700 + Math.abs(x1 - x0) / 900);
+      },
+      actualizar(dt) {
+        const t = (this.t += dt);
+        const dir = Math.sign(x1 - x0) || 1;
+        const lado = { orientacion: 80 * dir, cabezaGiro: -30 * dir };
+        if (t < PREP) {
+          const u = suave(t / PREP);
+          mirarCara(3 * dir, y1 < y0 ? -2.6 : 2.6, 0.3);
+          return {
+            pose: { ...POSE_BASE, ...lado, inclinar: 22 * u, musloAdI: 50 * u, rodillaAdI: -85 * u,
+              musloAdD: 50 * u, rodillaAdD: -85 * u, brazoAdI: -40 * u, brazoAdD: -40 * u, estirar: -0.04 * u },
+            apoyo: 'pies', x: x0, y: y0,
+          };
+        }
+        if (t < PREP + vuelo) {
+          const u = (t - PREP) / vuelo, r = Math.sin(Math.PI * u);
+          const y = lerp(y0, y1, u) - 4 * ((y0 + y1) / 2 - cima) * u * (1 - u);
+          return {
+            pose: { ...POSE_BASE, ...lado, inclinar: 8 * r, musloAdI: 60 * r, rodillaAdI: -70 * r,
+              musloAdD: -28 * r, rodillaAdD: -50 * r, brazoAdI: 150 * r, brazoAdD: 120 * r, codoAdI: 10, codoAdD: 10,
+              estirar: 0.06 * (1 - r) },
+            apoyo: 'pies', x: lerp(x0, x1, u), y,
+          };
+        }
+        if (!llego) {
+          llego = true;
+          m.sup = destino.id;
+          m.x = x1;
+        }
+        const k = Math.sin(Math.PI * Math.min(1, (t - PREP - vuelo) / ATERRIZA));
+        return {
+          pose: { ...POSE_BASE, ...lado, inclinar: 18 * k, musloAdI: 45 * k, rodillaAdI: -78 * k,
+            musloAdD: 45 * k, rodillaAdD: -78 * k, brazoAdI: 30 * k, brazoAdD: 30 * k, estirar: -0.05 * k },
+          apoyo: 'pies', x: x1, y: y1,
+        };
+      },
+      get hecha() { return vuelo !== undefined && this.t >= PREP + vuelo + ATERRIZA; },
+    };
+  }
+
+  // Sentada en el borde de la tarjeta: los muslos hacia delante y las piernas colgando por delante.
+  function sentarse(dur = entre(6, 11)) {
+    const fase = entre(0, 6), lado = azar() < 0.5 ? -1 : 1;
+    return {
+      nombre: 'Se sienta en el borde', t: 0, transicion: 0.45, calma: true,
+      actualizar(dt) {
+        this.t += dt;
+        const modorra = m.sueno > 0.55 ? tramo(this.t, Math.min(dur * 0.35, 6), Math.min(dur, 12)) : 0;
+        const col = Math.sin(this.t * 2.2 + fase) * (1 - modorra);
+        if (modorra < 0.3 && m.t > m.mirada.hasta) mirarAlAzar();
+        if (modorra >= 0.3) mirarCara(0, 2.4, 0.3);
+        if (modorra > 0.5) this.nombre = 'Le entra sueño';
+        return {
+          pose: {
+            ...POSE_BASE, orientacion: 18 * lado, cabezaGiro: -10 * lado, inclinar: -4 + 8 * modorra,
+            musloI: 7, musloD: 7, musloAdI: 84, musloAdD: 84, rodillaAdI: -84 + 16 * col, rodillaAdD: -84 - 16 * col,
+            brazoI: 26, brazoD: 26, brazoAdI: 6, brazoAdD: 6, codoAdI: 6, codoAdD: 6, hombros: 0.6 - modorra,
+            cabeza: 8 * modorra * (0.55 + 0.45 * Math.sin(this.t * 1.4)), cabezaAd: 22 * modorra,
+          },
+          apoyo: 'cadera', x: m.x, y: sup().y,
+          ojos: modorra > 0.6 ? Math.max(0.12, 1 - (modorra - 0.6) * 2.2) : 1,
+        };
+      },
+      get hecha() { return this.t >= dur; },
+    };
+  }
+
+  // Duerme tumbada boca arriba, con las rodillas dobladas y las manos detrás de la cabeza.
+  function dormir(dur = entre(12, 22)) {
+    const espejo = azar() < 0.5;
+    let proxZ = 1;
+    return {
+      nombre: 'Duerme', t: 0, transicion: 0.9, dormida: true, calma: true,
+      alEmpezar() {
+        m.cara = null;
+        const s = sup(), cabeza = 70 * m.escala, pies = 55 * m.escala;
+        m.x = espejo ? limitar(m.x, s.x1 + pies, s.x2 - cabeza) : limitar(m.x, s.x1 + cabeza, s.x2 - pies);
+      },
+      actualizar(dt) {
+        this.t += dt;
+        if (this.t > proxZ) {
+          efecto('z');
+          proxZ = this.t + 1.7;
+        }
+        const r = Math.sin((this.t * 2 * Math.PI) / 4.6);
+        return {
+          pose: {
+            ...POSE_BASE, orientacion: 90, giro: -90, cabezaGiro: -40, cabezaAd: -8, inclinar: -4, hombros: 0.6 * r,
+            musloAdI: 58, rodillaAdI: -108, musloAdD: 76, rodillaAdD: -62, musloD: -4,
+            brazoI: 16, brazoD: 16, brazoAdI: 166, brazoAdD: 166, codoAdI: 100, codoAdD: 100,
+          },
+          apoyo: 'tumbado', x: m.x, y: sup().y, espejo, cara: 'dormida', respira: 4.6,
+        };
+      },
+      get hecha() { return this.t >= dur; },
+      alTerminar() {
+        m.sueno = 0.12;
+        m.cola.unshift(gesto(GESTOS.desperezarse));
+      },
+    };
+  }
+
+  // Se esconde detrás de su tarjeta, se asoma por el borde, mira a un lado y a otro, y sale de un salto.
+  function asomarse() {
+    let ojos, todo;
+    return {
+      nombre: 'Se esconde', t: 0,
+      alEmpezar() {
+        const cin = cinematica(POSE_BASE, cuerpoDe(0));
+        ojos = (cin.pies - (cin.p.cabeza[1] - 1)) * m.escala;
+        todo = (cin.pies - (cin.p.cabeza[1] - MEDIDAS.cabeza)) * m.escala + 6;
+      },
+      actualizar(dt) {
+        const t = (this.t += dt);
+        const asomado = ojos - 7 * m.escala; // los ojos, por encima del borde; las manos, agarradas a él
+        let hundir = 0, pose = POSE_BASE, dx = 0;
+        if (t < 0.3) {
+          const u = suave(t / 0.3);
+          pose = { ...POSE_BASE, musloAdI: 40 * u, rodillaAdI: -70 * u, musloAdD: 40 * u, rodillaAdD: -70 * u, inclinar: 12 * u };
+        } else if (t < 0.62) {
+          hundir = todo * suave((t - 0.3) / 0.32);
+        } else if (t < 1.6) {
+          hundir = todo;
+        } else if (t < 4.0) {
+          hundir = lerp(todo, asomado, suave((t - 1.6) / 0.6));
+          pose = { ...POSE_BASE, brazoI: 110, codoI: 105, brazoD: 110, codoD: 105, codoAdI: 0, codoAdD: 0 };
+          if (t > 1.8 && this.nombre !== 'Se asoma') {
+            this.nombre = 'Se asoma';
+            ponerCara('curiosa', 2.1);
+          }
+          const mira = t < 2.5 ? -1 : t < 3.3 ? 1 : 0;
+          mirarCara(4.3 * mira, mira ? 0.6 : 0, 0.2);
+          dx = 2 * mira * tramo(t, 2.2, 2.5);
+        } else {
+          const u = Math.min(1, (t - 4.0) / 0.42);
+          hundir = asomado * (1 - u) - (asomado / 2 + 14) * 4 * u * (1 - u);
+          const r = Math.sin(Math.PI * u);
+          pose = { ...POSE_BASE, brazoI: 10 + 120 * r, brazoD: 10 + 120 * r, codoI: 10, codoD: 10,
+            musloAdI: 30 * r, rodillaAdI: -50 * r, musloAdD: 30 * r, rodillaAdD: -50 * r };
+        }
+        const s = sup(); // la de ahora (si se desplaza la pantalla, va con ella)
+        return {
+          pose, apoyo: 'pies', x: m.x + dx, y: s.y + hundir,
+          ocultar: { x1: s.c1 ?? s.x1, x2: s.c2 ?? s.x2, y: s.y }, sombra: hundir < 3,
+        };
+      },
+      get hecha() { return this.t >= 4.42; },
+    };
+  }
+
+  // Asomada por el borde de la barra de abajo (en el rincón): solo los ojos y las manos por encima, así que casi no tapa
+  // nada. Mira a un lado y a otro, sube y baja un poco y, si le entra sueño, se le cierran los ojos y se hunde.
+  function vigilar(dur = entre(10, 22)) {
+    const fase = entre(0, 6);
+    let ojos = 0;
+    return {
+      nombre: 'Se asoma desde abajo', t: 0, calma: true, transicion: 0.5,
+      alEmpezar() {
+        const cin = cinematica(POSE_BASE, cuerpoDe(0));
+        ojos = (cin.pies - (cin.p.cabeza[1] - 1)) * m.escala;
+      },
+      actualizar(dt) {
+        const t = (this.t += dt);
+        const modorra = tramo(m.sueno, 0.6, 1);
+        if (modorra < 0.5 && m.t > m.mirada.hasta) mirarAlAzar();
+        if (modorra >= 0.5) mirarCara(0, 1.5, 0.3);
+        const s = sup();
+        const hundir = ojos - 7 * m.escala + 1.5 * Math.sin(t * 1.1 + fase) * (1 - modorra) + 4 * modorra * m.escala;
+        return {
+          pose: { ...POSE_BASE, brazoI: 110, codoI: 105, brazoD: 110, codoD: 105, codoAdI: 0, codoAdD: 0 },
+          apoyo: 'pies', x: m.x, y: s.y + hundir,
+          ocultar: { x1: s.c1 ?? s.x1, x2: s.c2 ?? s.x2, y: s.y }, sombra: false,
+          ojos: modorra > 0.5 ? Math.max(0.1, 1 - (modorra - 0.5) * 1.8) : undefined,
+        };
+      },
+      get hecha() { return this.t >= dur; },
+    };
+  }
+
+  // Un gesto de gestos.js, con su cara, sus músculos y sus efectos.
+  const preparados = new Map();
+  function cuadrosDe(def) {
+    if (!preparados.has(def)) {
+      let anterior = { ...POSE_BASE };
+      const cuadros = [[0, anterior]];
+      for (const [t, cambios] of def.cuadros) {
+        anterior = { ...anterior, ...cambios };
+        cuadros.push([t, anterior]);
+      }
+      preparados.set(def, cuadros);
+    }
+    return preparados.get(def);
+  }
+  function poseEn(cuadros, t) {
+    for (let i = 1; i < cuadros.length; i++) {
+      const [t1, p1] = cuadros[i];
+      if (t < t1) {
+        const [t0, p0] = cuadros[i - 1];
+        return mezclar(p0, p1, suave((t - t0) / (t1 - t0)));
+      }
+    }
+    return cuadros[cuadros.length - 1][1];
+  }
+  function gesto(def, { espejo = def.espejable ? azar() < 0.5 : false } = {}) {
+    const cuadros = cuadrosDe(def);
+    return {
+      nombre: def.nombre, t: 0, interrumpible: false,
+      actualizar(dt) {
+        const t0 = this.t, t1 = (this.t += dt);
+        for (const [ti, cara, dur] of def.cara || []) if (ti >= t0 && ti < t1) ponerCara(cara, dur);
+        for (const [ti, tipo] of def.efectos || []) if (ti >= t0 && ti < t1) efecto(tipo);
+        for (const [clave, a, b] of def.musculos || []) {
+          const env = tramo(t1, a, a + 0.12) * (1 - tramo(t1, b - 0.18, b));
+          if (env <= 0) continue;
+          for (const k of clave === '*' ? Object.keys(m.musc) : [clave]) m.musc[k].contr = Math.max(m.musc[k].contr, env);
+        }
+        if (def.destello) {
+          const [a, b] = def.destello;
+          m.destello = Math.max(m.destello, tramo(t1, a, a + 0.15) * (1 - tramo(t1, b - 0.4, b)));
+        }
+        for (const [a, b, ox, oy] of def.mirar || []) if (t1 >= a && t1 < b) mirarCara(espejo ? -ox : ox, oy, 0.2);
+        let pose = poseEn(cuadros, t1);
+        for (const [a, b, campos, hz] of def.vibrar || []) {
+          if (t1 < a || t1 > b) continue;
+          const k = Math.sin(2 * Math.PI * hz * (t1 - a)) * tramo(t1, a, a + 0.1) * (1 - tramo(t1, b - 0.15, b));
+          pose = { ...pose };
+          for (const c in campos) pose[c] += campos[c] * k;
+        }
+        return { pose, apoyo: 'pies', x: m.x, y: sup().y, espejo };
+      },
+      get hecha() { return this.t >= def.dur; },
+    };
+  }
+
+  // ——— Qué hacer ahora ———
+  function elegir() {
+    const s = sup();
+    if (s.tipo === 'rincon') {
+      // en el rincón (en el entreno, o si no hay sitio libre en la pantalla): asomada, que casi no tapa
+      m.previa = 'vigilar';
+      return [vigilar()];
+    }
+    const salto = m.tranquila ? null : planearSalto();
+    const k = (n) => PESOS[n] * (m.pesos[n] ?? 1); // sus papeletas, con su carácter
+    const opciones = [
+      ['quieto', k('quieto')], ['pasear', k('pasear')], ['saltar', salto ? k('saltar') : 0],
+      ['sentarse', k('sentarse') * (1 + 3 * m.sueno)], ['asomarse', k('asomarse')], ['desperezarse', k('desperezarse')],
+      ['rascarse', k('rascarse')], ['mirarte', k('mirarte')], ['dormir', m.sueno > 0.7 ? k('dormir') : 0],
+    ].filter(([n, p]) => p > 0 && (n !== m.previa || n === 'quieto' || n === 'pasear') && (!m.tranquila || TRANQUILAS.has(n)));
+    let r = azar() * opciones.reduce((a, [, p]) => a + p, 0);
+    let elegida = opciones[0][0];
+    for (const [n, p] of opciones) {
+      if ((r -= p) <= 0) {
+        elegida = n;
+        break;
+      }
+    }
+    m.previa = elegida;
+    switch (elegida) {
+      case 'pasear': return [caminar(entre(s.x1 + MARGEN, s.x2 - MARGEN))];
+      case 'saltar': return [caminar(salto.x0), saltar(salto.s1, salto.x1)];
+      case 'sentarse': return m.sueno > 0.55 ? [sentarse(), dormir()] : [sentarse()];
+      case 'dormir': return [sentarse(entre(3, 5)), dormir()];
+      case 'asomarse': {
+        const x = limitar(m.x, s.x1 + 34, s.x2 - 34);
+        return Math.abs(x - m.x) < 1 ? [asomarse()] : [caminar(x), asomarse()];
+      }
+      case 'desperezarse': case 'rascarse': case 'mirarte': return [gesto(GESTOS[elegida])];
+      default: return [quieto()];
+    }
+  }
+
+  function empezar(accion) {
+    if (m.ultimo) {
+      m.trans = { pose: normalizar(m.ultimo.pose), raiz: m.ultimo.raiz, apoyo: m.ultimo.apoyo,
+        ocultar: m.ultimo.ocultar, t: 0, dur: accion.transicion ?? TRANSICION, raizTambien: false };
+    }
+    m.accion = accion;
+    accion.alEmpezar?.();
+  }
+  function siguiente() {
+    if (m.accion?.hecha) m.accion.alTerminar?.();
+    if (!m.cola.length) m.cola = autonoma ? elegir() : [quieto(1e9)];
+    empezar(m.cola.shift());
+  }
+  // Lo que le pasa (una serie, un récord, un toque): lo hace ya o, si está a media cosa, justo después.
+  function reaccionar(acciones) {
+    m.sueno = 0;
+    for (const a of acciones) a.reaccion = true;
+    const ahora = m.accion;
+    if (ahora && ahora.interrumpible === false && !ahora.hecha) {
+      m.cola = [...m.cola.filter((a) => a.reaccion), ...acciones].slice(-3);
+      return;
+    }
+    if (ahora?.dormida) acciones.unshift(Object.assign(gesto(GESTOS.despertar), { reaccion: true }));
+    m.cola = acciones.slice(1);
+    empezar(acciones[0]);
+  }
+
+  // ——— Cada fotograma ———
+  function paso(dt) {
+    m.t += dt;
+    m.sueno = Math.min(1, m.sueno + dt / m.suenoTras);
+    for (const k in m.musc) {
+      const s = m.musc[k];
+      s.contr = 0;
+      s.bombeo = Math.max(0, s.bombeo - dt / m.bombeoDura);
+    }
+    m.destello = 0;
+    if (!sup()) return null;
+    if (m.perdida) {
+      // Su superficie se fue: aparece en otra (el escenario lo funde), sin arrastrar la pose ni lo que tenía pensado.
+      m.perdida = false;
+      m.cola = m.cola.filter((a) => a.reaccion);
+      if (m.accion && !m.accion.reaccion) m.accion = null; // también un salto a medias: iba a la otra
+      m.trans = null;
+    }
+    if (!m.accion || m.accion.hecha) siguiente();
+    const salida = m.accion.actualizar(dt);
+    if (m.accion.nombre !== m.avisado) alCambiar((m.avisado = m.accion.nombre));
+
+    // los ojos van rápido; la cabeza se ladea despacio hacia donde mira
+    m.mirada.x = lerp(m.mirada.x, m.mirada.ox, Math.min(1, dt * 14));
+    m.mirada.y = lerp(m.mirada.y, m.mirada.oy, Math.min(1, dt * 14));
+    m.ladeo = lerp(m.ladeo, m.mirada.ox * 1.3, Math.min(1, dt * 4));
+
+    // respirar
+    const r = Math.sin((m.t * 2 * Math.PI) / (salida.respira || 3.4));
+    let pose = { ...salida.pose };
+    pose.hombros += 0.45 * r;
+    if (salida.apoyo === 'pies') pose.estirar += 0.006 * r;
+    pose.cabeza += m.ladeo;
+    pose = normalizar(pose);
+
+    // de la acción anterior a esta, sin saltos (la orientación, por el lado más corto)
+    let u = 1;
+    if (m.trans) {
+      m.trans.t += dt;
+      u = suave(m.trans.t / m.trans.dur);
+      pose = mezclar(m.trans.pose, pose, u, true);
+    }
+    const cuerpo = cuerpoDe(salida.dormida ? r : r * 0.4);
+    const cin = cinematica(pose, cuerpo, { espejo: !!salida.espejo, apoyo: salida.apoyo });
+    let abajo;
+    if (salida.apoyo === 'pies') abajo = cin.pies;
+    else if (salida.apoyo === 'cadera') abajo = cin.p.pelvis[1] + cin.radios.tronco * 0.7;
+    else abajo = cin.bajo;
+    let raiz = [salida.x, salida.y - (pose.alto + abajo) * m.escala];
+    let ocultar = salida.ocultar || null;
+    if (m.trans) {
+      const tr = m.trans;
+      if (!tr.raizTambien && (tr.apoyo !== salida.apoyo || Math.hypot(raiz[0] - tr.raiz[0], raiz[1] - tr.raiz[1]) > 3)) {
+        tr.raizTambien = true;
+      }
+      if (tr.raizTambien) raiz = [lerp(tr.raiz[0], raiz[0], u), lerp(tr.raiz[1], raiz[1], u)];
+      if (!ocultar && tr.ocultar) ocultar = tr.ocultar;
+      if (tr.t >= tr.dur) m.trans = null;
+    }
+
+    // parpadear (a veces, dos veces seguidas)
+    const pp = m.parpadeo;
+    if (m.t >= pp.proximo) {
+      pp.t0 = m.t;
+      pp.proximo = m.t + entre(1.8, 5.5);
+      if (azar() < 0.22) pp.doble = m.t + 0.3;
+    }
+    if (pp.doble && m.t >= pp.doble) {
+      pp.t0 = m.t;
+      pp.doble = 0;
+    }
+    const fp = (m.t - pp.t0) / 0.16;
+    let abiertos = fp >= 0 && fp <= 1 ? 1 - 0.9 * Math.sin(Math.PI * fp) : 1;
+    if (salida.ojos !== undefined) abiertos = Math.min(abiertos, salida.ojos);
+
+    // la cara que le surge (y se le va)
+    let cara = null;
+    if (m.cara) {
+      const e = m.t - m.cara.t0;
+      if (e > m.cara.dur) m.cara = null;
+      else cara = { ...CARAS[m.cara.nombre], nombre: m.cara.nombre, luz: encendido(e, m.cara.dur) };
+    }
+    if (!cara && salida.cara) cara = { ...CARAS[salida.cara], nombre: salida.cara, luz: 1 };
+
+    m.efectos = m.efectos.filter((e) => m.t - e.t0 < e.dur);
+
+    // la sombra, en la superficie de debajo (también al saltar)
+    const pies = raiz[1] + (pose.alto + abajo) * m.escala;
+    let sombra = null;
+    if (salida.sombra !== false) {
+      const cx = salida.apoyo === 'tumbado' ? raiz[0] + ((cin.p.cabeza[0] + cin.p.tobilloD[0]) / 2) * m.escala : raiz[0];
+      const s = debajo(cx, pies - 3);
+      if (s) {
+        const h = Math.max(0, s.y - pies);
+        sombra = { x: cx, y: s.y, rx: (salida.apoyo === 'tumbado' ? 64 : 28) * m.escala * (1 - 0.5 * Math.min(1, h / 120)),
+          fuerza: 1 - Math.min(1, h / 140) };
+      }
+    }
+
+    const f = {
+      t: m.t, cin, raiz, escala: m.escala, pose, apoyo: salida.apoyo, cuerpo, cara, abiertos,
+      mirada: [m.mirada.x, m.mirada.y], efectos: m.efectos.map((e) => ({ ...e, edad: m.t - e.t0 })),
+      ocultar, sombra, destello: m.destello, accion: m.accion.nombre,
+    };
+    m.ultimo = f;
+    return f;
+  }
+
+  const api = {
+    paso,
+    // Acabar una serie de un grupo de la app («muscleGroup»).
+    serie(grupo) {
+      const g = GRUPOS[grupo];
+      if (!g) return;
+      bombear(g.musculos);
+      reaccionar([gesto(GESTOS[g.gesto])]);
+    },
+    record() { reaccionar([gesto(GESTOS.record)]); },
+    // Un toque en el escenario: si es en ella, reacciona; si no, mira hacia allí (y a veces se acerca).
+    tocar(px, py) {
+      if (!api.contiene(px, py)) {
+        mirarPunto(px, py);
+        const s = sup(), a = m.accion;
+        if (a && a.nombre === 'Mira a su alrededor' && py < s.y && py > s.y - 90 && px > s.x1 && px < s.x2 && azar() < 0.5) {
+          m.cola = [caminar(px)];
+          empezar(m.cola.shift());
+        }
+        return false;
+      }
+      m.toques = m.toques.filter((t) => m.t - t < 3);
+      m.toques.push(m.t);
+      if (m.accion?.dormida) reaccionar([gesto(GESTOS.saludo)]);
+      else if (m.toques.length >= 2) reaccionar([gesto(GESTOS.cosquillas)]);
+      else reaccionar([gesto(GESTOS.susto), gesto(GESTOS.saludo)]);
+      return true;
+    },
+    contiene(px, py) {
+      const f = m.ultimo;
+      if (!f) return false;
+      if (f.ocultar && py > f.ocultar.y && px > f.ocultar.x1 && px < f.ocultar.x2) return false;
+      const q = [(px - f.raiz[0]) / m.escala, (py - f.raiz[1]) / m.escala];
+      if (Math.hypot(q[0] - f.cin.p.cabeza[0], q[1] - f.cin.p.cabeza[1]) < MEDIDAS.cabeza + 9) return true;
+      return f.cin.partes.some((parte) => parte.segmentos.some(([a, b, r]) => distSeg(q, a, b) < r + 8));
+    },
+    // Para probar: hacer una cosa ya («dormir», «sentarse», «asomarse», «pasear», «saltar» o un gesto).
+    hacer(nombre) {
+      const s = sup();
+      const otras = {
+        dormir: () => [dormir(1e9)],
+        sentarse: () => [sentarse(1e9)],
+        asomarse: () => [asomarse()],
+        pasear: () => [caminar(m.x < (s.x1 + s.x2) / 2 ? s.x2 : s.x1)],
+        saltar: () => {
+          const p = planearSalto();
+          return p ? [caminar(p.x0), saltar(p.s1, p.x1)] : [quieto()];
+        },
+      };
+      if (GESTOS[nombre]) reaccionar([gesto(GESTOS[nombre], { espejo: false })]);
+      else if (otras[nombre]) {
+        m.cola = otras[nombre]();
+        empezar(m.cola.shift());
+      }
+    },
+    reubicar() {
+      const s = sup();
+      if (s) m.x = limitar(m.x, s.x1 + MARGEN, s.x2 - MARGEN);
+    },
+    // Un gesto de gestos.js por su nombre («saludo», «mirarte»…), como reacción: ya, o justo después.
+    hacerGesto(nombre) {
+      if (GESTOS[nombre]) reaccionar([gesto(GESTOS[nombre])]);
+    },
+    // Mira hacia un punto (un toque que no es para ella), sin moverse.
+    mirar(px, py) { mirarPunto(px, py); },
+    // En el entreno: sin pasear ni saltar (TRANQUILAS).
+    get tranquila() { return m.tranquila; },
+    set tranquila(v) { m.tranquila = Boolean(v); },
+    // Su carácter: un número por cada cosa de PESOS (1, lo de siempre; 2, el doble de papeletas).
+    get pesos() { return m.pesos; },
+    set pesos(v) { m.pesos = v || {}; },
+    set suenoTras(v) { m.suenoTras = Math.max(5, Number(v) || SUENO_TRAS); },
+    set bombeoDura(v) { m.bombeoDura = Math.max(1, Number(v) || BOMBEO_DURA); },
+    // ¿Está tranquila (de pie mirando, sentada o dormida)? El escenario pinta entonces menos veces por segundo.
+    get calma() { return Boolean(m.accion?.calma); },
+    get dormida() { return Boolean(m.accion?.dormida); },
+    get superficie() { return m.sup; },
+    // Dónde tiene la cabeza, en px del escenario (para apuntarle, o para poner algo junto a ella).
+    get cabeza() {
+      const f = m.ultimo;
+      return f ? [f.raiz[0] + f.cin.p.cabeza[0] * m.escala, f.raiz[1] + f.cin.p.cabeza[1] * m.escala] : null;
+    },
+    get escala() { return m.escala; },
+    set escala(v) { m.escala = v; },
+    get forma() { return m.forma; },
+    set forma(v) { m.forma = limitar(v, 0, 1); },
+    get accion() { return m.accion?.nombre || ''; },
+  };
+  return api;
+}
