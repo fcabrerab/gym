@@ -66,7 +66,7 @@ button[aria-pressed="true"] { background: var(--acento); color: var(--sobre-acen
 </head>
 <body>
 <header>
-  <h1>La mascota · prototipo <span class="version">v2 · 3D</span></h1>
+  <h1>La mascota · prototipo <span class="version">v3 · 3D</span></h1>
   <button type="button" id="tema">Tema: el del móvil</button>
   <button type="button" id="lupa" aria-pressed="false">Lupa</button>
   <button type="button" id="huesos" aria-pressed="false">Esqueleto</button>
@@ -89,10 +89,11 @@ button[aria-pressed="true"] { background: var(--acento); color: var(--sobre-acen
     Es una página de prueba, aparte de la app: no lee ni guarda nada.</p>
 </section>
 <script type="module">
-// «?v=2»: la versión (igual en mascota/cerebro.js y arriba, en el título); al cambiar algo, súbela en todos.
-import { crearMascota } from './mascota/cerebro.js?v=2';
-import { crearTrajeNeon } from './mascota/traje-neon.js?v=2';
-import { GRUPOS } from './mascota/gestos.js?v=2';
+// La versión va en la carpeta (mascota/v3/) y en el título: el service worker de la app guarda lo que se pide bajo
+// /gym/ (y no mira lo que va tras «?»). Para una versión nueva: carpeta nueva (v4…), estos import y el título.
+import { crearMascota } from './mascota/v3/cerebro.js';
+import { crearTrajeNeon } from './mascota/v3/traje-neon.js';
+import { GRUPOS } from './mascota/v3/gestos.js';
 
 // Para probar: ?solo · ?tema=claro|oscuro · ?forma=0..1 · ?huesos · ?quieta (sin vida propia) · ?semilla=n
 // · ?escala=0.55 · ?accion=<grupo, «record» o «dormir», «sentarse», «asomarse», «pasear», «saltar»> · ?t=<s> (y se congela ahí)

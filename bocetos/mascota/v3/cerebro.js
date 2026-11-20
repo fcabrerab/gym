@@ -3,10 +3,10 @@
 // una serie acabada, un récord, un toque. No dibuja: cada paso devuelve un «fotograma» que pinta el traje.
 // Nunca toca la app: solo mira las superficies.
 
-// «?v=2»: la versión, la misma en todos los import (y en prototipo.html), para que el móvil no mezcle piezas
-// de versiones distintas que tenga guardadas. Al cambiar algo, súbela en todos.
-import { POSE_BASE, MEDIDAS, mezclar, normalizar, cinematica, lerp, limitar, suave, tramo } from './esqueleto.js?v=2';
-import { GESTOS, GRUPOS, CARAS, MUSCULOS } from './gestos.js?v=2';
+// Cada versión vive en su carpeta (v3, v4…): el service worker de la app guarda lo que se pide bajo /gym/ y no mira
+// lo que va tras «?», así que una versión nueva con los mismos nombres le llegaría vieja al móvil.
+import { POSE_BASE, MEDIDAS, mezclar, normalizar, cinematica, lerp, limitar, suave, tramo } from './esqueleto.js';
+import { GESTOS, GRUPOS, CARAS, MUSCULOS } from './gestos.js';
 
 const MARGEN = 14;        // px que deja hasta el borde de una tarjeta
 const VELOCIDAD = 34;     // px por segundo al pasear
