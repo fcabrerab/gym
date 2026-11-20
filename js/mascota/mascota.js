@@ -170,7 +170,7 @@ function nacer(ficha) {
       fuera = sale;
       modo();
     }
-    escenario.ponerAlDia();
+    escenario.ponerAlDia([cerebro.superficie, cerebro.destino]);
     return cerebro.paso(dt);
   }
 

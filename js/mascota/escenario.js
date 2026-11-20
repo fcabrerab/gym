@@ -162,14 +162,18 @@ export function crearEscenario({ doc = document, win = window, alto, anchoMin = 
     if (pendiente) return;
     pendiente = win.setTimeout(calcular, ms);
   }
-  // En cada fotograma: la «y» de las de la página, con lo desplazada que está (sin medir nada: no cuesta).
-  function ponerAlDia() {
+  // En cada fotograma: la «y» de las de la página, con lo desplazada que está (sin medir: no cuesta); y las de «vivas» (la
+  // suya y adónde salta), midiéndolas: si la app mueve su tarjeta (al desplegar otra), va con ella al momento.
+  function ponerAlDia(vivas = []) {
     const sy = win.scrollY;
     let falta = false;
     for (const s of lista) {
       if (s.yDoc == null) continue;
-      if (s.el?.isConnected) s.y = s.yDoc - sy;
-      else falta = true;
+      if (!s.el?.isConnected) falta = true;
+      else if (vivas.includes(s.id)) {
+        s.y = s.el.getBoundingClientRect().top;
+        s.yDoc = s.y + sy;
+      } else s.y = s.yDoc - sy;
     }
     if (falta) {
       lista = lista.filter((s) => s.yDoc == null || s.el?.isConnected);

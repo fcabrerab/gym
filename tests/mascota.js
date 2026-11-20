@@ -161,9 +161,9 @@ export async function ejecutar(c) {
       if (i === 45) cargaInicio = m.carga;
       if (i === total * 30) cargaFin = m.carga;
     }
-    const donde = (n) => vistas.indexOf(n);
+    const donde = (n) => vistas.findIndex((v) => v.startsWith(n));
     caso(donde("Recupera el aliento") >= 0 && donde("Se seca el sudor") > donde("Recupera el aliento")
-      && donde("Calienta para la siguiente") > donde("Se seca el sudor") && donde("¡Lista para la siguiente!") > donde("Calienta para la siguiente")
+      && donde("Calienta") > donde("Se seca el sudor") && donde("¡Lista para la siguiente!") > donde("Calienta")
       && cargaInicio < 0.6 && cargaFin > 1.2,
     `MA17 en el descanso se recupera, descansa, calienta a los 10 s y se pone en guardia a los 3; su luz, de ${cargaInicio?.toFixed(2)} a ${cargaFin.toFixed(2)} (${vistas.join(" → ")})`);
     m.descanso = { id: "d2", quedan: 50, fraccion: 0.2, pausa: false, grupoSiguiente: "Pecho" };
@@ -177,6 +177,36 @@ export async function ejecutar(c) {
     m.descanso = null;
     for (let i = 0; i < 30 * 3; i++) m.paso(1 / 30);
     caso(choca && Math.abs(m.carga - 1) < 0.1, `MA17 si la tocas en el descanso, choca los cinco; y sin descanso, su luz vuelve a la de siempre (${m.carga.toFixed(2)})`);
+  }
+
+  // MA19 Calentar para en cuanto se acaba el descanso (no se queda en bucle); y si la app vuelve a pintar su tarjeta
+  // (otro elemento, el mismo sitio), sigue en ella: sin saltos ni fundidos
+  {
+    let sups = [{ id: "a", x1: 20, x2: 380, y: 300 }, { id: "b", x1: 40, x2: 360, y: 420 }];
+    let fundidos = 0;
+    const m = crearMascota({ superficies: () => sups, azar: azarDe(5), alReubicar: () => { fundidos += 1; } });
+    for (let i = 0; i < 30; i++) m.paso(1 / 30);
+    m.descanso = { id: "r", quedan: 9, fraccion: 0.85, pausa: false, grupoSiguiente: "Pecho" };
+    const calentando = new Set();
+    for (let i = 0; i < 30 * 6; i++) {
+      m.paso(1 / 30);
+      if (/^Calienta/.test(m.accion)) calentando.add(m.accion);
+    }
+    m.descanso = null;
+    for (let i = 0; i < 6; i++) m.paso(1 / 30);
+    const tras = m.accion;
+    for (let i = 0; i < 30 * 4; i++) m.paso(1 / 30);
+    for (let i = 0; i < 90 && /Salta|Baja de un salto/.test(m.accion); i++) m.paso(1 / 30);
+    const antes = m.superficie;
+    sups = sups.map((s) => (s.id === antes ? { ...s, id: `${s.id}-rehecha`, y: s.y + 2 } : s));
+    const vistas = new Set();
+    for (let i = 0; i < 10; i++) {
+      m.paso(1 / 30);
+      vistas.add(m.accion);
+    }
+    caso(calentando.size >= 2 && !/^Calienta|Lista/.test(tras) && m.superficie === `${antes}-rehecha` && fundidos === 0
+      && ![...vistas].some((x) => /Salta|Baja de un salto/.test(x)),
+    `MA19 calienta con movimientos distintos (${[...calentando].join(", ")}) y para al acabar el descanso (luego: ${tras}); y si la app vuelve a pintar su tarjeta, sigue en ella, sin saltos ni fundidos (${m.superficie})`);
   }
 
   const preparar = async () => {

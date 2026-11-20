@@ -90,6 +90,7 @@ export function cinematica(pose, cuerpo, { espejo = false, apoyo = 'pies' } = {}
   const dL = [cos(aL), sen(aL), 0], dP = [cos(aP), sen(aP), 0];
   const fL = cruz(uL, dL), fP = cruz(uP, dP); // su delante
   q.lumbar = mas(q.pelvis, uL, M.lumbar);
+  q.cintura = mas(q.pelvis, uL, rT * 0.6); // donde acaba el tronco: más arriba que la pelvis (D-135: sin una punta redonda entre las piernas)
   q.cuello = mas(q.lumbar, uP, M.pecho);
   q.cabeza = mas(q.cuello, arriba(aC, iP * 0.8 + pose.cabezaAd * 0.2), M.cuello + M.cabeza);
   // un punto del tronco: x a su derecha, y hacia abajo desde el cuello, z hacia su delante
@@ -141,7 +142,7 @@ export function cinematica(pose, cuerpo, { espejo = false, apoyo = 'pies' } = {}
       const a1 = enTronco(s * rT * 0.8, 9, -0.5), a2 = enTronco(s * rT * 0.5, 25, -0.5);
       mancha('tronco', ['dorsales'], mas(entre(a1, a2, 0.4), dP, s * dl * 0.45), unidad(entre(a2, a1, 1).map((v, i) => v - a2[i])), 8 + dl * 0.4, 2.2 + dl * 0.9);
     }
-    mancha('tronco', ['gluteos'], enTronco(s * 3.3, M.pecho + M.lumbar + 1.5, -(rT * 0.55 + gl * 0.3)), dL, 3.6 + gl * 0.4, 3.6 + gl * 0.65);
+    mancha('tronco', ['gluteos'], enTronco(s * 3.3, M.pecho + M.lumbar - 2.5, -(rT * 0.55 + gl * 0.3)), dL, 3.6 + gl * 0.4, 3.6 + gl * 0.65);
 
     // las líneas de un cuerpo definido (de frente o de espaldas)
     const vp = ver['pecho' + l] || 0;
@@ -156,9 +157,9 @@ export function cinematica(pose, cuerpo, { espejo = false, apoyo = 'pies' } = {}
   const vc = Math.max(ver.abs1 || 0, ver.pechoI || 0, ver.pechoD || 0);
   if (vc > 0.03) detalles.push({ cara: 1, fuerza: vc, puntos: [enTronco(0, 12.5, rT), enTronco(0, 31, rT * 0.98)] });
   if ((ver.gluteos || 0) > 0.03) detalles.push({ cara: -1, fuerza: ver.gluteos, puntos: [enTronco(0, M.pecho + M.lumbar - 2, -rT), enTronco(0, M.pecho + M.lumbar + 5, -rT * 0.8)] });
-  // la barriga (gordito), hacia delante
+  // la barriga (gordito), hacia delante y a la altura de la tripa (no de la cadera)
   const r = cuerpo.vientre;
-  if (r > 2) mancha('tronco', [], mas(mas(q.pelvis, uL, r * 0.85), fL, r * 0.42), uL, r, r * 1.05);
+  if (r > 2) mancha('tronco', [], mas(mas(q.pelvis, uL, M.lumbar * 0.5 + r * 0.15), fL, r * 0.5), uL, r * 1.05, r * 1.1);
 
   // Visto desde la pantalla: girado hacia donde mira, en espejo, estirado y girado en el plano.
   const ct = cos(pose.orientacion), st = sen(pose.orientacion);
@@ -177,7 +178,8 @@ export function cinematica(pose, cuerpo, { espejo = false, apoyo = 'pies' } = {}
   // las partes, cada una con sus cápsulas y sus manchas, y su profundidad para ordenarlas
   const media = (...ks) => ks.reduce((a, k) => a + p[k][2], 0) / ks.length;
   const partes = [
-    { nombre: 'tronco', clave: -1, segmentos: [[p.cuello, p.pelvis, rT], [p.hombroI, p.hombroD, M.rHombros + 0.6 * g]], manchas: [] },
+    // el tronco, hasta la cintura; la cadera, una barra ancha de lado a lado (como los hombros)
+    { nombre: 'tronco', clave: -1, segmentos: [[p.cuello, p.cintura, rT], [p.caderaI, p.caderaD, rT * 0.8], [p.hombroI, p.hombroD, M.rHombros + 0.6 * g]], manchas: [] },
     { nombre: 'cabeza', clave: p.cabeza[2] - 0.5, segmentos: [], manchas: [], centro: p.cabeza, radio: M.cabeza },
   ];
   for (const l of ['I', 'D']) {
@@ -188,11 +190,13 @@ export function cinematica(pose, cuerpo, { espejo = false, apoyo = 'pies' } = {}
         [p['tobillo' + l], p['punta' + l], M.rPie]], manchas: [] });
   }
   const porNombre = Object.fromEntries(partes.map((x) => [x.nombre, x]));
+  const zTronco = (p.cuello[2] + p.pelvis[2]) / 2;
   for (const m of manchas) {
     const c = vista(m.c), a = vista(mas(m.c, m.eje, m.largo)), z = vista(mas(m.c, m.eje, -m.largo));
     const dx = a[0] - z[0], dy = a[1] - z[1];
+    // «detras»: la de detrás del tronco (los glúteos, de frente): la tapa el tronco, así que no se pinta
     porNombre[m.parte].manchas.push({ c, rx: Math.max(Math.hypot(dx, dy) / 2, m.ancho * 0.9), ry: m.ancho,
-      rot: Math.atan2(dy, dx), musculos: m.musculos });
+      rot: Math.atan2(dy, dx), musculos: m.musculos, detras: m.parte === 'tronco' && c[2] < zTronco - 1.5 });
   }
   partes.sort((x, y) => x.clave - y.clave);
 
