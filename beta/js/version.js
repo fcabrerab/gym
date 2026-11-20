@@ -1,12 +1,21 @@
 // Versión de la app. La misma VERSION está en ../sw.js y en la meta «gym-beta-version» de ../index.html: cada
 // cambio en un archivo de la app obliga a subirla en los tres sitios (una prueba de tests/ comprueba que coinciden).
 // Hasta la 0.2.10 fue la beta, en beta/; desde la 1.0.0, es la app, en la dirección de siempre (D-121).
-export const VERSION = "1.3.3";
+export const VERSION = "1.3.4";
 export const FECHA_VERSION = "2026-11-20";
 
 // Novedades por versión, de la más nueva a la más vieja. Se enseñan en Ajustes → La app → Novedades y, la primera
 // vez, en «Qué tiene de nuevo».
 export const NOVEDADES = [
+  {
+    version: "1.3.4",
+    fecha: "2026-11-20",
+    cambios: [
+      "La mascota tiene tu forma: su cuerpo sale de lo constante que eres con tu rutina (no de los kilos), de gordita a muy definida. Si lo dejas, se ablanda poco a poco; al volver, se recupera rápido.",
+      "En cada entreno se marca un poco más, y los músculos que trabajas se le hinchan: el bombeo le dura unas horas, aunque cierres la app. Al día siguiente, alguna agujeta suave: a veces se queja, y con las piernas cargadas anda más despacio.",
+      "Su ficha va en tus copias («Exportar datos» y la del PC): al cargar una, vuelve ella, con su nombre y su carácter. En su página, «Su forma» dice cómo está y por qué.",
+    ],
+  },
   {
     version: "1.3.3",
     fecha: "2026-11-20",

@@ -410,15 +410,23 @@ function haySesionViva() {
   return Boolean(s) && !abandonada(s, ahora()) && Boolean(datos && diaPorId(datos, s.diaId));
 }
 
+// Lo que la mascota lee de tus entrenos, para su cuerpo (D-133, la fase 2): una copia (nunca los de verdad) de tu
+// rutina, tus sesiones, la biblioteca (el grupo de cada ejercicio) y la sesión en marcha.
+function entrenosParaLaMascota() {
+  const d = almacen.datos();
+  if (!d) return null;
+  return structuredClone({ dias: d.dias, sesiones: d.sesiones, ejercicios: d.ejercicios, enCurso: almacen.leerSesion() });
+}
+
 // La mascota (D-133): aparte, cargada cuando la app ya ha arrancado y solo si está encendida (en la beta, de entrada).
 // Si algo suyo falla, la app sigue igual (y se apunta). Se llama otra vez al cambiar sus ajustes: entonces llega, se
-// pone al día o se va.
+// pone al día o se va; con «renacer» (al cargar una copia que trae su ficha), vuelve a nacer.
 let mascota = null;
 let cargandoMascota = false;
-function arrancarMascota() {
+function arrancarMascota({ renacer = false } = {}) {
   if (modo !== "app") return;
   if (mascota) {
-    mascota.aplicar();
+    mascota.aplicar({ renacer });
     return;
   }
   if (cargandoMascota || !memoriaMascota.encendida(memoriaMascota.leer(), { beta: esBeta() })) return;
@@ -426,7 +434,7 @@ function arrancarMascota() {
   import("./mascota/mascota.js")
     .then((m) => {
       mascota = m;
-      m.iniciar({ haySesion: haySesionViva, descanso: () => descanso.estadoDescanso() });
+      m.iniciar({ haySesion: haySesionViva, descanso: () => descanso.estadoDescanso(), entrenos: entrenosParaLaMascota });
     })
     .catch((err) => errores.push({ tipo: "mascota", mensaje: String(err?.message || err), t: Date.now() }))
     .finally(() => { cargandoMascota = false; });
@@ -436,6 +444,7 @@ function montar() {
   marcarBeta();
   ctx.irA = irA;
   ctx.mascota = arrancarMascota;
+  ctx.entrenosMascota = entrenosParaLaMascota;
   ctx.repintar = repintar;
   ctx.aplicarTema = aplicarTema;
   ctx.pantalla = () => rutaActual?.tab ?? "entreno";

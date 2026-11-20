@@ -1,7 +1,8 @@
 // La memoria de la mascota (D-133): su ficha, en una clave suya, aparte de tus datos (la app normal no la mira, y la
 // mascota nunca toca los tuyos). Hoy guarda sus ajustes (los de su página de Ajustes), cuándo nació, su semilla (de ella
-// sale su carácter: caracter.js), cuándo te vio por última vez y cuántas veces la has tocado. Lo que recuerde de tus
-// entrenos (la fase 2: tu forma, el bombeo de cada músculo) irá aquí también.
+// sale su carácter: caracter.js), cuándo te vio por última vez y cuántas veces la has tocado. Su cuerpo no hace falta
+// guardarlo: sale de tus sesiones (forma.js). Su ficha va también en tus copias («beta.mascota»: paraCopia()) y vuelve
+// al cargar una (restaurar()).
 //
 // Un dato nuevo: añadirlo en nueva() y en sanear() (con lo que vale si falta o no vale) y en guardar(). Si cambia la
 // forma de uno que ya hay: subir VERSION y añadir su paso en migrar(). Una ficha de una versión más nueva (por ejemplo,
@@ -68,27 +69,69 @@ function sanear(c, ahora) {
 // Su ficha (si no tiene, o no vale, una nueva). Con «crear», si era nueva o se ha reparado, se guarda ya: así su
 // semilla, y con ella su carácter, no cambian de una vez a otra.
 export function leer({ ahora = Date.now(), crear = false } = {}) {
-  let crudo = null;
-  try {
-    crudo = JSON.parse(localStorage.getItem(CLAVE));
-  } catch {
-    crudo = null;
-  }
-  const f = sanear(crudo, ahora) || nueva(ahora);
+  const f = sanear(leerCrudo(), ahora) || nueva(ahora);
   if (crear && f.reparada && !f.masNueva) guardar(f);
   return f;
+}
+
+// Lo que se guarda de una ficha (y lo que va en las copias).
+function aGuardar(f) {
+  return { v: VERSION, nacida: f.nacida, semilla: f.semilla, ajustes: { ...AJUSTES, ...limpiarAjustes(f.ajustes) }, vista: f.vista, toques: f.toques };
 }
 
 export function guardar(f) {
   if (!f || f.masNueva) return false;
   try {
-    localStorage.setItem(CLAVE, JSON.stringify({
-      v: VERSION, nacida: f.nacida, semilla: f.semilla, ajustes: { ...AJUSTES, ...limpiarAjustes(f.ajustes) }, vista: f.vista, toques: f.toques,
-    }));
+    localStorage.setItem(CLAVE, JSON.stringify(aGuardar(f)));
     f.reparada = false;
     return true;
   } catch {
     return false; // sin sitio en el navegador: sigue igual, sin recordarlo (tus datos van antes)
+  }
+}
+
+function leerCrudo() {
+  try {
+    const c = JSON.parse(localStorage.getItem(CLAVE));
+    return c && typeof c === "object" && !Array.isArray(c) ? c : null;
+  } catch {
+    return null;
+  }
+}
+
+// Su ficha para una copia de tus datos («Exportar datos» y la copia del PC), o null si aún no tiene (nunca ha salido).
+// Sin cuándo te vio: cambia cada vez que abres la app, y dos copias de los mismos datos serían distintas (el PC no
+// sabría que ya la tiene). Una de una versión más nueva, tal cual.
+export function paraCopia({ ahora = Date.now() } = {}) {
+  const c = leerCrudo();
+  if (!c) return null;
+  if (Number(c.v) > VERSION) return c;
+  const f = aGuardar(sanear(c, ahora));
+  delete f.vista;
+  return f;
+}
+
+// Al cargar una copia que la trae: su ficha pasa a ser la de la copia (si no vale, nada). Una de una versión más nueva
+// se guarda tal cual (esta app la lee sin pisarla). Devuelve true si se guardó.
+export function restaurar(crudo, { ahora = Date.now() } = {}) {
+  if (!crudo || typeof crudo !== "object" || Array.isArray(crudo)) return false;
+  if (Number(crudo.v) > VERSION) {
+    try {
+      localStorage.setItem(CLAVE, JSON.stringify(crudo));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  return guardar(sanear(crudo, ahora));
+}
+
+// Para deshacer una copia cargada cuando antes no tenía ficha: sin ficha otra vez (la próxima vez nace una nueva).
+export function olvidar() {
+  try {
+    localStorage.removeItem(CLAVE);
+  } catch {
+    // sin almacenamiento: no había nada que olvidar
   }
 }
 

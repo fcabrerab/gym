@@ -10,6 +10,7 @@ import {
 } from "./modelo.js";
 import { fusionarComoLaNormal, datosDesdeSnapshot, cargarBase, sanear } from "./normal.js";
 import { fechaLocal, recortar, diasEntre, leerDescanso, formatoDescanso } from "./util.js";
+import { paraCopia as fichaDeLaMascota } from "./mascota/memoria.js";
 
 const esObjeto = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
 const dos = (n) => String(n).padStart(2, "0");
@@ -34,7 +35,9 @@ export const TEXTO_FORMA_RARA = "Este archivo no se puede cargar: tiene datos co
 
 // --- Exportar ---
 
-export function construirExportacion(datos, ahoraMs) {
+// «mascota»: su ficha (D-133, la fase 2), que va en «beta.mascota» para que vuelva ella al cargar la copia; de serie, la
+// de este navegador (si nunca ha salido, no tiene y no va). La normal no la mira.
+export function construirExportacion(datos, ahoraMs, { mascota = fichaDeLaMascota() } = {}) {
   const a = datos.ajustes;
   const exportacion = {
     gymApp: true,
@@ -87,6 +90,7 @@ export function construirExportacion(datos, ahoraMs) {
     },
   };
   if (datos.descartado?.length) exportacion.beta.descartado = datos.descartado;
+  if (esObjeto(mascota)) exportacion.beta.mascota = mascota;
   return exportacion;
 }
 
@@ -158,7 +162,8 @@ function esDiffAntiguo(v) {
 const contar = (n, uno, varios) => `${n} ${n === 1 ? uno : varios}`;
 
 // Lee y valida una copia (File, Blob o texto) sin tocar nada. Devuelve {ok: false, error} o
-// {ok: true, tipo, datosNuevos, resumen, avisos, traeHistorial, traeAjustesBeta}.
+// {ok: true, tipo, datosNuevos, resumen, avisos, traeHistorial, traeAjustesBeta, mascota} («mascota»: su ficha, si la
+// copia la trae, tal cual; la limpia mascota/memoria.js al guardarla).
 // opciones: actuales (datos de la beta, para conservar tipo, incremento y notas), ahoraMs y cargar (la rutina publicada).
 export async function leerCopia(archivo, { actuales = null, ahoraMs = Date.now(), cargar = cargarBase } = {}) {
   let texto;
@@ -291,6 +296,7 @@ function leerExportacion(v, { actuales, ahoraMs }) {
     avisos: datos.origen.avisos,
     traeHistorial,
     traeAjustesBeta,
+    mascota: beta && esObjeto(beta.mascota) ? structuredClone(beta.mascota) : null,
     raros,
     resumen: {
       fecha: typeof v.exportedAt === "string" ? v.exportedAt : null,
