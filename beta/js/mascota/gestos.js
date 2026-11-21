@@ -27,6 +27,7 @@ export const CARAS = {
   curiosa: { ojos: 'punto', cejas: 'una', boca: null },
   bostezo: { ojos: 'apretados', cejas: 'altas', boca: 'oGrande' },
   tierna: { ojos: 'feliz', cejas: null, boca: 'pequena', rubor: true },
+  sacudida: { ojos: 'apretados', cejas: 'fruncidas', boca: 'apretada' },
   dormida: { ojos: 'cerrados', cejas: null, boca: null, fija: true },
 };
 
@@ -387,12 +388,40 @@ export const GESTOS = {
     vibrar: [[0.4, 1.7, { codoD: 24 }, 2.6]],
     cara: [[0.2, 'contenta', 1.7]],
   },
-  cosquillas: {
+  cosquillas: { // tres toques o más seguidos (D-135, la 5): mientras sigas, sigue riéndose (cerebro.js: hacerCosquillas())
     nombre: 'Le haces cosquillas', dur: 1.9,
     cuadros: [[0.2, { ...brazos(24, -120), ...brazosAd(10, 10), hombros: 1.5, inclinar: 10 }], [1.5, {}],
       [1.9, { ...REPOSO, hombros: 0, inclinar: 0 }]],
     vibrar: [[0.15, 1.55, { giro: 5, lumbar: -4 }, 6.5]],
     cara: [[0.1, 'risa', 1.6]],
+  },
+  saltoAlegria: { // dos toques seguidos (D-135, la 5): se agacha, salta dando una vuelta en el aire y aterriza con los brazos arriba
+    nombre: '¡Salta de alegría!', dur: 1.8,
+    cuadros: [
+      [0.2, { ...piernasAd(42, -76), inclinar: 14, ...brazosAd(-30, 20), estirar: -0.05 }],
+      [0.4, { ...piernasAd(4, -10), inclinar: -4, ...brazos(150, 14), ...brazosAd(0, 0), estirar: 0.07, alto: 22, orientacion: 120 }],
+      [0.6, { ...piernasAd(56, -96), inclinar: 6, estirar: 0, alto: 40, orientacion: 260 }],
+      [0.8, { ...piernasAd(8, -14), alto: 14, orientacion: 360, ...brazos(130, 18) }],
+      [0.94, { ...piernasAd(38, -68), inclinar: 12, alto: 0, estirar: -0.06, ...brazos(70, 14) }],
+      [1.2, { ...DE_PIE, inclinar: -4, estirar: 0.02, ...brazos(156, 12) }],
+      [1.45, { ...brazos(146, 22) }],
+      [1.8, { ...REPOSO, inclinar: 0, estirar: 0 }],
+    ],
+    cara: [[0.1, 'risa', 1.6]],
+    efectos: [[0.5, 'chispas'], [1.22, 'chispas']],
+    destello: [0.4, 1.1],
+  },
+  sacudirse: { // al soltarla de tu dedo (D-135, la 5), ya en el suelo: se sacude entera, como un perrito, y se recoloca
+    nombre: 'Se sacude', dur: 1.8, espejable: true,
+    cuadros: [
+      [0.16, { inclinar: 8, ...brazos(26, -6), ...brazosAd(16, 26), hombros: 1.2, ...piernasAd(14, -24) }],
+      [1.0, {}],
+      [1.3, { ...REPOSO, ...DE_PIE, inclinar: 0, hombros: 0 }],
+      [1.55, { cabezaAd: 9 }],
+      [1.8, { cabezaAd: 0 }],
+    ],
+    vibrar: [[0.16, 1.02, { giro: 5, lumbar: 8, pecho: 6, cabeza: 10, brazoI: 16, brazoD: -16 }, 7.5]],
+    cara: [[0.1, 'sacudida', 0.95], [1.15, 'contenta', 0.65]],
   },
   despertar: {
     nombre: 'Se despierta de golpe', dur: 1.0,

@@ -418,6 +418,11 @@ function entrenosParaLaMascota() {
   return structuredClone({ dias: d.dias, sesiones: d.sesiones, marcas: d.marcas, ejercicios: d.ejercicios, enCurso: almacen.leerSesion() });
 }
 
+// Al coger la mascota (D-135, la 5), una vibración corta, como al levantar una fila en Rutina: si la tienes encendida.
+function vibrarMascota() {
+  if (almacen.datos()?.ajustes?.vibracion) navigator.vibrate?.(15);
+}
+
 // La mascota (D-133): aparte, cargada cuando la app ya ha arrancado y solo si está encendida (en la beta, de entrada).
 // Si algo suyo falla, la app sigue igual (y se apunta). Se llama otra vez al cambiar sus ajustes: entonces llega, se
 // pone al día o se va; con «renacer» (al cargar una copia que trae su ficha), vuelve a nacer.
@@ -434,7 +439,7 @@ function arrancarMascota({ renacer = false } = {}) {
   import("./mascota/mascota.js")
     .then((m) => {
       mascota = m;
-      m.iniciar({ haySesion: haySesionViva, descanso: () => descanso.estadoDescanso(), entrenos: entrenosParaLaMascota });
+      m.iniciar({ haySesion: haySesionViva, descanso: () => descanso.estadoDescanso(), entrenos: entrenosParaLaMascota, vibrar: vibrarMascota });
     })
     .catch((err) => errores.push({ tipo: "mascota", mensaje: String(err?.message || err), t: Date.now() }))
     .finally(() => { cargandoMascota = false; });

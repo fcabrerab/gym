@@ -1,12 +1,20 @@
 // Versión de la app. La misma VERSION está en ../sw.js y en la meta «gym-beta-version» de ../index.html: cada
 // cambio en un archivo de la app obliga a subirla en los tres sitios (una prueba de tests/ comprueba que coinciden).
 // Hasta la 0.2.10 fue la beta, en beta/; desde la 1.0.0, es la app, en la dirección de siempre (D-121).
-export const VERSION = "1.3.7";
-export const FECHA_VERSION = "2026-11-20";
+export const VERSION = "1.3.8";
+export const FECHA_VERSION = "2026-11-21";
 
 // Novedades por versión, de la más nueva a la más vieja. Se enseñan en Ajustes → La app → Novedades y, la primera
 // vez, en «Qué tiene de nuevo».
 export const NOVEDADES = [
+  {
+    version: "1.3.8",
+    fecha: "2026-11-21",
+    cambios: [
+      "La mascota se deja coger: mantenla pulsada y se sube a tu dedo. Llévala adonde quieras (va haciendo equilibrios) y, al soltarla, cae en lo que haya debajo y se sacude. Mientras la llevas, la pantalla no se mueve.",
+      "Con dos toques seguidos, salta de alegría; con tres o más, le haces cosquillas. Con uno, como siempre: se asusta y te saluda (en el descanso, choca los cinco).",
+    ],
+  },
   {
     version: "1.3.7",
     fecha: "2026-11-20",

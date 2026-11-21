@@ -23,13 +23,13 @@ const AUSENCIA = 6 * 3600000;  // tras este rato sin verte, al volver te da la b
 // Fotogramas por segundo: menos cuanto más tranquila (gasta menos batería).
 const FPS = { moviendose: 30, calma: 20, dormida: 12 };
 
-let app = { haySesion: () => false, descanso: () => null, entrenos: () => null };
+let app = { haySesion: () => false, descanso: () => null, entrenos: () => null, vibrar: () => {} };
 let viva = null;
 const sucesos = [];
 
-// app: { haySesion(), descanso(), entrenos() } (¿hay una sesión de entreno en marcha?; el descanso, como lo da
-// estadoDescanso() de js/descanso.js; y una copia de tus entrenos, { dias, sesiones, ejercicios, enCurso }, para su
-// cuerpo: forma.js). Se puede llamar más de una vez.
+// app: { haySesion(), descanso(), entrenos(), vibrar() } (¿hay una sesión de entreno en marcha?; el descanso, como lo
+// da estadoDescanso() de js/descanso.js; una copia de tus entrenos, { dias, sesiones, ejercicios, enCurso }, para su
+// cuerpo: forma.js; y una vibración corta al cogerla, si la tienes encendida). Se puede llamar más de una vez.
 export function iniciar(adaptador = {}) {
   app = { ...app, ...adaptador };
   if (!sucesos.length) {
@@ -190,13 +190,29 @@ function nacer(ficha) {
   verte();
   doc.addEventListener("visibilitychange", verte);
 
+  // Los toques (D-135, la 5): uno, dos o tres seguidos (el cerebro sabe cuántos); y mantenerla pulsada la coge (en su
+  // rincón del entreno, no). Cada toque y cada vez que la coges, apuntado en su ficha.
+  const tocada = () => memoria.anotar((f) => { f.toques += 1; });
   escenario.escucharToques({
     contiene: (x, y) => cerebro.contiene(x, y),
-    tocar: (x, y) => {
-      cerebro.tocar(x, y);
-      memoria.anotar((f) => { f.toques += 1; });
+    tocar: () => {
+      cerebro.tocarla();
+      tocada();
     },
     mirar: (x, y) => cerebro.mirar(x, y),
+    puedeCoger: () => !oculta && cerebro.puedeCoger(),
+    coger: (x, y) => {
+      if (!cerebro.coger(x, y)) return false;
+      tocada();
+      try {
+        app.vibrar?.();
+      } catch {
+        // la vibración es lo de menos
+      }
+      return true;
+    },
+    llevar: (x, y) => cerebro.llevar(x, y),
+    soltar: (x, y) => cerebro.soltar(x, y),
   });
 
   function pintar(f) {
@@ -205,9 +221,10 @@ function nacer(ficha) {
       traje.dibujar(null);
       return;
     }
-    // encima de una tarjeta, pegada a la página (al desplazarla va con ella, sin tirones); en la barra de abajo, a la pantalla
+    // encima de una tarjeta, pegada a la página (al desplazarla va con ella, sin tirones); en la barra de abajo o en tu
+    // dedo, a la pantalla; y en tu dedo o cayendo de él, por encima de todo
     const s = escenario.superficies().find((x) => x.id === cerebro.superficie);
-    const origen = escenario.colocar(f, { pegadaAPagina: Boolean(s && s.yDoc != null) });
+    const origen = escenario.colocar(f, { pegadaAPagina: !cerebro.cogida && Boolean(s && s.yDoc != null), encima: cerebro.enElAire });
     traje.dibujar(f, origen);
   }
 
@@ -326,6 +343,9 @@ if (esLocal()) {
     get trofeo() { return Boolean(viva?.cerebro.trofeo); },
     get cinta() { return Boolean(viva?.cerebro.cinta); },
     get celebracionPendiente() { return viva?.celebrar ?? null; },
+    // en tu dedo (D-135, la 5) y, si no, en el aire (cayendo de él)
+    get cogida() { return Boolean(viva?.cerebro.cogida); },
+    get enElAire() { return Boolean(viva?.cerebro.enElAire); },
     get cuerpo() { return viva?.cuerpo ?? null; },
     ponerAlDiaCuerpo() { viva?.ponerAlDiaCuerpo(); },
     hacer(nombre) { viva?.cerebro.hacer(nombre); },
