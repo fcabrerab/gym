@@ -12,6 +12,7 @@ import * as memoria from "./memoria.js";
 import { rasgosDe, pesosDe, suenoDe } from "./caracter.js";
 import { cuerpoDeTusEntrenos, llevasDiasSin, BOMBEO_HORAS } from "./forma.js";
 import { grupoDe } from "./grupos.js";
+import { horaDe, ritmoDe, recibimiento } from "./dia.js";
 import { escuchar } from "../sucesos.js";
 import { ahora, esBeta, esLocal, parametroLocal } from "../util.js";
 
@@ -19,7 +20,6 @@ export const ESCALAS = { pequena: 0.45, normal: 0.55, grande: 0.68 };
 export const BRILLOS = { suave: 0.6, normal: 1, intenso: 1.7 };
 const ALTO_DE_PIE = 135;  // lo que mide de pie, en unidades del esqueleto (con la cabeza)
 const CUERPO_CADA = 5 * 60000; // cada cuánto mira otra vez su cuerpo (la forma y las agujetas cambian despacio)
-const AUSENCIA = 6 * 3600000;  // tras este rato sin verte, al volver te da la bienvenida (D-135)
 // Fotogramas por segundo: menos cuanto más tranquila (gasta menos batería).
 const FPS = { moviendose: 30, calma: 20, dormida: 12 };
 
@@ -137,6 +137,7 @@ function nacer(ficha) {
   function modo() {
     const haySesion = Boolean(app.haySesion());
     cerebro.cinta = haySesion; // con una sesión en marcha, lleva su cinta (D-135, la 4)
+    cerebro.ritmo = ritmoDe(horaDe(ahora()), { conSesion: haySesion }); // de noche, más dormilona (D-135, la 6)
     entrenando = doc.body.dataset.pantalla === "entreno" && haySesion;
     const esconder = entrenando && entreno === "escondida";
     const enLaSerie = entrenando && !fuera;
@@ -178,14 +179,17 @@ function nacer(ficha) {
   const cadaCuerpo = win.setInterval(ponerAlDiaCuerpo, CUERPO_CADA);
 
   // Cuándo te vio por última vez: tras 6 h sin verte, al volver te da la bienvenida; si llevas días sin entrenar, estaba
-  // dormida y se alegra de verte (D-135).
+  // dormida y se alegra de verte (D-135, la 3); y la primera vez por la mañana, o de noche, se despierta despacio y se
+  // despereza (la 6: recibimiento() de dia.js).
   const verte = () => {
     if (doc.visibilityState !== "visible") return;
     const antes = memoria.leer().vista;
     const t = ahora();
     memoria.anotar((f) => { f.vista = t; });
     ponerAlDiaCuerpo();
-    if (Number.isFinite(antes) && t - antes >= AUSENCIA) cerebro.bienvenida({ dormida: llevasDiasSin(cuerpo) });
+    modo(); // con la hora de ahora
+    const r = recibimiento({ antes, ahora: t, diasSin: llevasDiasSin(cuerpo) });
+    if (r) cerebro.bienvenida(r);
   };
   verte();
   doc.addEventListener("visibilitychange", verte);
@@ -346,6 +350,8 @@ if (esLocal()) {
     // en tu dedo (D-135, la 5) y, si no, en el aire (cayendo de él)
     get cogida() { return Boolean(viva?.cerebro.cogida); },
     get enElAire() { return Boolean(viva?.cerebro.enElAire); },
+    // el ritmo del día que tiene ahora (D-135, la 6): { noche, manana, sueno, siesta, pesos }
+    get ritmo() { return viva?.cerebro.ritmo ?? null; },
     get cuerpo() { return viva?.cuerpo ?? null; },
     ponerAlDiaCuerpo() { viva?.ponerAlDiaCuerpo(); },
     hacer(nombre) { viva?.cerebro.hacer(nombre); },

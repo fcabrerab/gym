@@ -10,8 +10,9 @@
 // de fondo, el bombeo (el de cada músculo y el general, que la marca más) y las agujetas, que se notan poco (alguna vez
 // le duele y se queja; con las piernas cargadas, anda más despacio y salta menos). Y los toques (D-135, la 5): uno suelto
 // espera un momento por si llega otro; dos seguidos, salta de alegría; tres o más, cosquillas; y si la mantienes pulsada,
-// la coges: va de pie en tu dedo, haciendo equilibrios, y al soltarla cae donde toque y se sacude. Qué hace cada pieza y
-// cómo añadir algo, en LEEME.md.
+// la coges: va de pie en tu dedo, haciendo equilibrios, y al soltarla cae donde toque y se sacude. Y el ritmo del día
+// (D-135, la 6; dia.js, que se lo da mascota.js en «ritmo»): de noche, más dormilona; por la mañana, se despereza. Qué
+// hace cada pieza y cómo añadir algo, en LEEME.md.
 import { POSE_BASE, MEDIDAS, mezclar, normalizar, cinematica, lerp, limitar, suave, tramo } from './esqueleto.js';
 import { GESTOS, GRUPOS, CARAS, MUSCULOS, REGIONES, CON_TROFEO, IMITAR } from './gestos.js';
 import { formaVisible, BOMBEO_SERIE, GENERAL_SERIE } from './forma.js';
@@ -25,12 +26,15 @@ const BOMBEO_DURA = 150;  // s que tarda en irse el bombeo (por defecto: en la a
 // Las papeletas de cada cosa en el sorteo de qué hacer (elegir()); su carácter las multiplica (caracter.js).
 // En la app salta más y se queda quieta menos que en el prototipo (D-134: que se mueva entre las tarjetas).
 // «agujetas»: las suyas con las agujetas en su punto (con menos, menos; sin, ninguna). «presumir»: solo con trofeo.
+// «bostezar»: solo de noche (el ritmo del día, dia.js, le da sus papeletas; de día, ninguna).
 export const PESOS = {
   quieto: 2.2, pasear: 3.2, saltar: 2.6, sentarse: 0.8, asomarse: 0.9, desperezarse: 0.4, rascarse: 0.45, mirarte: 0.7, dormir: 2.5,
-  agujetas: 1.1, presumir: 0.9,
+  agujetas: 1.1, presumir: 0.9, bostezar: 0.7,
 };
 // En el modo tranquilo (en el entreno), solo estas: ni pasea ni salta.
-export const TRANQUILAS = new Set(['quieto', 'sentarse', 'asomarse', 'desperezarse', 'rascarse', 'mirarte', 'dormir', 'agujetas', 'presumir']);
+export const TRANQUILAS = new Set(['quieto', 'sentarse', 'asomarse', 'desperezarse', 'rascarse', 'mirarte', 'dormir', 'agujetas', 'presumir', 'bostezar']);
+// El ritmo del día de siempre (dia.js: ritmoDe()): de día, nada cambia.
+const SIN_RITMO = { sueno: 1, siesta: 1, pesos: {} };
 const CALENTAR_CADA = 600; // s: antes de empezar a entrenar, calienta como mucho una vez cada 10 min
 const PASO = 22;          // grados que abre cada pierna al andar
 const DOBLE = 0.35;       // s como mucho entre dos toques para que cuenten seguidos (dos, salta; tres o más, cosquillas)
@@ -75,7 +79,7 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
   const m = {
     t: 0, x: 0, sup: null, ultY: null, perdida: false, desde: null, llegada: 0, fondo: 0.25, general: 0, escala,
     descanso: null, rest: null, carga: 1, flash: -9, destinoSalto: null,
-    pesos: {}, tranquila: false, suenoTras, bombeoDura, trofeo: false, calentado: -1e9, saludar: null, cinta: false,
+    pesos: {}, ritmo: SIN_RITMO, tranquila: false, suenoTras, bombeoDura, trofeo: false, calentado: -1e9, saludar: null, cinta: false,
     sueno: 0, accion: null, cola: [], previa: null, avisado: '',
     musc: Object.fromEntries(Object.keys(MUSCULOS).map((k) => [k, { bombeo: 0, contr: 0, agujetas: 0 }])),
     cara: null,
@@ -404,6 +408,8 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
       },
     };
   }
+  // Lo que duerme cuando le entra sueño: de 12 a 22 s; de noche, más (el ritmo del día, dia.js).
+  const siesta = () => entre(12, 22) * (m.ritmo.siesta || 1);
 
   // Se esconde detrás de su tarjeta, se asoma por el borde, mira a un lado y a otro, y sale de un salto.
   function asomarse() {
@@ -882,13 +888,15 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
       ? { quieto: 0.15, sentarse: 0.1, dormir: 0.05, pasear: 0.8, saltar: 4 * (1 + aburrida) }
       : { saltar: 1 + 2 * aburrida, pasear: 1 + 0.5 * aburrida };
     const aSitio = (acciones) => (incomoda && s.libres?.length ? [caminar(puntoEn(s, null, Infinity, true)), ...acciones] : acciones);
-    const k = (n) => PESOS[n] * (m.pesos[n] ?? 1) * (ganas[n] ?? 1); // sus papeletas, con su carácter
+    // sus papeletas, con su carácter y con la hora (el ritmo del día, dia.js: de noche, más dormilona)
+    const k = (n) => PESOS[n] * (m.pesos[n] ?? 1) * (ganas[n] ?? 1) * (m.ritmo.pesos[n] ?? 1);
     const zona = masDolorida(); // con agujetas, a veces se queja de esa zona; con las piernas cargadas, salta menos
     const opciones = [
       ['quieto', k('quieto')], ['pasear', k('pasear')], ['saltar', salto ? k('saltar') * (1 - 0.6 * dolor('piernas')) : 0],
       ['sentarse', k('sentarse') * (1 + 3 * m.sueno)], ['asomarse', k('asomarse')], ['desperezarse', k('desperezarse')],
       ['rascarse', k('rascarse')], ['mirarte', k('mirarte')], ['dormir', m.sueno > 0.7 ? k('dormir') : 0],
       ['agujetas', zona ? k('agujetas') * dolor(zona) : 0], ['presumir', m.trofeo ? k('presumir') : 0],
+      ['bostezar', m.ritmo.pesos.bostezar ? k('bostezar') : 0],
     ].filter(([n, p]) => p > 0 && (n !== m.previa || n === 'quieto' || n === 'pasear') && (!m.tranquila || TRANQUILAS.has(n)));
     let r = azar() * opciones.reduce((a, [, p]) => a + p, 0);
     let elegida = opciones[0][0];
@@ -902,13 +910,13 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
     switch (elegida) {
       case 'pasear': return [caminar(puntoEn(s))];
       case 'saltar': return [caminar(salto.x0), saltar(salto.s1, salto.x1)];
-      case 'sentarse': return aSitio(m.sueno > 0.55 ? [sentarse(), dormir()] : [sentarse()]);
-      case 'dormir': return aSitio([sentarse(entre(3, 5)), dormir()]);
+      case 'sentarse': return aSitio(m.sueno > 0.55 ? [sentarse(), dormir(siesta())] : [sentarse()]);
+      case 'dormir': return aSitio([sentarse(entre(3, 5)), dormir(siesta())]);
       case 'asomarse': {
         const x = limitar(m.x, s.x1 + 34, s.x2 - 34);
         return Math.abs(x - m.x) < 1 ? [asomarse()] : [caminar(x), asomarse()];
       }
-      case 'desperezarse': case 'rascarse': case 'mirarte': case 'presumir': return [gesto(GESTOS[elegida])];
+      case 'desperezarse': case 'rascarse': case 'mirarte': case 'presumir': case 'bostezar': return [gesto(GESTOS[elegida])];
       case 'agujetas': return aSitio([gesto(GESTOS[REGIONES[zona].gesto])]);
       default: return aSitio([quieto()]);
     }
@@ -928,17 +936,22 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
     if (!m.cola.length) m.cola = autonoma ? elegir() : [quieto(1e9)];
     empezar(m.cola.shift());
   }
-  // Te ve tras un rato sin verte (D-135): te saluda; si llevas días sin entrenar, estaba dormida: se despierta de golpe
-  // y se alegra de verte, sin reproches. En su rincón del entreno o en el descanso, nada.
-  function darBienvenida({ dormida }) {
+  // Te ve tras un rato sin verte (D-135): te saluda. Si llevas días sin entrenar («dormida»), estaba dormida: se
+  // despierta de golpe y se alegra de verte, sin reproches. La primera vez por la mañana, o de noche («despacio»: el
+  // ritmo del día, dia.js), estaba dormida y se despierta despacio: se levanta bostezando y se despereza (y, si llevas
+  // días sin entrenar, luego se alegra). En su rincón del entreno o en el descanso, nada.
+  function darBienvenida({ dormida, despacio }) {
     const s = sup();
     if (!s || s.tipo === 'rincon' || m.descanso) return;
-    if (!dormida) {
+    if (!dormida && !despacio) {
       reaccionar([gesto(GESTOS.saludo), gesto(GESTOS.mirarte)]);
       return;
     }
-    const acciones = [dormir(entre(2.5, 3.5), { alDespertar: null }), gesto(GESTOS.despertar), gesto(GESTOS.alegria),
-      gesto(GESTOS.saludo, { espejo: false }), gesto(GESTOS.mirarte)];
+    const acciones = despacio
+      ? [dormir(entre(2.5, 3.5), { alDespertar: null }), Object.assign(gesto(GESTOS.bostezar, { espejo: false }), { transicion: 0.9 }),
+        gesto(GESTOS.desperezarse), ...(dormida ? [gesto(GESTOS.alegria)] : []), gesto(GESTOS.saludo, { espejo: false })]
+      : [dormir(entre(2.5, 3.5), { alDespertar: null }), gesto(GESTOS.despertar), gesto(GESTOS.alegria),
+        gesto(GESTOS.saludo, { espejo: false }), gesto(GESTOS.mirarte)];
     for (const a of acciones) a.reaccion = true;
     m.cola = acciones.slice(1);
     empezar(acciones[0]);
@@ -962,7 +975,7 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
   // ——— Cada fotograma ———
   function paso(dt) {
     m.t += dt;
-    m.sueno = Math.min(1, m.sueno + dt / m.suenoTras);
+    m.sueno = Math.min(1, m.sueno + dt / (m.suenoTras * (m.ritmo.sueno || 1))); // de noche, le entra antes (dia.js)
     for (const k in m.musc) {
       const s = m.musc[k];
       s.contr = 0;
@@ -1120,9 +1133,12 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
       m.calentado = m.t;
       reaccionar(calentar(grupo, () => m.cinta)); // en cuanto empiezas la sesión (ya lleva su cinta), deja de calentar
     },
-    // Te ve tras un rato sin verte (D-135): «dormida», si llevas días sin entrenar (la bienvenida, en cuanto tenga dónde
-    // ponerse: darBienvenida()).
-    bienvenida({ dormida = false } = {}) { m.saludar = { dormida: Boolean(dormida) }; },
+    // Te ve tras un rato sin verte (D-135): «dormida», si llevas días sin entrenar; «despacio», si se despierta despacio
+    // (la primera vez por la mañana, o de noche: dia.js). La bienvenida, en cuanto tenga dónde ponerse: darBienvenida().
+    bienvenida({ dormida = false, despacio = false } = {}) { m.saludar = { dormida: Boolean(dormida), despacio: Boolean(despacio) }; },
+    // El ritmo del día (D-135, la 6; dia.js: ritmoDe()): { sueno, siesta, pesos }; sin él, lo de siempre.
+    get ritmo() { return m.ritmo; },
+    set ritmo(r) { m.ritmo = r && r.pesos ? r : SIN_RITMO; },
     // Su trofeo (D-135): si hoy has batido una marca entrenando, lo lleva el resto del día.
     get trofeo() { return m.trofeo; },
     set trofeo(v) { m.trofeo = Boolean(v); },

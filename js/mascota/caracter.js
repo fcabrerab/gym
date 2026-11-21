@@ -26,7 +26,7 @@ export function rasgosDe(semilla) {
 
 // Por cuánto multiplica cada cosa de PESOS (cerebro.js): la curiosa pasea y se asoma más; la juguetona salta y te
 // mira más (y presume más de su trofeo); la perezosa se queda quieta, se sienta y se duerme más (y se queja un poco más
-// de las agujetas).
+// de las agujetas, y de noche bosteza más).
 export function pesosDe({ curiosidad = 0.5, pereza = 0.5, juego = 0.5 } = {}) {
   return {
     quieto: 0.7 + 0.6 * pereza,
@@ -40,6 +40,7 @@ export function pesosDe({ curiosidad = 0.5, pereza = 0.5, juego = 0.5 } = {}) {
     dormir: 0.6 + 0.8 * pereza,
     agujetas: 0.8 + 0.4 * pereza,
     presumir: 0.6 + 0.8 * juego,
+    bostezar: 0.6 + 0.8 * pereza,
   };
 }
 

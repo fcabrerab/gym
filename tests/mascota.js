@@ -610,6 +610,57 @@ export async function ejecutar(c) {
     `MA35 cogerla: va de pie en tu dedo (los pies en ${Math.round(px)}, ${Math.round(py)}), se inclina al revés de como la mueves (${inclina.toFixed(1)}°); al soltarla cae en la de debajo (${enB}: ${vistas.slice(0, 3).join(" → ")}) o, sin nada debajo, en la más cercana (${enA}); en el rincón, no se deja`);
   }
 
+  // MA37 El ritmo del día (D-135, la 6; dia.js): cuánto es de noche y por la mañana; de día y con una sesión en marcha,
+  // nada cambia; de noche, más dormilona; y cómo te recibe al verte
+  const dia = await import("/js/mascota/dia.js");
+  {
+    const n = dia.cuantaNoche, ma = dia.cuantaManana;
+    const horas = n(14) === 0 && n(19.5) === 0 && n(21.5) > 0.3 && n(21.5) < 0.7 && n(23.5) === 1 && n(3) === 1 && n(7) > 0 && n(10) === 0
+      && ma(3) === 0 && ma(8) === 1 && ma(11) > 0 && ma(11) < 1 && ma(13) === 0;
+    const noche = dia.ritmoDe(1);
+    const ritmos = dia.ritmoDe(15) === dia.NEUTRO && dia.ritmoDe(1, { conSesion: true }) === dia.NEUTRO && noche.sueno < 0.5
+      && noche.siesta > 1.5 && noche.pesos.saltar < 0.4 && noche.pesos.bostezar > 1 && dia.ritmoDe(8).pesos.desperezarse > 2.5;
+    const r = (antes, ahora, diasSin = false) => JSON.stringify(dia.recibimiento({ antes: antes && ms(antes), ahora: ms(ahora), diasSin }));
+    const casos = {
+      "primera vez por la mañana": [r("2026-11-03T22:00:00", "2026-11-04T07:30:00"), '{"despacio":true,"dormida":false}'],
+      "y con días sin entrenar": [r("2026-11-03T22:00:00", "2026-11-04T07:30:00", true), '{"despacio":true,"dormida":true}'],
+      "ya te vio esta mañana": [r("2026-11-04T06:00:00", "2026-11-04T07:30:00"), "null"],
+      "hace poco, de madrugada": [r("2026-11-04T04:50:00", "2026-11-04T07:00:00"), "null"],
+      "tras 7 h, por la tarde": [r("2026-11-04T08:00:00", "2026-11-04T15:00:00"), '{"despacio":false,"dormida":false}'],
+      "tras 2 h, por la tarde": [r("2026-11-04T13:00:00", "2026-11-04T15:00:00"), "null"],
+      "tras 7 h, de noche": [r("2026-11-04T16:00:00", "2026-11-04T23:30:00"), '{"despacio":true,"dormida":false}'],
+      "la primera vez de todas": [r(null, "2026-11-04T07:30:00"), "null"],
+    };
+    const mal = Object.entries(casos).filter(([, [es, debe]]) => es !== debe).map(([k, [es]]) => `${k}: ${es}`);
+    caso(horas && ritmos && mal.length === 0,
+      `MA37 el ritmo del día: de noche, ${Math.round(100 * (1 - noche.sueno))} % menos para tener sueño y ${Math.round(100 * (noche.siesta - 1))} % más de siesta; de día y entrenando, nada; y cómo te recibe (${Object.keys(casos).length} casos)${mal.length ? `; mal: ${mal.join("; ")}` : ""}`);
+  }
+
+  // MA38 De noche, más dormilona: en 10 min con el mismo azar, duerme más, salta menos y a veces bosteza; de día, nunca
+  // bosteza
+  {
+    const vivirA = (ritmo) => {
+      const m = crearMascota({ superficies: () => [{ id: "a", x1: 20, x2: 380, y: 300 }, { id: "b", x1: 200, x2: 380, y: 520 }], azar: azarDe(9), techo: () => 60 });
+      m.ritmo = ritmo;
+      const r = { dormida: 0, saltos: 0, bostezos: 0 };
+      let antes = "";
+      for (let i = 0; i < 30 * 600; i++) {
+        m.paso(1 / 30);
+        if (m.dormida) r.dormida += 1 / 30;
+        if (m.accion !== antes) {
+          if (/^Salta|^Baja de un salto/.test(m.accion)) r.saltos += 1;
+          if (m.accion === "Bosteza") r.bostezos += 1;
+          antes = m.accion;
+        }
+      }
+      return r;
+    };
+    const deDia = vivirA(dia.ritmoDe(15));
+    const deNoche = vivirA(dia.ritmoDe(1));
+    caso(deNoche.dormida > 1.5 * deDia.dormida && deNoche.saltos < 0.7 * deDia.saltos && deNoche.bostezos >= 2 && deDia.bostezos === 0,
+      `MA38 de noche, más dormilona: dormida ${Math.round(deNoche.dormida)} s (de día, ${Math.round(deDia.dormida)}), ${deNoche.saltos} saltos (de día, ${deDia.saltos}) y ${deNoche.bostezos} bostezos (de día, ${deDia.bostezos})`);
+  }
+
   const preparar = async () => {
     await limpiarBeta();
     guardar("gym-beta-datos", await datosBeta());
@@ -1021,6 +1072,47 @@ export async function ejecutar(c) {
     b.d.getElementById("avisos").hidden = false;
     sinErrores(b, "MA36");
     quitar(b);
+    await limpiarBeta();
+  }
+
+  // MA39 En la app (D-135, la 6): la primera vez por la mañana estaba dormida y se despierta despacio, bostezando, y se
+  // despereza; de noche, más dormilona; y con una sesión en marcha, despierta
+  {
+    const abrir = async (ahora, vista) => {
+      await limpiarBeta();
+      guardar("gym-beta-datos", await datosBeta());
+      guardar("gym-beta-ui", { versionVista: VERSION, versionVistaBeta: VERSION, ayudaSerieVista: true });
+      guardar(memoria.CLAVE, { v: 1, nacida: vista - 20 * DIA, semilla: 7, ajustes: {}, vista, toques: 0 });
+      const b = await cargarBeta({ ahora, canal: "beta" });
+      await hastaQue(() => b.w.__gymMascota?.viva, 200);
+      return b;
+    };
+    const b = await abrir("2026-11-04T07:30:00", ms("2026-11-03T22:00:00"));
+    const m = b.w.__gymMascota;
+    const vistas = [];
+    for (let i = 0; i < 64 && !vistas.includes("Te saluda"); i++) {
+      m.avanzar(0.25);
+      if (vistas[vistas.length - 1] !== m.accion) vistas.push(m.accion);
+    }
+    const manana = m.ritmo?.manana;
+    sinErrores(b, "MA39 (por la mañana)");
+    quitar(b);
+    const donde = (x) => vistas.indexOf(x);
+    caso(vistas[0] === "Duerme" && donde("Bosteza") > 0 && donde("Se despereza") > donde("Bosteza") && donde("Te saluda") > donde("Se despereza") && manana === 1,
+      `MA39 la primera vez por la mañana, estaba dormida y se despierta despacio (${vistas.join(" → ")})`);
+
+    const b2 = await abrir("2026-11-03T23:30:00", ms("2026-11-03T22:30:00"));
+    const m2 = b2.w.__gymMascota;
+    const noche = m2.ritmo?.noche;
+    pulsar(b2.d, "abrir-ejercicio", "pec-deck");
+    await esperar(150);
+    pulsar(b2.d, "serie-hecha", "pec-deck");
+    await esperar(200);
+    m2.avanzar(0.5);
+    const entrenando = m2.ritmo?.noche;
+    sinErrores(b2, "MA39 (de noche)");
+    quitar(b2);
+    caso(noche === 1 && entrenando === 0, `MA39 de noche, más dormilona (cuánta noche: ${noche}); con una sesión en marcha, despierta (${entrenando})`);
     await limpiarBeta();
   }
 
