@@ -321,6 +321,18 @@ export async function ejecutar(c) {
     const otraVez = vive(cal, 3);
     caso(["Calienta los brazos", "Calienta las rodillas", "Calienta el tronco"].every((x) => calienta.includes(x)) && !otraVez.some((x) => /Calienta/.test(x)),
       `MA26 vas a empezar: calienta (${calienta.filter((x) => /Calienta/.test(x)).join(", ")}), como mucho una vez cada 10 min`);
+    // y si a media cosa (un gesto, que no se corta) abres un ejercicio y enseguida apuntas la primera serie (empieza la
+    // sesión: su cinta), no se queda calentando: siente la serie
+    const prisa = nueva();
+    prisa.hacerGesto("rascarse");
+    prisa.paso(1 / 30);
+    prisa.calentarAntes("Pecho");
+    vive(prisa, 0.2);
+    prisa.cinta = true;
+    prisa.serie("Pecho");
+    const conPrisa = vive(prisa, 6);
+    caso(conPrisa.includes("Siente el pecho") && !conPrisa.some((x) => /Calienta/.test(x)),
+      `MA26 si empiezas la sesión mientras iba a calentar, deja de calentar y siente la serie (${conPrisa.slice(0, 3).join(" → ")})`);
     const conTrofeo = nueva();
     conTrofeo.trofeo = true;
     const f = conTrofeo.paso(1 / 30);
@@ -497,6 +509,107 @@ export async function ejecutar(c) {
     `MA19 calienta con movimientos distintos (${[...calentando].join(", ")}) y para al acabar el descanso (luego: ${tras}); y si la app vuelve a pintar su tarjeta, sigue en ella, sin saltos ni fundidos (${m.superficie})`);
   }
 
+  // Para las de los toques: vive «s» segundos y dice qué ha hecho, por orden.
+  const vivirLo = (m, s) => {
+    const vistas = [];
+    for (let i = 0; i < Math.round(s * 30); i++) {
+      m.paso(1 / 30);
+      if (vistas[vistas.length - 1] !== m.accion) vistas.push(m.accion);
+    }
+    return vistas;
+  };
+
+  // MA34 Los toques (D-135, la 5): uno suelto espera un momento por si llega otro (luego, se asusta y te saluda); dos
+  // seguidos, salta de alegría; tres o más, cosquillas; y dormida, el primero la despierta, sin esperar
+  {
+    const nueva = () => {
+      const m = crearMascota({ superficies: () => [{ id: "a", x1: 20, x2: 380, y: 300 }], azar: azarDe(21) });
+      m.hacer("sentarse"); // quieta, para que no se vaya mientras la tocas
+      vivirLo(m, 1);
+      return m;
+    };
+    const tocarVeces = (m, n) => {
+      for (let i = 0; i < n; i++) {
+        m.tocar(...m.cabeza);
+        if (i < n - 1) vivirLo(m, 0.15);
+      }
+    };
+    const uno = nueva();
+    tocarVeces(uno, 1);
+    const enseguida = vivirLo(uno, 0.25);
+    const luego = vivirLo(uno, 2);
+    const dos = nueva();
+    tocarVeces(dos, 2);
+    const conDos = vivirLo(dos, 3);
+    const tres = nueva();
+    tocarVeces(tres, 3);
+    const conTres = vivirLo(tres, 3);
+    const mas = nueva();
+    tocarVeces(mas, 6);
+    const conSeis = vivirLo(mas, 3).filter((x) => x === "Le haces cosquillas").length;
+    const dormida = nueva();
+    dormida.hacer("dormir");
+    vivirLo(dormida, 2);
+    dormida.tocar(...dormida.cabeza);
+    const alDespertar = vivirLo(dormida, 0.1);
+    caso(!enseguida.some((x) => /susto/.test(x)) && luego.includes("¡Qué susto!")
+      && conDos.includes("¡Salta de alegría!") && !conDos.includes("¡Qué susto!")
+      && conTres.includes("Le haces cosquillas") && !conTres.some((x) => /susto|alegría/.test(x)) && conSeis === 1
+      && alDespertar.includes("Se despierta de golpe"),
+    `MA34 un toque espera por si llega otro (luego: ${luego.slice(0, 2).join(" → ")}); dos seguidos: ${conDos.slice(0, 2).join(" → ")}; tres: ${conTres.slice(0, 2).join(" → ")} (con seis, sigue riéndose: ${conSeis} vez); dormida: ${alDespertar[0]}`);
+  }
+
+  // MA35 Cogerla (D-135, la 5): sube a tu dedo y va de pie en él (los pies, donde le dicen); se inclina al revés de como
+  // la mueves; lo que le pase mientras, lo hace después; al soltarla, cae en la superficie de debajo (o, si no hay, en
+  // la más cercana) y se sacude; y en el rincón no se deja coger
+  {
+    let sups = [{ id: "a", x1: 20, x2: 380, y: 300 }, { id: "b", x1: 200, x2: 380, y: 520 }];
+    const m = crearMascota({ superficies: () => sups, azar: azarDe(4) });
+    vivirLo(m, 1);
+    const piesDe = (f) => [f.raiz[0], f.raiz[1] + (f.pose.alto + f.cin.pies) * f.escala];
+    const puede = m.puedeCoger();
+    const cogio = m.coger(150, 200);
+    let f = null;
+    for (let i = 0; i < 12; i++) f = m.paso(1 / 30);
+    const [px, py] = piesDe(f);
+    const enDedo = m.accion === "Va en tu dedo" && m.cogida && m.enElAire && Math.abs(px - 150) < 2 && Math.abs(py - 200) < 2;
+    let inclina = 0;
+    for (let i = 1; i <= 12; i++) {
+      m.llevar(150 + 25 * i, 200); // deprisa, a la derecha
+      f = m.paso(1 / 30);
+      inclina = Math.min(inclina, f.pose.lumbar);
+    }
+    m.serie("Pecho");
+    vivirLo(m, 0.3);
+    const sigue = m.accion === "Va en tu dedo";
+    // vive hasta que hace «nombre» (como mucho, «s» segundos): lo que ha hecho y dónde estaba entonces
+    const hasta = (nombre, s) => {
+      const vistas = [];
+      for (let i = 0; i < s * 30 && m.accion !== nombre; i++) {
+        m.paso(1 / 30);
+        if (vistas[vistas.length - 1] !== m.accion) vistas.push(m.accion);
+      }
+      return { vistas, donde: m.superficie, enElAire: m.enElAire };
+    };
+    m.soltar(300, 380);
+    const tras = hasta("Se sacude", 3);
+    const vistas = [...tras.vistas, ...hasta("Siente el pecho", 4).vistas.slice(1)];
+    const cae = vistas.indexOf("Se cae"), sacude = vistas.indexOf("Se sacude"), pecho = vistas.indexOf("Siente el pecho");
+    const enB = tras.donde;
+    m.coger(...m.cabeza);
+    vivirLo(m, 0.5);
+    m.soltar(10, 600); // nada debajo: a la más cercana
+    const otra = hasta("Se sacude", 3);
+    const arriba = otra.vistas;
+    const enA = otra.donde;
+    sups = [{ id: "rincon", tipo: "rincon", x1: 300, x2: 396, y: 800, c1: 0, c2: 412 }];
+    vivirLo(m, 2);
+    const enRincon = !m.puedeCoger() && !m.coger(340, 700) && !m.cogida;
+    caso(puede && cogio && enDedo && inclina < -5 && sigue && enB === "b" && !tras.enElAire && cae >= 0 && sacude > cae && pecho > sacude
+      && enA === "a" && arriba[0] === "Salta a la tarjeta de arriba" && enRincon,
+    `MA35 cogerla: va de pie en tu dedo (los pies en ${Math.round(px)}, ${Math.round(py)}), se inclina al revés de como la mueves (${inclina.toFixed(1)}°); al soltarla cae en la de debajo (${enB}: ${vistas.slice(0, 3).join(" → ")}) o, sin nada debajo, en la más cercana (${enA}); en el rincón, no se deja`);
+  }
+
   const preparar = async () => {
     await limpiarBeta();
     guardar("gym-beta-datos", await datosBeta());
@@ -543,6 +656,7 @@ export async function ejecutar(c) {
     avisos.hidden = true; // el «Deshacer» de la serie, si cae encima, se llevaría el toque (y está bien)
     const debajo = b.d.elementFromPoint(hx, hy) || b.d.body;
     debajo.dispatchEvent(new b.w.PointerEvent("pointerdown", { bubbles: true, clientX: hx, clientY: hy, isPrimary: true, pointerId: 1 }));
+    debajo.dispatchEvent(new b.w.PointerEvent("pointerup", { bubbles: true, clientX: hx, clientY: hy, isPrimary: true, pointerId: 1 })); // el toque cuenta al levantar el dedo (D-135, la 5)
     debajo.dispatchEvent(new b.w.MouseEvent("click", { bubbles: true, clientX: hx, clientY: hy }));
     b.d.removeEventListener("click", contar, true);
     avisos.hidden = false;
@@ -813,6 +927,99 @@ export async function ejecutar(c) {
     caso(vistas.includes("Siente el pecho") && m.descanso?.grupo === "Pecho",
       `MA33 un ejercicio con el grupo «Chest»: siente el pecho (${[...new Set(vistas)].join(" → ")}) y en el descanso sabe que fue ${m.descanso?.grupo}`);
     sinErrores(b, "MA33");
+    quitar(b);
+    await limpiarBeta();
+  }
+
+  // MA36 En la app (D-135, la 5): mantenerla pulsada la coge, sin el menú del móvil; va en tu dedo, por encima de todo, y
+  // la pantalla no se desplaza; al soltarla cae en lo de debajo y se sacude, y el clic no pulsa lo de debajo; si el dedo
+  // se mueve antes, está desplazando la pantalla: nada; y dos toques seguidos, salta de alegría
+  {
+    await preparar();
+    const b = await cargarBeta({ canal: "beta" });
+    await hastaQue(() => b.w.__gymMascota?.viva, 200);
+    const m = b.w.__gymMascota;
+    m.calcular();
+    m.avanzar(1);
+    const arriba = b.d.getElementById("cabecera").getBoundingClientRect().bottom;
+    const abajo = b.d.getElementById("nav").getBoundingClientRect().top;
+    // quieta (sentada) y un punto de su cuerpo que se vea (bajo la cabecera)
+    const quieta = () => {
+      m.hacer("sentarse");
+      m.avanzar(0.6);
+      const [x, y] = m.cabeza || [0, 0];
+      return [Math.round(x), Math.round(Math.max(y, arriba + 10))];
+    };
+    const lanzar = (tipo, x, y) => {
+      const el = b.d.elementFromPoint(x, y) || b.d.body;
+      const datos = { bubbles: true, cancelable: true, clientX: x, clientY: y };
+      const ev = tipo.startsWith("pointer")
+        ? new b.w.PointerEvent(tipo, { ...datos, isPrimary: true, pointerId: 7, pointerType: "touch", button: 0, buttons: tipo === "pointerup" ? 0 : 1 })
+        : tipo === "click" || tipo === "contextmenu" ? new b.w.MouseEvent(tipo, datos) : new b.w.Event(tipo, datos);
+      el.dispatchEvent(ev);
+      return ev;
+    };
+    b.d.getElementById("avisos").hidden = true;
+    let [x, y] = quieta();
+    const toques0 = leerJson(memoria.CLAVE)?.toques || 0;
+    lanzar("pointerdown", x, y);
+    const sinMenu = lanzar("contextmenu", x, y).defaultPrevented;
+    await esperar(450);
+    const cogida = m.cogida;
+    const dx = Math.round(Math.min(Math.max(x - 110, 60), b.w.innerWidth - 60)), dy = Math.round(Math.min(y + 120, abajo - 30));
+    for (let i = 1; i <= 6; i++) lanzar("pointermove", Math.round(x + ((dx - x) * i) / 6), Math.round(y + ((dy - y) * i) / 6));
+    const sinDesplazar = lanzar("touchmove", dx, dy).defaultPrevented;
+    m.avanzar(0.5);
+    const capa = b.d.querySelector(".mascota-capa");
+    const encima = capa.classList.contains("encima") && b.w.getComputedStyle(capa).position === "fixed" && b.w.getComputedStyle(capa).zIndex === "45";
+    const [cx, cy] = m.cabeza || [0, 0];
+    const enDedo = Math.abs(cx - dx) < 25 && cy < dy - 32;
+    let llega = 0;
+    const contar = () => { llega += 1; };
+    b.d.addEventListener("click", contar, true);
+    lanzar("pointerup", dx, dy);
+    lanzar("click", dx, dy);
+    b.d.removeEventListener("click", contar, true);
+    const vistas = [];
+    for (let i = 0; i < 16 && !vistas.includes("Se sacude"); i++) {
+      m.avanzar(0.2);
+      if (vistas[vistas.length - 1] !== m.accion) vistas.push(m.accion);
+    }
+    const suelta = !m.cogida && /^(tarjeta|abajo)/.test(m.superficie) && !lanzar("touchmove", dx, dy).defaultPrevented;
+    const sumo = (leerJson(memoria.CLAVE)?.toques || 0) - toques0;
+    caso(sinMenu && cogida && sinDesplazar && encima && enDedo && llega === 0 && vistas.includes("Se cae") && vistas.includes("Se sacude") && suelta && sumo === 1,
+      `MA36 mantenerla pulsada la coge (sin el menú del móvil: ${sinMenu}); va en tu dedo, por encima de todo, sin desplazar la pantalla (${sinDesplazar}); al soltarla, ${vistas.join(" → ")} (en ${m.superficie}), y el clic no pulsa lo de debajo`);
+
+    m.avanzar(2);
+    [x, y] = quieta();
+    const toques1 = leerJson(memoria.CLAVE)?.toques || 0;
+    lanzar("pointerdown", x, y);
+    lanzar("pointermove", x, y + 30); // desplaza la pantalla
+    await esperar(450);
+    const noCogida = !m.cogida;
+    lanzar("pointercancel", x, y + 30);
+    const tras = [];
+    for (let i = 0; i < 5; i++) {
+      m.avanzar(0.25);
+      tras.push(m.accion);
+    }
+    caso(noCogida && !tras.some((a) => /susto|saluda|alegría|cosquillas|Choca/i.test(a)) && (leerJson(memoria.CLAVE)?.toques || 0) === toques1,
+      `MA36 si el dedo se mueve antes, está desplazando la pantalla: ni la coge ni es un toque (${[...new Set(tras)].join(", ")})`);
+
+    [x, y] = quieta();
+    for (let i = 0; i < 2; i++) {
+      lanzar("pointerdown", x, y);
+      lanzar("pointerup", x, y);
+      lanzar("click", x, y);
+    }
+    const conDos = [];
+    for (let i = 0; i < 8; i++) {
+      m.avanzar(0.25);
+      conDos.push(m.accion);
+    }
+    caso(conDos.includes("¡Salta de alegría!") && !conDos.includes("¡Qué susto!"), `MA36 dos toques seguidos: salta de alegría (${[...new Set(conDos)].join(" → ")})`);
+    b.d.getElementById("avisos").hidden = false;
+    sinErrores(b, "MA36");
     quitar(b);
     await limpiarBeta();
   }

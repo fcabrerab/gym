@@ -869,6 +869,9 @@ body.con-borrador:not(.con-descanso):not(.con-hoja) .avisos { bottom: calc(var(-
 .mascota-capa { position: fixed; left: 0; top: 0; z-index: 15; pointer-events: none; will-change: transform; }
 .mascota-capa.en-pagina { position: absolute; }
 .mascota-capa[hidden] { display: none; }
+/* En tu dedo o cayendo de él (D-135, la 5): por encima de la cabecera, las barras de abajo y la navegación (30), pero
+   por debajo de las hojas (50) y los avisos (60). */
+.mascota-capa.encima { z-index: 45; }
 /* Su página en Ajustes: el color de cada luz junto a su nombre */
 .opcion-textos { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .muestra-luz { flex: none; width: 18px; height: 18px; border-radius: 50%; }

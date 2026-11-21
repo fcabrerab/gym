@@ -6,7 +6,8 @@
 // - Su lienzo: pequeño y va con ella. Encima de una tarjeta, pegado a la página: al desplazarla va con ella, sin
 //   tirones (lo mueve el navegador, no JavaScript); en la barra de abajo o en el rincón, pegado a la pantalla. Queda
 //   por debajo de la cabecera, las barras de abajo, las hojas y los avisos: lo que pasa por detrás de ellos se tapa.
-// - Los toques: si la tocas a ella, el toque es suyo (no pulsa lo que haya debajo); si no, solo mira hacia allí.
+// - Los toques: si la tocas a ella, el toque es suyo (no pulsa lo que haya debajo); si no, solo mira hacia allí. Si la
+//   mantienes pulsada, la coges (D-135, la 5): mientras la llevas, va por encima de todo y la pantalla no se desplaza.
 // No decide qué hace (eso es el cerebro) y nunca toca la app: solo la mira.
 
 // Las tarjetas de la app y las cosas con caja donde puede ponerse (también una dentro de otra).
@@ -20,6 +21,13 @@ const TAPAN = ".capa-hoja, .capa-fin, .avisos, .nav, .cabecera, .barra-descanso,
 const AIRE = 6;        // px entre ella y lo que no tapa
 const RINCON = 96;     // px de ancho del rincón
 const DESPLAZAR = 280; // ms quieta la pantalla antes de volver a mirar dónde hay sitio
+// Cogerla (D-135, la 5), como el arrastre de Rutina (js/ui/arrastre.js):
+const MS_COGER = 350;       // ms con el dedo quieto en ella para cogerla (antes de que el móvil saque su menú)
+const TOLERANCIA_DEDO = 10; // px: si el dedo se mueve más antes, está desplazando la pantalla: no es para ella
+const UMBRAL_RATON = 6;     // px: con el ratón, moverla así con el botón pulsado ya la coge
+const ALZAR_DEDO = 32;      // px por encima del dedo van sus pies, para que el dedo no la tape
+const ALZAR_RATON = 4;      // con el ratón, casi en la punta de la flecha
+const MS_SIN_CLIC = 600;    // tras soltar el dedo, el clic que llegue no pulsa lo de debajo
 
 // ¿Se ve la caja de este control (fondo, borde o sombra), o solo lo que lleva dentro? Las imágenes y los campos, siempre.
 function conCaja(el) {
@@ -123,6 +131,7 @@ export function crearEscenario({ doc = document, win = window, alto, anchoMin = 
   let dpr = 1;
   let colocado = null;
   let enPagina = false;
+  let porEncima = false;
   let evitar = null; // un selector: lo que no tapar (en el descanso, el ejercicio abierto)
   let alCalcular = () => {};
   const quitar = [];
@@ -210,38 +219,118 @@ export function crearEscenario({ doc = document, win = window, alto, anchoMin = 
   }, 2000);
   quitar.push(() => win.clearInterval(cada), () => win.clearTimeout(pendiente), () => win.clearTimeout(desplazando));
 
-  // Los toques: contiene(x, y) dice si es en ella; tocar(x, y), que la han tocado; mirar(x, y), que mire hacia allí.
-  function escucharToques({ contiene, tocar, mirar }) {
-    let tocada = -1;
+  // Los toques. contiene(x, y): si es en ella. Un toque corto en ella: tocar(x, y); en otro sitio: mirar(x, y).
+  // Mantenerla pulsada (MS_COGER sin mover el dedo; con el ratón, también moverla) la coge, si puedeCoger(): coger(x, y)
+  // (false si no la coge), llevar(x, y) mientras la llevas y soltar(x, y) al soltarla, con (x, y) donde van sus pies: por
+  // encima del dedo, para que no la tape, y dentro de la pantalla. Si el dedo se mueve antes, está desplazando la
+  // pantalla: ni toque ni nada. Lo que empezó en ella no pulsa lo de debajo, y mientras dura no sale el menú del móvil
+  // ni se selecciona texto; mientras la llevas, la pantalla no se desplaza.
+  function escucharToques({ contiene, tocar, mirar, puedeCoger = () => false, coger = () => false, llevar = () => {}, soltar = () => {} }) {
+    // el dedo que empezó en ella: { id, x, y (donde bajó), ux, uy (donde está), raton, alzar, reloj, fase }; la fase:
+    // «pulsada» (aún puede ser un toque o cogerla), «cogida», «larga» (pulsada donde no se puede coger) o «nada» (se
+    // movió: desplaza la pantalla)
+    let toque = null;
+    let comer = -1; // hasta cuándo el clic que llegue es suyo (mientras dura el toque, siempre)
+    const pies = (x, y, alzar) => [
+      Math.min(Math.max(x, 14), win.innerWidth - 14),
+      Math.min(Math.max(y - alzar, alto()), win.innerHeight - 4),
+    ];
+    const levantar = () => {
+      const t = toque;
+      if (!t || t.fase !== "pulsada") return;
+      win.clearTimeout(t.reloj);
+      t.fase = puedeCoger() && coger(...pies(t.ux, t.uy, t.alzar)) !== false ? "cogida" : "larga";
+    };
+    // Se acaba el toque: un toque corto, para ella; si la llevabas, la suelta donde esté el dedo.
+    const acabar = (ts, valeToque) => {
+      const t = toque;
+      toque = null;
+      if (!t) return;
+      win.clearTimeout(t.reloj);
+      comer = ts + MS_SIN_CLIC;
+      if (t.fase === "cogida") soltar(...pies(t.ux, t.uy, t.alzar));
+      else if (t.fase === "pulsada" && valeToque) tocar(t.x, t.y);
+    };
+    const ahora = () => win.performance.now();
     const alBajar = (ev) => {
-      if (!ev.isPrimary || lienzo.hidden) return;
+      if (!ev.isPrimary) return;
+      if (toque) acabar(ahora(), false); // el de antes no acabó bien (se soltó fuera de la ventana)
+      comer = -1;
+      if (lienzo.hidden || ev.button > 0) return;
       const x = ev.clientX;
       const y = ev.clientY;
       const tapa = doc.elementFromPoint(x, y)?.closest?.(TAPAN);
-      if (!tapa && y > region.y1 && y < region.y2 && contiene(x, y)) {
-        tocada = ev.timeStamp;
-        tocar(x, y);
-      } else {
-        tocada = -1;
+      if (tapa || y <= region.y1 || y >= region.y2 || !contiene(x, y)) {
         mirar(x, y);
+        return;
+      }
+      const raton = ev.pointerType === "mouse";
+      toque = { id: ev.pointerId, x, y, ux: x, uy: y, raton, alzar: raton ? ALZAR_RATON : ALZAR_DEDO, reloj: 0, fase: "pulsada" };
+      toque.reloj = win.setTimeout(levantar, MS_COGER);
+      comer = Infinity;
+    };
+    const alMover = (ev) => {
+      const t = toque;
+      if (!t || ev.pointerId !== t.id) return;
+      t.ux = ev.clientX;
+      t.uy = ev.clientY;
+      if (t.fase === "cogida") {
+        if (t.raton && !(ev.buttons & 1)) acabar(ev.timeStamp, false); // soltó el botón fuera de la ventana
+        else llevar(...pies(t.ux, t.uy, t.alzar));
+        return;
+      }
+      if (t.fase !== "pulsada") return;
+      const d = Math.hypot(t.ux - t.x, t.uy - t.y);
+      if (t.raton ? d < UMBRAL_RATON : d <= TOLERANCIA_DEDO) return;
+      if (t.raton) levantar(); // con el ratón, moverla ya la coge
+      else {
+        win.clearTimeout(t.reloj);
+        t.fase = "nada"; // desplaza la pantalla: no es para ella
       }
     };
-    // El toque que fue para ella no pulsa lo que haya debajo.
+    const alSubir = (ev) => {
+      if (toque && ev.pointerId === toque.id) acabar(ev.timeStamp, true);
+    };
+    const alCancelar = (ev) => {
+      if (toque && ev.pointerId === toque.id) acabar(ev.timeStamp, false);
+    };
+    // El toque que fue para ella no pulsa lo que haya debajo (ni el clic de soltarla, con el ratón).
     const alPulsar = (ev) => {
-      if (tocada >= 0 && ev.timeStamp - tocada < 800) {
-        ev.preventDefault();
-        ev.stopPropagation();
-      }
-      tocada = -1;
+      if (ev.timeStamp > comer) return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      if (!toque) comer = -1;
     };
-    const alCancelar = () => { tocada = -1; };
-    win.addEventListener("pointerdown", alBajar, { capture: true, passive: true });
-    win.addEventListener("click", alPulsar, { capture: true });
-    win.addEventListener("pointercancel", alCancelar, { capture: true, passive: true });
+    // Mientras la llevas, el dedo no desplaza la pantalla. Tiene que estar puesto desde antes de tocar (si no, el
+    // navegador ya no deja pararlo), así que está siempre, pero solo para algo mientras la llevas.
+    const alArrastrar = (ev) => {
+      if (toque?.fase === "cogida" && ev.cancelable) ev.preventDefault();
+    };
+    // Ni el menú del móvil (mantener pulsado), ni seleccionar el texto de debajo, ni arrastrar una imagen.
+    const sinMenu = (ev) => {
+      if (toque && toque.fase !== "nada") ev.preventDefault();
+    };
+    // Si la app se va (otra app, la pantalla apagada) con ella en el dedo, la suelta.
+    const alIrse = () => {
+      if (toque?.fase === "cogida") acabar(ahora(), false);
+    };
+    const escuchas = [
+      [win, "pointerdown", alBajar, { capture: true, passive: true }],
+      [win, "pointermove", alMover, { capture: true, passive: true }],
+      [win, "pointerup", alSubir, { capture: true, passive: true }],
+      [win, "pointercancel", alCancelar, { capture: true, passive: true }],
+      [win, "click", alPulsar, { capture: true }],
+      [win, "touchmove", alArrastrar, { capture: true, passive: false }],
+      [win, "contextmenu", sinMenu, { capture: true }],
+      [win, "dragstart", sinMenu, { capture: true }],
+      [doc, "selectstart", sinMenu, { capture: true }],
+      [win, "blur", alIrse, false],
+      [doc, "visibilitychange", alIrse, false],
+    ];
+    for (const [donde, tipo, fn, opciones] of escuchas) donde.addEventListener(tipo, fn, opciones);
     quitar.push(() => {
-      win.removeEventListener("pointerdown", alBajar, { capture: true });
-      win.removeEventListener("click", alPulsar, { capture: true });
-      win.removeEventListener("pointercancel", alCancelar, { capture: true });
+      if (toque) win.clearTimeout(toque.reloj);
+      for (const [donde, tipo, fn, opciones] of escuchas) donde.removeEventListener(tipo, fn, opciones);
     });
   }
 
@@ -257,8 +346,13 @@ export function crearEscenario({ doc = document, win = window, alto, anchoMin = 
     traje.medidas(l, l, r);
   }
   // Pone el lienzo donde está ella (centrado en su cuerpo): pegado a la página (en una tarjeta) o a la pantalla (en la
-  // barra de abajo o en el rincón). Devuelve dónde cae su esquina, en px de la ventana.
-  function colocar(f, { pegadaAPagina = true } = {}) {
+  // barra de abajo, en el rincón o en tu dedo); con «encima» (en tu dedo o cayendo de él), por encima de la cabecera y
+  // de las barras de abajo. Devuelve dónde cae su esquina, en px de la ventana.
+  function colocar(f, { pegadaAPagina = true, encima = false } = {}) {
+    if (encima !== porEncima) {
+      porEncima = encima;
+      lienzo.classList.toggle("encima", encima);
+    }
     let x0 = Infinity;
     let y0 = Infinity;
     let x1 = -Infinity;

@@ -94,7 +94,8 @@ export function pintarPaginaMascota(contenedor) {
     seccion("En el entreno", opciones(ENTRENO, a.entreno, "mascota-entreno", "En el entreno", { desactivadas: fija })),
     seccionForma(f),
     seccion("Cómo es",
-      ayuda("Su carácter le viene de nacimiento: cuánto pasea, se asoma, juega o se duerme. No habla ni te manda mensajes: mira, siente cada serie (ese músculo se le enciende un rato) y celebra tus marcas. Tócala y verás."),
+      ayuda("Su carácter le viene de nacimiento: cuánto pasea, se asoma, juega o se duerme. No habla ni te manda mensajes: mira, siente cada serie (ese músculo se le enciende un rato) y celebra tus marcas."),
+      ayuda("Tócala: con un toque se asusta y te saluda (en el descanso, choca los cinco); con dos seguidos, salta de alegría; con tres o más, le haces cosquillas. Y si la mantienes pulsada, se sube a tu dedo: llévala adonde quieras y, al soltarla, cae en lo que haya debajo y se sacude. Mientras entrenas, en su rincón, no se deja coger."),
       h("p", { class: "linea-dato" }, `Nació el ${fechaConAnio(f.nacida)}. La has tocado ${toques}.`),
       ayuda("Vive en este móvil, en una ficha suya, aparte de tus datos: nunca los cambia. Su ficha va también en tus copias («Exportar datos» y la del PC): al cargar una, vuelve ella, con su nombre y su carácter."))));
 }

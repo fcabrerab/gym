@@ -8,8 +8,10 @@
 // entre tramos libres de las tarjetas (no solo de borde a borde), un techo para la cabeza y qué hacer si su superficie
 // se va de la pantalla. Y su cuerpo, de tus entrenos (la fase 2: forma.js, que se lo da con ponerCuerpo()): la forma
 // de fondo, el bombeo (el de cada músculo y el general, que la marca más) y las agujetas, que se notan poco (alguna vez
-// le duele y se queja; con las piernas cargadas, anda más despacio y salta menos). Qué hace cada pieza y cómo añadir
-// algo, en LEEME.md.
+// le duele y se queja; con las piernas cargadas, anda más despacio y salta menos). Y los toques (D-135, la 5): uno suelto
+// espera un momento por si llega otro; dos seguidos, salta de alegría; tres o más, cosquillas; y si la mantienes pulsada,
+// la coges: va de pie en tu dedo, haciendo equilibrios, y al soltarla cae donde toque y se sacude. Qué hace cada pieza y
+// cómo añadir algo, en LEEME.md.
 import { POSE_BASE, MEDIDAS, mezclar, normalizar, cinematica, lerp, limitar, suave, tramo } from './esqueleto.js';
 import { GESTOS, GRUPOS, CARAS, MUSCULOS, REGIONES, CON_TROFEO, IMITAR } from './gestos.js';
 import { formaVisible, BOMBEO_SERIE, GENERAL_SERIE } from './forma.js';
@@ -31,6 +33,8 @@ export const PESOS = {
 export const TRANQUILAS = new Set(['quieto', 'sentarse', 'asomarse', 'desperezarse', 'rascarse', 'mirarte', 'dormir', 'agujetas', 'presumir']);
 const CALENTAR_CADA = 600; // s: antes de empezar a entrenar, calienta como mucho una vez cada 10 min
 const PASO = 22;          // grados que abre cada pierna al andar
+const DOBLE = 0.35;       // s como mucho entre dos toques para que cuenten seguidos (dos, salta; tres o más, cosquillas)
+const GRAVEDAD = 2600;    // px por segundo al cuadrado, al caer de tu dedo
 
 // La cara se enciende como un tubo de neón (parpadea y se queda) y se apaga igual.
 const ENCENDER = [[0, 0], [0.04, 0.85], [0.08, 0.2], [0.13, 0.95], [0.18, 0.5], [0.24, 1]];
@@ -82,7 +86,9 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
     trans: null,
     ultimo: null,
     destello: 0,
-    toques: [],
+    rafaga: null,    // los toques seguidos: { n, ultimo }
+    pendiente: null, // lo que hará con ellos si no llega otro: { n, cuando }
+    cogida: null,    // si la llevas en el dedo: { x, y }, donde van sus pies
   };
 
   // ——— Dónde está ———
@@ -551,7 +557,7 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
   }
   // Calienta para el siguiente ejercicio, un movimiento tras otro (los brazos, las rodillas, el tronco), y ese músculo
   // se le enciende a ratos. Cada movimiento para en cuanto ya no toca calentar («sobra»: en el descanso, calentarSobra;
-  // antes de empezar a entrenar, nunca: hace los tres).
+  // antes de empezar a entrenar, cuando empiezas la sesión; si no, hace los tres).
   function calentar(grupo, sobra = calentarSobra) {
     const musculos = GRUPOS[grupo]?.musculos || [];
     const W = 2 * Math.PI;
@@ -689,6 +695,174 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
     };
   }
 
+  // ——— Los toques (D-135, la 5) ———
+  // Un toque en ella: uno suelto espera DOBLE s por si llega otro (unToque()); dos seguidos, salta de alegría; tres o más,
+  // cosquillas, mientras sigas. Dormida, el primero la despierta y te saluda, sin esperar.
+  function tocarla() {
+    if (m.cogida) return;
+    const r = m.rafaga && m.t - m.rafaga.ultimo <= DOBLE ? m.rafaga : (m.rafaga = { n: 0, ultimo: 0 });
+    r.n += 1;
+    r.ultimo = m.t;
+    if (r.n >= 3) {
+      m.pendiente = null;
+      hacerCosquillas();
+    } else if (r.n === 1 && m.accion?.dormida) {
+      m.pendiente = null;
+      reaccionar([gesto(GESTOS.saludo)]);
+    } else m.pendiente = { n: r.n, cuando: m.t + DOBLE };
+  }
+  // Un toque suelto: se asusta, te saluda y se aparta, para no quedarse tapando lo que querías tocar; en el descanso,
+  // choca los cinco.
+  function unToque() {
+    if (m.descanso) {
+      reaccionar([gesto(GESTOS.chocar)]);
+      return;
+    }
+    reaccionar([gesto(GESTOS.susto), gesto(GESTOS.saludo)]);
+    const s = sup();
+    if (!m.tranquila && s && s.tipo !== 'rincon') {
+      const p = planearSalto();
+      const lejos = m.x < (s.x1 + s.x2) / 2 ? s.x2 : s.x1;
+      const irse = p ? [caminar(p.x0), saltar(p.s1, p.x1)] : [caminar(puntoEn(s, lejos, 120))];
+      for (const a of irse) a.reaccion = true;
+      m.cola.push(...irse);
+    }
+  }
+  // Tres toques o más: cosquillas. Si ya se está riendo, sigue (sin volver a empezar el gesto).
+  function hacerCosquillas() {
+    const a = m.accion, nombre = GESTOS.cosquillas.nombre;
+    if (a?.nombre === nombre && !a.hecha) {
+      a.t = Math.min(a.t, 0.4);
+      if (m.cara?.nombre === 'risa') m.cara.dur = m.t - m.cara.t0 + 1.3;
+      else ponerCara('risa', 1.4);
+      return;
+    }
+    if (m.cola.some((x) => x.nombre === nombre)) return;
+    reaccionar([gesto(GESTOS.cosquillas)]);
+  }
+
+  // ——— Cogerla (D-135, la 5) ———
+  // La llevas: de pie en la punta de tu dedo (sus pies, en el punto que le dan: un poco por encima del dedo, para que no
+  // la tape), haciendo equilibrios. Se inclina al revés de como la mueves, como de pie en un autobús que arranca, con los
+  // brazos abiertos, que agita si vas rápido; al parar, se balancea un poco y se endereza. Al cogerla, sube de un saltito
+  // hasta tu dedo. No se acaba sola: la acaba soltar().
+  function llevada() {
+    let px = 0, py = 0, x0 = 0, y0 = 0, vx = 0, vy = 0, lado = 0, vlado = 0, agite = 0;
+    return {
+      nombre: 'Va en tu dedo', t: 0, interrumpible: false, cogida: true, transicion: 0.12,
+      alEmpezar() {
+        px = m.cogida.x;
+        py = m.cogida.y;
+        // desde donde tiene los pies ahora
+        const f = m.ultimo;
+        x0 = f ? f.raiz[0] : px;
+        y0 = f ? f.raiz[1] + (f.pose.alto + f.cin.pies) * m.escala : py;
+        ponerCara('sorpresa', 0.8);
+      },
+      actualizar(dt) {
+        const t = (this.t += dt);
+        const c = m.cogida || { x: px, y: py };
+        if (dt > 0) {
+          const k = Math.min(1, dt * 12);
+          vx = lerp(vx, (c.x - px) / dt, k);
+          vy = lerp(vy, (c.y - py) / dt, k);
+        }
+        px = c.x;
+        py = c.y;
+        // como un muelle: se inclina al revés de como la mueves y, al parar, se balancea hasta enderezarse
+        vlado += (90 * (limitar(-0.03 * vx, -26, 26) - lado) - 9 * vlado) * dt;
+        lado = limitar(lado + vlado * dt, -34, 34);
+        const rapido = Math.min(1, Math.hypot(vx, vy) / 900);
+        agite = lerp(agite, rapido, Math.min(1, dt * 5));
+        if (rapido > 0.25) mirarCara(4 * Math.sign(vx), 0.6 * Math.sign(vy), 0.25); // mira adónde la llevas
+        else if (m.t > m.mirada.hasta) mirarCara(0, 0, 0.4);                        // y si no, a ti
+        // al cogerla, sube de un saltito hasta tu dedo
+        const u = Math.min(1, t / 0.24);
+        const x = lerp(x0, c.x, suave(u)), y = lerp(y0, c.y, suave(u)) - 16 * Math.sin(Math.PI * u);
+        const w = Math.sin(m.t * 15) * agite, b = Math.sin(m.t * 3.3) * (1 - agite);
+        const doblar = 14 + 12 * agite;
+        return {
+          pose: {
+            ...POSE_BASE, lumbar: 0.55 * lado, pecho: 0.35 * lado, cabeza: -0.3 * lado,
+            brazoI: 80 + 8 * b + 34 * w - 0.5 * lado, brazoD: 80 - 8 * b - 34 * w + 0.5 * lado,
+            codoI: 16, codoD: 16, brazoAdI: 8, brazoAdD: 8, codoAdI: 6, codoAdD: 6,
+            musloI: 1, musloD: 1, musloAdI: 8, musloAdD: 8, rodillaAdI: -doblar, rodillaAdD: -doblar,
+            estirar: limitar(0.00004 * vy, -0.04, 0.04),
+          },
+          apoyo: 'pies', x, y, cara: rapido > 0.45 ? 'risa' : 'contenta',
+        };
+      },
+      get hecha() { return false; },
+    };
+  }
+  // Donde cae si la sueltas con los pies en (x, y): la primera superficie de debajo; si no hay ninguna, la más cercana.
+  function dondeCae(x, y) {
+    let mejor = null, d0 = Infinity;
+    for (const s of lista()) {
+      const dy = s.y - y;
+      const d = x >= s.x1 - 4 && x <= s.x2 + 4 && dy >= -6 ? dy : 1e4 + Math.abs(dy) + 2 * Math.abs(limitar(x, s.x1, s.x2) - x);
+      if (d < d0) {
+        d0 = d;
+        mejor = s;
+      }
+    }
+    return mejor;
+  }
+  // Al soltarla: cae hasta su superficie, cada vez más deprisa, con los brazos arriba y pataleando (si está más arriba,
+  // salta hasta ella); aterriza agachándose y, si caía de alto, rebota un poco (en el modo tranquilo, sin rebote).
+  function caer(destino, x1, desde) {
+    const ATERRIZA = 0.22, REBOTE = 0.34;
+    let y1 = destino.y, vuelo = 0, sube = false, rebote = 0, cima = 0;
+    return {
+      nombre: 'Se cae', t: 0, interrumpible: false, cayendo: true, transicion: 0.08,
+      alEmpezar() {
+        m.sup = destino.id;
+        m.x = x1;
+        m.ultY = destino.y;
+        m.llegada = m.t;
+        m.perdida = false;
+        m.desde = null;
+        m.destinoSalto = null;
+        const h = y1 - desde.y;
+        sube = h < -4;
+        vuelo = sube ? 0.42 : limitar(Math.sqrt((2 * Math.max(0, h)) / GRAVEDAD), 0.1, 0.85);
+        rebote = sube || m.tranquila ? 0 : 18 * tramo(h, 40, 320);
+        cima = Math.min(desde.y, y1) - 24;
+        if (sube) this.nombre = 'Salta a la tarjeta de arriba';
+      },
+      actualizar(dt) {
+        const t = (this.t += dt);
+        const d = lista().find((s) => s.id === destino.id); // si se desplaza la pantalla mientras cae, va con ella
+        if (d) y1 = d.y;
+        if (t < vuelo) {
+          const u = t / vuelo;
+          const y = sube ? lerp(desde.y, y1, u) - 4 * ((desde.y + y1) / 2 - cima) * u * (1 - u) : lerp(desde.y, y1, u * u);
+          const p = Math.sin(t * 24);
+          mirarCara(0, 2.6, 0.2); // mira adónde cae
+          return {
+            pose: {
+              ...POSE_BASE, brazoI: 150, brazoD: 150, codoI: 24, codoD: 24, codoAdI: 0, codoAdD: 0,
+              musloAdI: 34 + 26 * p, rodillaAdI: -44 - 26 * Math.max(0, p), musloAdD: 34 - 26 * p, rodillaAdD: -44 - 26 * Math.max(0, -p),
+              estirar: 0.03,
+            },
+            apoyo: 'pies', x: lerp(desde.x, x1, suave(u)), y, cara: 'sorpresa',
+          };
+        }
+        const e = t - vuelo;
+        const k = e < ATERRIZA ? Math.sin((Math.PI * e) / ATERRIZA) : 0; // se agacha al tocar el suelo
+        const r = rebote && e >= ATERRIZA ? Math.sin(Math.PI * Math.min(1, (e - ATERRIZA) / REBOTE)) : 0;
+        return {
+          pose: {
+            ...POSE_BASE, inclinar: 16 * k, musloAdI: 44 * k, rodillaAdI: -4 - 74 * k, musloAdD: 44 * k, rodillaAdD: -4 - 74 * k,
+            brazoI: 10 + 40 * k + 60 * r, brazoD: 10 + 40 * k + 60 * r, estirar: -0.06 * k + 0.04 * r, alto: rebote * r,
+          },
+          apoyo: 'pies', x: x1, y: y1, cara: k > 0.2 ? 'sorpresa' : null,
+        };
+      },
+      get hecha() { return vuelo > 0 && this.t >= vuelo + ATERRIZA + (rebote ? REBOTE : 0); },
+    };
+  }
+
   // ——— Qué hacer ahora ———
   function elegir() {
     const s = sup();
@@ -798,11 +972,20 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
     m.destello = 0;
     ponerAlDiaDescanso(dt);
     if (!sup()) return null;
-    if (m.saludar) {
+    // los toques: si ya no llega otro, lo que toca (uno suelto o dos seguidos)
+    if (m.pendiente && m.t >= m.pendiente.cuando) {
+      const n = m.pendiente.n;
+      m.pendiente = null;
+      if (!m.cogida) {
+        if (n >= 2) reaccionar([gesto(GESTOS.saltoAlegria)]);
+        else unToque();
+      }
+    }
+    if (m.saludar && !m.cogida) {
       darBienvenida(m.saludar); // ya tiene dónde ponerse
       m.saludar = null;
     }
-    if (m.perdida) {
+    if (m.perdida && !m.cogida) { // en tu dedo, da igual: al soltarla, cae donde toque
       // Su superficie se fue. Si estaba cerca, salta desde donde estaba hasta la nueva; si no (o si estaba sintiendo
       // algo), aparece allí fundiéndose. Lo que tenía pensado era para la otra.
       m.perdida = false;
@@ -935,7 +1118,7 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
     calentarAntes(grupo) {
       if (m.t - m.calentado < CALENTAR_CADA || sup()?.tipo === 'rincon') return;
       m.calentado = m.t;
-      reaccionar(calentar(grupo, () => false));
+      reaccionar(calentar(grupo, () => m.cinta)); // en cuanto empiezas la sesión (ya lleva su cinta), deja de calentar
     },
     // Te ve tras un rato sin verte (D-135): «dormida», si llevas días sin entrenar (la bienvenida, en cuanto tenga dónde
     // ponerse: darBienvenida()).
@@ -946,7 +1129,7 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
     // Su cinta (D-135, la 4): la lleva mientras hay una sesión en marcha.
     get cinta() { return m.cinta; },
     set cinta(v) { m.cinta = Boolean(v); },
-    // Un toque en el escenario: si es en ella, reacciona; si no, mira hacia allí (y a veces se acerca).
+    // Un toque en el escenario: si es en ella, reacciona (tocarla()); si no, mira hacia allí (y a veces se acerca).
     tocar(px, py) {
       if (!api.contiene(px, py)) {
         mirarPunto(px, py);
@@ -957,25 +1140,52 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
         }
         return false;
       }
-      m.toques = m.toques.filter((t) => m.t - t < 3);
-      m.toques.push(m.t);
-      if (m.accion?.dormida) reaccionar([gesto(GESTOS.saludo)]);
-      else if (m.toques.length >= 2) reaccionar([gesto(GESTOS.cosquillas)]);
-      else if (m.descanso) reaccionar([gesto(GESTOS.chocar)]); // en el descanso, choca los cinco
-      else {
-        reaccionar([gesto(GESTOS.susto), gesto(GESTOS.saludo)]);
-        // y se aparta: así no se queda tapando lo que querías tocar
-        const s = sup();
-        if (!m.tranquila && s && s.tipo !== 'rincon') {
-          const p = planearSalto();
-          const lejos = m.x < (s.x1 + s.x2) / 2 ? s.x2 : s.x1;
-          const irse = p ? [caminar(p.x0), saltar(p.s1, p.x1)] : [caminar(puntoEn(s, lejos, 120))];
-          for (const a of irse) a.reaccion = true;
-          m.cola.push(...irse);
-        }
-      }
+      tocarla();
       return true;
     },
+    // Un toque que ya se sabe que es en ella (el escenario lo miró al bajar el dedo): uno suelto, dos o tres seguidos…
+    tocarla,
+    // Cogerla (D-135, la 5): ¿se puede ahora? (en el rincón del entreno, no). coger(x, y): sube a tu dedo, con los pies
+    // en (x, y), y dice si la ha cogido; llevar(x, y): adonde va tu dedo; soltar(x, y): cae en la superficie de debajo
+    // (o en la más cercana), se sacude y sigue con lo suyo (y con lo que le haya pasado mientras la llevabas).
+    puedeCoger() {
+      const s = sup();
+      return Boolean(m.ultimo && s && s.tipo !== 'rincon');
+    },
+    coger(px, py) {
+      if (!Number.isFinite(px) || !Number.isFinite(py) || !api.puedeCoger()) return false;
+      m.pendiente = null;
+      m.rafaga = null;
+      m.sueno = 0;
+      m.destinoSalto = null;
+      m.cogida = { x: px, y: py };
+      m.cola = [];
+      empezar(llevada());
+      return true;
+    },
+    llevar(px, py) {
+      if (!m.cogida || !Number.isFinite(px) || !Number.isFinite(py)) return;
+      m.cogida.x = px;
+      m.cogida.y = py;
+    },
+    soltar(px, py) {
+      if (!m.cogida) return;
+      const x = Number.isFinite(px) ? px : m.cogida.x, y = Number.isFinite(py) ? py : m.cogida.y;
+      m.cogida = null;
+      const pendientes = m.cola.filter((a) => a.reaccion && !a.hecha); // lo que le pasó mientras la llevabas
+      const s = dondeCae(x, y);
+      if (!s) {
+        m.cola = pendientes;
+        m.accion = null;
+        return;
+      }
+      const x1 = s.x2 - s.x1 < 2 * MARGEN ? (s.x1 + s.x2) / 2 : limitar(x, s.x1 + MARGEN, s.x2 - MARGEN);
+      m.cola = [gesto(GESTOS.sacudirse), ...pendientes];
+      empezar(caer(s, x1, { x, y }));
+    },
+    // ¿La llevas en el dedo? ¿Y en el aire (en tu dedo o cayendo de él)? Entonces el escenario la pone por encima de todo.
+    get cogida() { return Boolean(m.cogida); },
+    get enElAire() { return Boolean(m.cogida || (m.accion?.cayendo && !m.accion.hecha)); },
     contiene(px, py) {
       const f = m.ultimo;
       if (!f) return false;
