@@ -1,12 +1,20 @@
 // Versión de la app. La misma VERSION está en ../sw.js y en la meta «gym-beta-version» de ../index.html: cada
 // cambio en un archivo de la app obliga a subirla en los tres sitios (una prueba de tests/ comprueba que coinciden).
 // Hasta la 0.2.10 fue la beta, en beta/; desde la 1.0.0, es la app, en la dirección de siempre (D-121).
-export const VERSION = "1.3.8";
+export const VERSION = "1.3.9";
 export const FECHA_VERSION = "2026-11-21";
 
 // Novedades por versión, de la más nueva a la más vieja. Se enseñan en Ajustes → La app → Novedades y, la primera
 // vez, en «Qué tiene de nuevo».
 export const NOVEDADES = [
+  {
+    version: "1.3.9",
+    fecha: "2026-11-21",
+    cambios: [
+      "La mascota tiene su ritmo del día, con la hora de tu móvil: de noche está más dormilona (bosteza, se sienta y se duerme antes y más rato) y por la mañana, la primera vez que te ve, estaba dormida: se despierta despacio, bostezando, y se despereza antes de saludarte.",
+      "Mientras entrenas, siempre despierta, contigo.",
+    ],
+  },
   {
     version: "1.3.8",
     fecha: "2026-11-21",

@@ -455,6 +455,17 @@ export const GESTOS = {
     mirar: [[0.2, 2.2, 0, 0]],
     cara: [[0.9, 'tierna', 1.1]],
   },
+  bostezar: { // de noche (D-135, la 6; dia.js) y al despertar por la mañana: echa la cabeza atrás, abre mucho la boca y se la tapa
+    nombre: 'Bosteza', dur: 2.5, espejable: true,
+    cuadros: [
+      [0.5, { cabezaAd: -12, hombros: 1.4, inclinar: -5, estirar: 0.02 }],
+      [0.95, { brazoD: 96, codoD: 136, brazoAdD: 50, codoAdD: 0 }],
+      [1.55, { cabezaAd: -14, hombros: 1.8 }],
+      [2.1, { ...REPOSO, cabezaAd: 3, hombros: 0, inclinar: 0, estirar: 0 }],
+      [2.5, { cabezaAd: 0 }],
+    ],
+    cara: [[0.2, 'bostezo', 1.8]],
+  },
 
   // ——— Con agujetas (D-133, la fase 2): suaves, se notan poco (los elige cerebro.js, por la zona que más le duele) ———
   agujetasPiernas: { // una mano en la cadera y con la otra se frota el muslo, algo encorvada
