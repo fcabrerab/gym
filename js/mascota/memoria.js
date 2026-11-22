@@ -16,9 +16,10 @@ export const OPCIONES = {
   luz: ["verde", "cian", "rosa", "ambar", "violeta"],
   entreno: ["rincon", "escondida"],
   brillo: ["suave", "normal", "intenso"],
+  sexo: ["neutro", "ella", "el"], // D-140: «Sin definir» (el de serie, también el de una ficha de antes), «Ella» o «Él»
 };
 // «encendida: null» es lo de la app: en la beta, sí; en la normal, todavía no (D-133).
-export const AJUSTES = { encendida: null, tamano: "normal", luz: "verde", entreno: "rincon", nombre: "", brillo: "normal" };
+export const AJUSTES = { encendida: null, tamano: "normal", luz: "verde", entreno: "rincon", nombre: "", brillo: "normal", sexo: "neutro" };
 
 function semillaNueva() {
   try {

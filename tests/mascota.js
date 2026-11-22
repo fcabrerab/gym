@@ -661,6 +661,30 @@ export async function ejecutar(c) {
       `MA38 de noche, más dormilona: dormida ${Math.round(deNoche.dormida)} s (de día, ${Math.round(deDia.dormida)}), ${deNoche.saltos} saltos (de día, ${deDia.saltos}) y ${deNoche.bostezos} bostezos (de día, ${deDia.bostezos})`);
   }
 
+  // MA40 Su sexo (D-140, D-141): en su ficha, «Sin definir» de serie (también en una de antes) y solo lo que vale; en su
+  // cuerpo, solo las proporciones (los hombros de «Ella», los más estrechos, y su cadera, la más ancha), y «Ella», con
+  // su coleta; lo que no valga, «Sin definir»; y su carácter, en masculino con «Él»
+  {
+    const sinSexo = memoria.leer({ ahora: 1000 });
+    const limpio = memoria.limpiarAjustes({ sexo: "ella" }), malo = memoria.limpiarAjustes({ sexo: "otro" });
+    const medir = (sexo) => {
+      const m = crearMascota({ superficies: () => [{ id: "a", x1: 20, x2: 380, y: 300 }], azar: azarDe(3), autonoma: false });
+      m.forma = 1;
+      if (sexo !== undefined) m.sexo = sexo;
+      let f = null;
+      for (let i = 0; i < 30; i++) f = m.paso(1 / 30);
+      return { sexo: m.sexo, hombros: f.cuerpo.anchoHombros, cadera: Math.abs(f.cin.p.caderaD[0] - f.cin.p.caderaI[0]), coleta: f.coleta };
+    };
+    const [ella, neutro, el, otro, deSerie] = [medir("ella"), medir("neutro"), medir("el"), medir("otro"), medir(undefined)];
+    const masc = caracter.describir({ curiosidad: 0.8, pereza: 0.5, juego: 0.8 }, { masculino: true });
+    const fem = caracter.describir({ curiosidad: 0.8, pereza: 0.5, juego: 0.8 });
+    caso(memoria.AJUSTES.sexo === "neutro" && sinSexo.ajustes.sexo === "neutro" && limpio.sexo === "ella" && !("sexo" in malo)
+      && ella.hombros < neutro.hombros && neutro.hombros < el.hombros && ella.cadera > el.cadera
+      && ella.coleta === true && !neutro.coleta && !el.coleta && otro.sexo === "neutro" && deSerie.sexo === "neutro"
+      && masc === "Curioso y juguetón." && fem === "Curiosa y juguetona.",
+    `MA40 su sexo: de serie, «Sin definir»; hombros (forma 1) ${ella.hombros.toFixed(1)} · ${neutro.hombros.toFixed(1)} · ${el.hombros.toFixed(1)} y cadera ${ella.cadera.toFixed(1)} · ${neutro.cadera.toFixed(1)} · ${el.cadera.toFixed(1)} (Ella · Sin definir · Él); «Ella», con su coleta; «${masc}»`);
+  }
+
   const preparar = async () => {
     await limpiarBeta();
     guardar("gym-beta-datos", await datosBeta());
@@ -1114,6 +1138,41 @@ export async function ejecutar(c) {
     quitar(b2);
     caso(noche === 1 && entrenando === 0, `MA39 de noche, más dormilona (cuánta noche: ${noche}); con una sesión en marcha, despierta (${entrenando})`);
     await limpiarBeta();
+  }
+
+  // MA41 En la app (D-140): su página tiene su sexo; con «Él», sus textos, en masculino, y su cuerpo, al momento; con «Sin
+  // definir», en femenino otra vez; y lo guarda en su ficha
+  {
+    await preparar();
+    guardar(memoria.CLAVE, { v: 1, nacida: ms("2026-10-20T10:00:00"), semilla: 7, ajustes: {}, vista: null, toques: 1 });
+    const b = await cargarBeta({ canal: "beta" });
+    await hastaQue(() => b.w.__gymMascota?.viva, 200);
+    const m = b.w.__gymMascota;
+    b.d.querySelector('#nav [data-accion="ir-ajustes"]').click();
+    await esperar(100);
+    pulsar(b.d, "ir-mascota");
+    await esperar(100);
+    const opciones = [...b.d.querySelectorAll('[data-accion="mascota-sexo"]')].map((x) => x.dataset.valor).join(",");
+    const marcadaAntes = b.d.querySelector('[data-accion="mascota-sexo"][aria-checked="true"]')?.dataset.valor;
+    const antes = textoDe(b.d, ".pantalla-mascota");
+    b.d.querySelector('[data-accion="mascota-sexo"][data-valor="el"]')?.click();
+    await esperar(80);
+    const conEl = textoDe(b.d, ".pantalla-mascota");
+    const fichaEl = leerJson(memoria.CLAVE)?.ajustes.sexo, sexoEl = m?.sexo;
+    b.d.querySelector('[data-accion="mascota-sexo"][data-valor="ella"]')?.click();
+    await esperar(80);
+    const sexoElla = m?.sexo;
+    b.d.querySelector('[data-accion="mascota-sexo"][data-valor="neutro"]')?.click();
+    await esperar(80);
+    const otraVez = textoDe(b.d, ".pantalla-mascota");
+    const femenino = (t) => /Encendida/.test(t) && /La has tocado una vez/.test(t) && /vuelve ella/.test(t) && /Tócala/.test(t);
+    const masculino = (t) => /Encendido/.test(t) && /Lo has tocado una vez/.test(t) && /vuelve él/.test(t) && /Tócalo/.test(t)
+      && /asomado/.test(t) && !/Encendida|La has tocado|Tócala|asomada/.test(t);
+    caso(opciones === "neutro,ella,el" && marcadaAntes === "neutro" && femenino(antes) && masculino(conEl) && femenino(otraVez)
+      && fichaEl === "el" && sexoEl === "el" && sexoElla === "ella" && m?.sexo === "neutro" && leerJson(memoria.CLAVE)?.ajustes.sexo === "neutro",
+    `MA41 su página: su sexo (${opciones}; de serie, ${marcadaAntes}); con «Él», en masculino y al momento (${sexoEl}); con «Sin definir», en femenino otra vez`);
+    sinErrores(b, "MA41");
+    quitar(b);
   }
 
   // MA15 En la app normal no sale ni guarda nada hasta que la enciendes en Ajustes

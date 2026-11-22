@@ -51,7 +51,7 @@ export const MUSCULOS = {
 // pose de partida («a», sobre la de pie) y lo que cambia al hacer fuerza («b»).
 export const IMITAR = {
   'Bíceps': { nombre: 'Imita tu curl de bíceps', manos: 'ambas',
-    a: { orientacion: 40, ...brazos(8, 0), ...brazosAd(4, 10) }, b: { codoAdI: 135, codoAdD: 135 } },
+    a: { orientacion: 28, ...brazos(18, 0), ...brazosAd(4, 10) }, b: { codoAdI: 135, codoAdD: 135 } }, // D-141: menos girada y los brazos algo abiertos: las manos, a los lados
   'Tríceps': { nombre: 'Imita tu extensión de tríceps', manos: 'D',
     a: { orientacion: 40, brazoD: 165, codoD: 0, brazoAdD: 0, codoAdD: -120 }, b: { codoAdD: -5 } },
   'Hombro': { nombre: 'Imita tu press de hombros', manos: 'ambas',
@@ -184,13 +184,13 @@ export const GESTOS = {
   cuadriceps: {
     nombre: 'Siente los cuádriceps', dur: 3.8, espejable: true,
     cuadros: [
-      [0.3, { orientacion: 35 }],
-      [0.7, { ...piernasAd(80, -115), inclinar: 28, ...brazos(6, 0), ...brazosAd(78, 0) }],
+      [0.3, { orientacion: 35, ...brazos(20, -4) }], // D-141: los brazos, algo abiertos al subir y al bajar
+      [0.7, { ...piernasAd(80, -115), inclinar: 28, ...brazos(22, 0), ...brazosAd(78, 0) }],
       [1.15, { ...piernasAd(4, -6), inclinar: 2, ...brazosAd(30, 10) }],
       [1.6, { ...piernasAd(80, -115), inclinar: 28, ...brazosAd(78, 0) }],
-      [2.1, { ...piernasAd(4, -8), inclinar: 2, ...REPOSO }],
+      [2.1, { ...piernasAd(4, -8), inclinar: 2, ...brazos(18, -6), ...brazosAd(0, 14) }],
       [3.0, {}],
-      [3.8, { ...DE_PIE, inclinar: 0, orientacion: 0 }],
+      [3.8, { ...DE_PIE, inclinar: 0, orientacion: 0, ...REPOSO }],
     ],
     vibrar: [[2.15, 2.95, { musloAdI: 2.5, musloAdD: 2.5, rodillaAdI: -4, rodillaAdD: -4 }, 13]],
     cara: [[0.45, 'esfuerzo', 1.65], [2.15, 'agotada', 0.95], [3.05, 'contenta', 1]],
@@ -215,8 +215,8 @@ export const GESTOS = {
   cadena: {
     nombre: 'Siente la cadena posterior', dur: 4.2, espejable: true,
     cuadros: [
-      [0.3, { orientacion: 45 }],
-      [0.75, { inclinar: 72, ...piernasAd(10, -22), ...brazos(4, 0), ...brazosAd(70, 0), cabezaAd: -30, hombros: -1 }],
+      [0.3, { orientacion: 45, ...EN_JARRAS }], // D-141: con las manos en la cintura (no pasan por delante de la entrepierna)
+      [0.75, { inclinar: 72, ...piernasAd(10, -22), cabezaAd: -30, hombros: -1 }],
       [1.0, {}],
       [1.5, { inclinar: -8, ...piernasAd(0, -4), ...brazosAd(-8, 6), cabezaAd: 0, estirar: 0.025 }],
       [1.95, { orientacion: 180, inclinar: 0, estirar: 0, hombros: 0 }],
@@ -253,6 +253,7 @@ export const GESTOS = {
     cuadros: [
       [0.4, { inclinar: 26, hombros: 1.2, ...brazos(26, -100), ...brazosAd(10, 10), ...piernasAd(8, -14) }],
       [1.6, {}],
+      [1.85, { ...brazos(58, -148), ...brazosAd(4, 4) }], // D-141: se abren de lado, con los antebrazos a la altura de la tripa, antes de bajar
       [2.1, { inclinar: -6, ...EN_JARRAS, hombros: -0.8, estirar: 0.02, ...DE_PIE }],
       [3.0, {}],
       [3.6, { inclinar: 0, ...REPOSO, hombros: 0, estirar: 0 }],
@@ -391,6 +392,7 @@ export const GESTOS = {
   cosquillas: { // tres toques o más seguidos (D-135, la 5): mientras sigas, sigue riéndose (cerebro.js: hacerCosquillas())
     nombre: 'Le haces cosquillas', dur: 1.9,
     cuadros: [[0.2, { ...brazos(24, -120), ...brazosAd(10, 10), hombros: 1.5, inclinar: 10 }], [1.5, {}],
+      [1.68, { ...brazos(58, -148), ...brazosAd(6, 6) }], // D-141: se abren de lado, con los antebrazos a la altura de la tripa, antes de bajar
       [1.9, { ...REPOSO, hombros: 0, inclinar: 0 }]],
     vibrar: [[0.15, 1.55, { giro: 5, lumbar: -4 }, 6.5]],
     cara: [[0.1, 'risa', 1.6]],
@@ -399,9 +401,9 @@ export const GESTOS = {
     nombre: '¡Salta de alegría!', dur: 1.8,
     cuadros: [
       [0.2, { ...piernasAd(42, -76), inclinar: 14, ...brazosAd(-30, 20), estirar: -0.05 }],
-      [0.4, { ...piernasAd(4, -10), inclinar: -4, ...brazos(150, 14), ...brazosAd(0, 0), estirar: 0.07, alto: 22, orientacion: 120 }],
-      [0.6, { ...piernasAd(56, -96), inclinar: 6, estirar: 0, alto: 40, orientacion: 260 }],
-      [0.8, { ...piernasAd(8, -14), alto: 14, orientacion: 360, ...brazos(130, 18) }],
+      [0.4, { ...piernasAd(4, -10), ...piernas(16, 0), inclinar: -4, ...brazos(150, 14), ...brazosAd(0, 0), estirar: 0.07, alto: 22, orientacion: 120 }],
+      [0.6, { ...piernasAd(56, -96), inclinar: 6, estirar: 0, alto: 40, orientacion: 260 }], // D-141: las piernas, algo abiertas en el aire (no se cruzan)
+      [0.8, { ...piernasAd(8, -14), ...piernas(4, 0), alto: 14, orientacion: 360, ...brazos(130, 18) }],
       [0.94, { ...piernasAd(38, -68), inclinar: 12, alto: 0, estirar: -0.06, ...brazos(70, 14) }],
       [1.2, { ...DE_PIE, inclinar: -4, estirar: 0.02, ...brazos(156, 12) }],
       [1.45, { ...brazos(146, 22) }],
@@ -507,7 +509,7 @@ export const GESTOS = {
   jadear: {
     nombre: 'Recupera el aliento', dur: 3.2,
     cuadros: [
-      [0.45, { orientacion: 40, inclinar: 32, ...brazos(14, 6), ...brazosAd(38, 8), ...piernasAd(22, -36), hombros: 0.6 }],
+      [0.45, { orientacion: 40, inclinar: 26, ...EN_JARRAS, ...piernasAd(22, -36), hombros: 0.6 }], // D-141: en jarras
       [2.7, {}],
       [3.2, { ...REPOSO, orientacion: 0, inclinar: 0, ...piernasAd(0, -4), hombros: 0 }],
     ],
