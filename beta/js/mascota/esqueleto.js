@@ -30,6 +30,19 @@ export const POSE_BASE = Object.freeze({
 });
 export const CAMPOS = Object.keys(POSE_BASE);
 
+// Su sexo, a elegir (D-139): «Ella», «Él» o «Sin definir» (el de serie, y el de una mascota sin ese dato). Solo
+// cambian las proporciones, nunca con forma de pecho ni nada en la entrepierna: los hombros (de base y lo que crecen al
+// definirse), su grosor, la cadera (la mitad de lo que separa las piernas), la cintura (lo que se estrecha el tronco
+// abajo), los glúteos y las piernas que gana al definirse, los brazos y lo que se le marca el pecho (en «Ella», nada:
+// ni manchas redondas ni líneas debajo; con el pecho encendido, una franja plana arriba, junto a las clavículas).
+export const SEXOS = Object.freeze(['neutro', 'ella', 'el']);
+export const CUERPOS = Object.freeze({
+  el: Object.freeze({ hombros: [8.5, 3.2], rHombros: 1, cadera: 4.5, caderaR: 1.1, cintura: 1, gluteos: 0, piernas: 0, brazos: 1, pecho: 1 }),
+  neutro: Object.freeze({ hombros: [7.9, 2.2], rHombros: 0.95, cadera: 5, caderaR: 1.15, cintura: 0.91, gluteos: 0.25, piernas: 0.22, brazos: 0.95, pecho: 0.55 }),
+  ella: Object.freeze({ hombros: [7.2, 1.2], rHombros: 0.9, cadera: 5.5, caderaR: 1.12, cintura: 0.82, gluteos: 0.5, piernas: 0.45, brazos: 0.9, pecho: 0 }),
+});
+export const cuerpoDeSexo = (sexo) => CUERPOS[sexo] || CUERPOS.neutro;
+
 export const lerp = (a, b, t) => a + (b - a) * t;
 export const limitar = (v, a, b) => (v < a ? a : v > b ? b : v);
 export const suave = (t) => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t));
@@ -79,18 +92,23 @@ function perpendicular(u, ...candidatos) {
  */
 export function cinematica(pose, cuerpo, { espejo = false, apoyo = 'pies' } = {}) {
   const M = MEDIDAS, b = cuerpo.bultos || {}, ver = cuerpo.ver || {}, g = cuerpo.gordo || 0;
-  const rT = M.rTronco + 1.4 * g, rB = M.rBrazo + 0.5 * g, rPi = M.rPierna + 0.6 * g, w = cuerpo.anchoHombros;
+  const S = cuerpo.proporciones || CUERPOS.neutro, def = cuerpo.def || 0; // su sexo (D-139)
+  const rT = M.rTronco + 1.4 * g, rB = (M.rBrazo + 0.5 * g) * S.brazos, rPi = M.rPierna + 0.6 * g + S.piernas * def;
+  const w = cuerpo.anchoHombros, ancho = S.cadera, rH = (M.rHombros + 0.6 * g) * S.rHombros;
   const aL = pose.lumbar, aP = aL + pose.pecho, aC = aP + pose.cabeza;
   const iL = pose.inclinar * 0.45, iP = pose.inclinar;
   const q = {}, manchas = [], detalles = [];
-  const mancha = (parte, musculos, c, eje, largo, ancho) => manchas.push({ parte, musculos, c, eje, largo, ancho });
+  // «mas», lo que la cambia (D-139): «escorzo», la normal hacia fuera de un músculo de la pierna (si la pierna viene hacia
+  // nosotros, se aplasta y luego se quita: así no queda un círculo en la ingle); «lado», «prof» y «frente», sus otros dos
+  // semiejes (un elipsoide de verdad: la barriga, ancha de frente y plana de lado); «liso», sin brillo.
+  const mancha = (parte, musculos, c, eje, largo, ancho, mas = {}) => manchas.push({ parte, musculos, c, eje, largo, ancho, ...mas });
 
   q.pelvis = [0, 0, 0];
   const uL = arriba(aL, iL), uP = arriba(aP, iP);
   const dL = [cos(aL), sen(aL), 0], dP = [cos(aP), sen(aP), 0];
   const fL = cruz(uL, dL), fP = cruz(uP, dP); // su delante
   q.lumbar = mas(q.pelvis, uL, M.lumbar);
-  q.cintura = mas(q.pelvis, uL, rT * 0.6); // donde acaba el tronco: más arriba que la pelvis (D-135: sin una punta redonda entre las piernas)
+  q.cintura = mas(q.pelvis, uL, rT * 0.72); // donde acaba el tronco: más arriba que la pelvis (D-135, D-139: nada redondo entre las piernas)
   q.cuello = mas(q.lumbar, uP, M.pecho);
   q.cabeza = mas(q.cuello, arriba(aC, iP * 0.8 + pose.cabezaAd * 0.2), M.cuello + M.cabeza);
   // un punto del tronco: x a su derecha, y hacia abajo desde el cuello, z hacia su delante
@@ -98,6 +116,7 @@ export function cinematica(pose, cuerpo, { espejo = false, apoyo = 'pies' } = {}
     ? mas(mas(mas(q.cuello, dP, x), uP, -y), fP, z)
     : mas(mas(mas(q.pelvis, dL, x), uL, M.pecho + M.lumbar - y), fL, z));
 
+  for (const [l, s] of [['I', -1], ['D', 1]]) q['pelvis' + l] = mas([s * ancho * 0.8, 0, 0], uL, rT * 0.5);
   for (const [l, s] of [['I', -1], ['D', 1]]) {
     // brazo
     const H = mas(mas(q.cuello, dP, s * w), uP, pose.hombros - M.hombroBajo);
@@ -116,7 +135,7 @@ export function cinematica(pose, cuerpo, { espejo = false, apoyo = 'pies' } = {}
     if (de > 0.12) mancha('brazo' + l, ['hombros' + l, 'hombrosPost' + l], mas(mas(H, lat, rB * 0.45 + de * 0.35), dB, 2.5), dB, 4.5 + de * 0.5, rB * 0.8 + de * 0.55);
 
     // pierna; el pie, plano en el suelo salvo con la pierna muy doblada (entonces sigue a la espinilla)
-    const Hc = [s * M.cadera, 0, 0];
+    const Hc = [s * ancho, 0, 0];
     const aR = s * (pose['muslo' + l] + pose['rodilla' + l]);
     const fM = pose['musloAd' + l], fR = fM + pose['rodillaAd' + l];
     const dM = dir(s * pose['muslo' + l], fM), dS = dir(aR, fR);
@@ -131,21 +150,22 @@ export function cinematica(pose, cuerpo, { espejo = false, apoyo = 'pies' } = {}
     const nK = perpendicular(dM, dS, [0, 0, -1]);               // hacia donde se dobla la rodilla
     const nC = perpendicular(dS, dF.map((v) => -v), [0, 0, -1]); // la pantorrilla: al revés de la punta del pie
     const cu = b['cuadriceps' + l] || 0, is = b['isquios' + l] || 0, ge = b['gemelos' + l] || 0;
-    if (cu > 0.12) mancha('pierna' + l, ['cuadriceps' + l], mas(entre(Hc, K, 0.45), nK, -(rPi * 0.4 + cu * 0.35)), dM, 8 + cu * 0.6, rPi * 0.7 + cu * 0.55);
-    if (is > 0.12) mancha('pierna' + l, ['isquios' + l], mas(entre(Hc, K, 0.5), nK, rPi * 0.4 + is * 0.35), dM, 8 + is * 0.6, rPi * 0.7 + is * 0.5);
-    if (ge > 0.12) mancha('pierna' + l, ['gemelos' + l], mas(entre(K, A, 0.3), nC, rPi * 0.35 + ge * 0.3), dS, 6 + ge * 0.5, rPi * 0.7 + ge * 0.5);
+    // D-139: el cuádriceps, más abajo en el muslo (lejos de la ingle); los tres, con su normal para el escorzo
+    const nKm = nK.map((v) => -v);
+    if (cu > 0.12) mancha('pierna' + l, ['cuadriceps' + l], mas(entre(Hc, K, 0.6), nKm, rPi * 0.4 + cu * 0.35), dM, 7.5 + cu * 0.6, rPi * 0.7 + cu * 0.55, { escorzo: nKm });
+    if (is > 0.12) mancha('pierna' + l, ['isquios' + l], mas(entre(Hc, K, 0.56), nK, rPi * 0.4 + is * 0.35), dM, 7.5 + is * 0.6, rPi * 0.7 + is * 0.5, { escorzo: nK });
+    if (ge > 0.12) mancha('pierna' + l, ['gemelos' + l], mas(entre(K, A, 0.3), nC, rPi * 0.35 + ge * 0.3), dS, 6 + ge * 0.5, rPi * 0.7 + ge * 0.5, { escorzo: nC });
 
     // tronco: pectoral, dorsal y glúteo de este lado
-    const pc = b['pecho' + l] || 0, dl = b.dorsales || 0, gl = b.gluteos || 0;
+    const pc = (b['pecho' + l] || 0) * S.pecho, dl = b.dorsales || 0;
     if (pc > 0.12) mancha('tronco', ['pecho' + l], enTronco(s * w * 0.42, 9.5, rT * 0.55), dP, w * 0.4 + pc * 0.3, 3.2 + pc * 0.7);
     if (dl > 0.12) {
       const a1 = enTronco(s * rT * 0.8, 9, -0.5), a2 = enTronco(s * rT * 0.5, 25, -0.5);
       mancha('tronco', ['dorsales'], mas(entre(a1, a2, 0.4), dP, s * dl * 0.45), unidad(entre(a2, a1, 1).map((v, i) => v - a2[i])), 8 + dl * 0.4, 2.2 + dl * 0.9);
     }
-    mancha('tronco', ['gluteos'], enTronco(s * 3.3, M.pecho + M.lumbar - 2.5, -(rT * 0.55 + gl * 0.3)), dL, 3.6 + gl * 0.4, 3.6 + gl * 0.65);
 
     // las líneas de un cuerpo definido (de frente o de espaldas)
-    const vp = ver['pecho' + l] || 0;
+    const vp = (ver['pecho' + l] || 0) * S.pecho;
     if (vp > 0.03) detalles.push({ cara: 1, fuerza: vp, puntos: [enTronco(s * 1.2, 12.5, rT), enTronco(s * w * 0.45, 15, rT * 0.95), enTronco(s * w * 0.85, 11, rT * 0.6)] });
     [16.5, 22, 27.5].forEach((y, i) => {
       const va = ver['abs' + (i + 1)] || 0;
@@ -154,12 +174,25 @@ export function cinematica(pose, cuerpo, { espejo = false, apoyo = 'pies' } = {}
     const vl = ver.lumbares || 0;
     if (vl > 0.03) detalles.push({ cara: -1, fuerza: vl, puntos: [enTronco(s * 2.6, 25, -rT), enTronco(s * 2.6, 34, -rT)] });
   }
-  const vc = Math.max(ver.abs1 || 0, ver.pechoI || 0, ver.pechoD || 0);
+  const vc = Math.max(ver.abs1 || 0, (ver.pechoI || 0) * S.pecho, (ver.pechoD || 0) * S.pecho);
   if (vc > 0.03) detalles.push({ cara: 1, fuerza: vc, puntos: [enTronco(0, 12.5, rT), enTronco(0, 31, rT * 0.98)] });
-  if ((ver.gluteos || 0) > 0.03) detalles.push({ cara: -1, fuerza: ver.gluteos, puntos: [enTronco(0, M.pecho + M.lumbar - 2, -rT), enTronco(0, M.pecho + M.lumbar + 5, -rT * 0.8)] });
-  // la barriga (gordito), hacia delante y a la altura de la tripa (no de la cadera)
+  // los glúteos (D-139): su volumen, una sola franja ancha y sin brillo, más arriba (de espaldas, nada redondo entre las
+  // piernas), que nunca se enciende; lo que siente, una franja fina más arriba aún, en los riñones
+  const gl = (b.gluteos || 0) + S.gluteos * def;
+  mancha('tronco', [], enTronco(0, M.pecho + M.lumbar - 4.8, -(rT * 0.55 + gl * 0.3)), dL, ancho * 0.75 + 4 + gl * 0.5, 3 + gl * 0.42, { liso: true });
+  mancha('tronco', ['gluteos'], enTronco(0, M.pecho + M.lumbar - 8.5, -rT * 0.5), dL, ancho * 0.7 + 3, 2 + gl * 0.15, { liso: true });
+  // la línea de los glúteos (D-139): corta y por encima de la ingle (antes bajaba entre las piernas)
+  if ((ver.gluteos || 0) > 0.03) detalles.push({ cara: -1, fuerza: ver.gluteos, puntos: [enTronco(0, M.pecho + M.lumbar - 7.5, -rT), enTronco(0, M.pecho + M.lumbar - 3.5, -rT * 0.92)] });
+  // «Ella», con el pecho encendido o muy marcado: una franja plana arriba, junto a las clavículas (nunca dos manchas)
+  const pcE = Math.max(b.pechoI || 0, b.pechoD || 0) * (1 - S.pecho);
+  if (S.pecho < 0.5 && pcE > 0.3) mancha('tronco', ['pechoI', 'pechoD'], enTronco(0, 5.5, rT * 0.6), dP, w * 0.72, 1.6 + 0.2 * Math.min(pcE, 3), { liso: true });
+  // la barriga (gordito, D-139): a la altura de la tripa, ancha de frente y plana de lado, con lo de abajo dentro de la
+  // cadera (sin colgar ni dejar un hueco debajo) y sin brillo
   const r = cuerpo.vientre;
-  if (r > 2) mancha('tronco', [], mas(mas(q.pelvis, uL, M.lumbar * 0.5 + r * 0.15), fL, r * 0.5), uL, r * 1.05, r * 1.1);
+  if (r > 2) {
+    mancha('tronco', [], mas(mas(q.pelvis, uL, 10.5 + r * 0.15), fL, r * 0.36), uL, r * 0.78, rT * 0.9 + r * 0.2,
+      { lado: dL, prof: r * 0.66, frente: fL, liso: true });
+  }
 
   // Visto desde la pantalla: girado hacia donde mira, en espejo, estirado y girado en el plano.
   const ct = cos(pose.orientacion), st = sen(pose.orientacion);
@@ -179,7 +212,9 @@ export function cinematica(pose, cuerpo, { espejo = false, apoyo = 'pies' } = {}
   const media = (...ks) => ks.reduce((a, k) => a + p[k][2], 0) / ks.length;
   const partes = [
     // el tronco, hasta la cintura; la cadera, una barra ancha de lado a lado (como los hombros)
-    { nombre: 'tronco', clave: -1, segmentos: [[p.cuello, p.cintura, rT], [p.caderaI, p.caderaD, rT * 0.8], [p.hombroI, p.hombroD, M.rHombros + 0.6 * g]], manchas: [] },
+    // (D-139: la cadera, subida: su borde de abajo queda dentro de la U invertida que hacen las piernas al salir)
+    { nombre: 'tronco', clave: -1, segmentos: [[p.cuello, p.cintura, rT], [p.pelvisI, p.pelvisD, rT * 0.62], [p.hombroI, p.hombroD, rH]], manchas: [],
+      cintura: S.cintura, caderaR: S.caderaR },
     { nombre: 'cabeza', clave: p.cabeza[2] - 0.5, segmentos: [], manchas: [], centro: p.cabeza, radio: M.cabeza },
   ];
   for (const l of ['I', 'D']) {
@@ -191,12 +226,36 @@ export function cinematica(pose, cuerpo, { espejo = false, apoyo = 'pies' } = {}
   }
   const porNombre = Object.fromEntries(partes.map((x) => [x.nombre, x]));
   const zTronco = (p.cuello[2] + p.pelvis[2]) / 2;
+  const ingle = vista(mas(q.pelvis, uL, -rT * 0.5)); // D-139: la ingle, algo por debajo de la pelvis
   for (const m of manchas) {
     const c = vista(m.c), a = vista(mas(m.c, m.eje, m.largo)), z = vista(mas(m.c, m.eje, -m.largo));
     const dx = a[0] - z[0], dy = a[1] - z[1];
     // «detras»: la de detrás del tronco (los glúteos, de frente): la tapa el tronco, así que no se pinta
-    porNombre[m.parte].manchas.push({ c, rx: Math.max(Math.hypot(dx, dy) / 2, m.ancho * 0.9), ry: m.ancho,
-      rot: Math.atan2(dy, dx), musculos: m.musculos, detras: m.parte === 'tronco' && c[2] < zTronco - 1.5 });
+    const detras = m.parte === 'tronco' && c[2] < zTronco - 1.5;
+    if (m.prof) {
+      // un elipsoide de verdad (la barriga, D-139): su silueta, de sus tres semiejes ya vistos desde la pantalla
+      let sxx = 0, sxy = 0, syy = 0;
+      for (const [v, k] of [[m.eje, m.largo], [m.lado, m.ancho], [m.frente, m.prof]]) {
+        const e = vista(mas(m.c, v, k)), x = e[0] - c[0], y = e[1] - c[1];
+        sxx += x * x; sxy += x * y; syy += y * y;
+      }
+      const tr = (sxx + syy) / 2, de = Math.sqrt(((sxx - syy) / 2) ** 2 + sxy * sxy);
+      porNombre[m.parte].manchas.push({ c, rx: Math.sqrt(tr + de), ry: Math.sqrt(Math.max(0.01, tr - de)),
+        rot: 0.5 * Math.atan2(2 * sxy, sxx - syy), musculos: m.musculos, detras: false, liso: true });
+      continue;
+    }
+    let ancho = m.ancho;
+    if (m.escorzo) {
+      // D-139: un músculo de la pierna, con la pierna hacia nosotros (o del lado que no se ve): se aplasta y se quita;
+      // y nunca cerca de la ingle (con su brillo, a más de 3 unidades de ella)
+      const k = Math.hypot(dx, dy) / (2 * m.largo);
+      if (k < 0.7 || vista(mas(m.c, m.escorzo, 1))[2] - c[2] < -0.6) continue;
+      ancho *= 0.55 + 0.45 * tramo(k, 0.7, 1);
+      const rMax = Math.max(Math.hypot(dx, dy) / 2, ancho) + 2.6;
+      if (Math.hypot(c[0] - ingle[0], c[1] - ingle[1]) - rMax < 3) continue;
+    }
+    porNombre[m.parte].manchas.push({ c, rx: Math.max(Math.hypot(dx, dy) / 2, ancho * 0.9), ry: ancho,
+      rot: Math.atan2(dy, dx), musculos: m.musculos, detras, ...(m.liso ? { liso: true } : {}) });
   }
   partes.sort((x, y) => x.clave - y.clave);
 

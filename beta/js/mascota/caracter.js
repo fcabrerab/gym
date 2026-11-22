@@ -49,13 +49,15 @@ export function suenoDe({ pereza = 0.5 } = {}, base = 120) {
   return Math.round(base * (1.45 - 0.9 * pereza));
 }
 
-// Cómo es, en una frase, para su página de Ajustes: «Curiosa y juguetona; se duerme pronto.»
-export function describir({ curiosidad = 0.5, pereza = 0.5, juego = 0.5 } = {}) {
+// Cómo es, en una frase, para su página de Ajustes: «Curiosa y juguetona; se duerme pronto.» Con «masculino» (su sexo,
+// «Él», D-140), en masculino: «Curioso y juguetón…».
+export function describir({ curiosidad = 0.5, pereza = 0.5, juego = 0.5 } = {}, { masculino = false } = {}) {
   const como = [];
-  if (curiosidad >= 0.6) como.push("curiosa");
-  else if (curiosidad <= 0.4) como.push("tranquila");
-  if (juego >= 0.6) como.push("juguetona");
-  else if (juego <= 0.4) como.push("algo tímida");
+  const g = (fem, masc) => (masculino ? masc : fem);
+  if (curiosidad >= 0.6) como.push(g("curiosa", "curioso"));
+  else if (curiosidad <= 0.4) como.push(g("tranquila", "tranquilo"));
+  if (juego >= 0.6) como.push(g("juguetona", "juguetón"));
+  else if (juego <= 0.4) como.push(g("algo tímida", "algo tímido"));
   let frase = como.length ? como.join(" y ") : "de carácter equilibrado";
   frase = frase[0].toUpperCase() + frase.slice(1);
   const sueno = pereza >= 0.6 ? "se duerme pronto" : pereza <= 0.4 ? "le cuesta dormirse" : "";

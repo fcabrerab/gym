@@ -116,6 +116,7 @@ function nacer(ficha) {
     bombeoDura: BOMBEO_HORAS * 3600,
   });
   cerebro.pesos = pesosDe(rasgos);
+  cerebro.sexo = ficha.ajustes.sexo; // D-140: sus proporciones (y, «Ella», su coleta)
   escenario = crearEscenario({ doc, win, alto: () => ALTO_DE_PIE * cerebro.escala + 8 });
   escenario.alCalcular = () => cerebro.reubicar();
   const traje = crearTrajeNeon(escenario.lienzo);
@@ -303,6 +304,7 @@ function nacer(ficha) {
     },
     ajustar(f) {
       cerebro.escala = ESCALAS[f.ajustes.tamano] || ESCALAS.normal;
+      cerebro.sexo = f.ajustes.sexo;
       traje.luz = f.ajustes.luz;
       traje.brillo = BRILLOS[f.ajustes.brillo] ?? 1;
       entreno = f.ajustes.entreno;
@@ -336,6 +338,7 @@ if (esLocal()) {
     get oculta() { return Boolean(viva?.oculta); },
     get enPagina() { return Boolean(viva?.escenario.enPagina); },
     get brillo() { return viva?.traje.brillo ?? null; },
+    get sexo() { return viva?.cerebro.sexo ?? null; },
     get carga() { return viva?.cerebro.carga ?? null; },
     get descanso() { return viva?.cerebro.descanso ?? null; },
     // su cuerpo: la forma que se le ve, la de fondo, el bombeo general, cada músculo y lo último de forma.js

@@ -2,9 +2,24 @@
 // bola con la cara del boceto del globo (dos puntitos por ojos; las cejas y la boca se encienden al expresar algo y se
 // apagan).
 // Pinta en un <canvas> los volúmenes que le da el esqueleto, por capas: lo de detrás, primero (y algo más oscuro). Cada
-// capa es una sola silueta, con el borde solo por fuera (capasDe()): el tronco, con hombros, cintura, cadera y cuello,
-// y lo que está a su altura (de pie, las piernas); brazos y piernas, más gruesos junto al cuerpo, con manos; y lo que
-// queda delante sale del cuerpo sin costura. Una sola luz, de arriba a la izquierda, para todo (iluminar()).
+// capa es una sola silueta (capasDe()): el tronco, con hombros, cuello, cintura y cadera, y lo que está a su altura (de
+// pie, las piernas); brazos y piernas, más gruesos junto al cuerpo, con manos de manopla y pies redondeados; y lo que
+// queda delante sale del cuerpo sin costura.
+// Desde D-141 (el camino «pulido» de la pasada de estética, con lo mejor de los otros dos): el mismo cuerpo por capas,
+// acabado.
+//  · Uniones de verdad: en el cuello, los hombros, la cintura, las axilas, la ingle, los codos y las rodillas, un relleno
+//    de unión (filete()) con una curva tangente a los dos tramos, sin muescas.
+//  · El contorno, con jerarquía: el de fuera, de toda la figura, más grueso abajo y a la derecha (la sombra) y más fino
+//    y claro hacia la luz; el de dentro (entre capas), fino y más suave.
+//  · El neón: entre el contorno y el cuerpo, una línea de luz que lo recorre (más viva arriba a la izquierda, apagada
+//    en la cadera); en la cabeza, un aro de luz y un brillo fino; en el pecho, su luz por dentro, que late despacio; y
+//    su halo respira.
+//  · El volumen: cada tubo, sombreado a lo ancho; el tronco, con su luz de bola; los músculos, un bulto sombreado; el
+//    que siente se enciende por dentro (como mucho 3 a la vez; los dos pectorales o dorsales, como una franja), con algo
+//    más de halo.
+//  · «Ella» (D-140, D-141), con su coleta: cuelga por su peso, con su goma, sus mechones y su vaivén (coletaDe()).
+//  · D-139: nada en la entrepierna ni en la barriga baja que pueda parecer genitales (su prueba: tests/mascota-d139.js).
+// Una sola luz, de arriba a la izquierda, para todo, sobre un marco fijo (no cambia al subir los brazos).
 // No decide nada: otro estilo sería otro traje como este.
 // En la app (D-133), además: el color de su luz (LUCES, a elegir en su página de Ajustes), un lienzo pequeño que va
 // con ella («origen» de dibujar(); así se borra y se pinta poco) y la franja de la pantalla donde se ve («recorte»).
@@ -15,7 +30,7 @@ function luzDe({ halo, borde, bordeOscuro, cuerpo, lejos, vivo, vivoOscuro, tint
   const base = { halo, cuerpo, lejos, tinta, brillo0: 'rgba(240, 253, 244, 0)' };
   return {
     // en claro, más halo y una sombra oscura (sobre el blanco, la de color apenas se veía; D-134)
-    claro: { ...base, halo1: 0.2, halo2: 0.09, borde, brillo: 'rgba(240, 253, 244, 0.9)', vivo, detalle: `rgba(${detalle}, 0.5)`,
+    claro: { ...base, halo1: 0.22, halo2: 0.1, borde, brillo: 'rgba(240, 253, 244, 0.9)', vivo, detalle: `rgba(${detalle}, 0.5)`,
       rubor: rubor[0], sombra: 'rgba(15, 23, 42, 0.28)', sombra0: 'rgba(15, 23, 42, 0)', hueso: '#334155' },
     oscuro: { ...base, halo1: 0.3, halo2: 0.14, borde: bordeOscuro, brillo: 'rgba(240, 253, 244, 0.85)', vivo: vivoOscuro,
       detalle: `rgba(${detalle}, 0.55)`, rubor: rubor[1], sombra: `rgba(${sombraOscura}, 0.45)`, sombra0: `rgba(${sombraOscura}, 0)`,
@@ -39,52 +54,137 @@ export const LUCES = {
     vivoOscuro: '#f5f3ff', tinta: '#2e1065', detalle: '46, 16, 101', rubor: ['rgba(244, 114, 182, 0.6)', 'rgba(249, 168, 212, 0.65)'],
     sombra: '124, 58, 237', sombraOscura: '167, 139, 250' }),
 };
-const BORDE = 1.3; // grosor del borde oscuro, en unidades
 const TAU = Math.PI * 2;
 const lim = (v, a, b) => (v < a ? a : v > b ? b : v);
 const mezcla = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+// Los grosores, en unidades (a escala 1; por debajo de 0,75, algo más gruesos): el contorno de fuera (con su sesgo
+// hacia abajo a la derecha: así es más fino hacia la luz y más grueso en la sombra), el de dentro, entre capas, y la
+// línea de neón, entre el contorno y el cuerpo.
+const GROSOR = { fuera: 1.45, sesgo: [0.36, 0.48], dentro: 0.6, neon: 0.65 };
+const LUZ = [-0.6, -0.8]; // hacia dónde está la luz (arriba a la izquierda)
 // Un cuerpo de verdad (D-138): cuánto engorda o adelgaza cada tramo en su raíz y en su punta, por su radio en el
-// esqueleto: más gruesos junto al cuerpo y más finos hacia la muñeca y el tobillo.
+// esqueleto: más gruesos junto al cuerpo y más finos hacia la muñeca y el tobillo. Desde D-141, algo más rellenos (del
+// camino «orgánico»): a su tamaño en la app se leen más como un cuerpo.
 const AFINAR = {
-  brazo: [[1.2, 0.98], [1.0, 0.8]],                   // brazo y antebrazo
-  pierna: [[1.24, 0.96], [0.98, 0.74], [1.05, 0.86]], // muslo, pierna y pie
+  brazo: [[1.27, 1.05], [1.07, 0.88]], // brazo y antebrazo
+  pierna: [[1.3, 1.02], [1.04, 0.82]], // muslo y pierna (el pie, aparte: PIE)
 };
-const MANO = 1.12; // la mano, algo más gruesa que la muñeca (por el radio del brazo)
+// La mano, una manopla: un óvalo a lo largo del antebrazo, más ancho que la muñeca y algo grande, que le da encanto
+// (por el radio del brazo); desde D-141, algo más estrecha: más mano y menos bola.
+const MANO = { largo: 1.42, ancho: 1.1, avance: 1.4 };
+// La coleta de «Ella» (D-141): sale de la goma, arriba en la parte de atrás de la cabeza, se separa de ella y cae por su
+// peso (hacia abajo en la pantalla, como el pelo de verdad: también tumbada o dando una vuelta), más gruesa justo tras la
+// goma y en punta al final, algo hacia un lado, con mechones y su vaivén. Cada tramo: cuánto se separa de la cabeza
+// (por la dirección hacia atrás, que de lado mide unas 6 unidades y de frente o de espaldas casi nada), cuánto cae y su
+// grosor al acabar; el primero empieza en la goma (COLETA_GOMA, de grosor COLETA_R0).
+const COLETA = [[0.55, 2.6, 3.6], [0.45, 7.2, 3.9], [0.22, 8.4, 3.4], [0.06, 8.6, 2.2], [0, 7.6, 0.6]];
+const COLETA_GOMA = { y: -8.5, fuera: 0.6 }, COLETA_R0 = 2.5;
+const COLETA_LADO = 0.9; // cuánto cae hacia un lado, de serie (a su derecha), en unidades por tramo, de frente o de espaldas
+// El pie, una zapatilla pequeña y redondeada: un elipsoide de largo, ancho y alto, adelantado desde el tobillo, con la
+// suela en el suelo.
+const PIE = { largo: 6, ancho: 4.4, alto: 2.6, avance: 2.7, suela: 3.6 };
 const HALO_RES = 0.5; // la resolución del halo, por la del lienzo: es un resplandor, y así cuesta mucho menos
-// Su luz (D-138): cada degradado, de arriba a la izquierda (0) a abajo a la derecha (1) de todo su cuerpo, con su color
-// mezclado hacia el blanco (+) o hacia el negro (−) en cada punto: el cuerpo, y la franja de sombra y la de luz de cada
-// tramo (más oscura y más clara que él donde caen).
+const HALO_ANCHO_RES = 0.25; // y la del halo ancho, aún menos: al ampliarlo, se difumina solo
+// Su luz: el cuerpo, un degradado de arriba a la izquierda (0) a abajo a la derecha (1) de un marco fijo, con su color
+// mezclado hacia el blanco (+) o hacia el negro (−); la línea de neón, del centro de la cadera (apagada) hacia arriba a
+// la izquierda (viva); y la de la cabeza, de arriba a la izquierda a abajo a la derecha.
 const TONOS = {
-  cuerpo: [[0, 0.22], [0.45, 0], [1, -0.2]],
-  sombra: [[0, -0.04], [0.45, -0.14], [1, -0.3]],
-  luz: [[0, 0.42], [0.45, 0.22], [1, 0.06]],
+  cuerpo: [[0, 0.2], [0.22, 0.06], [0.55, -0.05], [1, -0.24]],
+  neon: { claro: [[0, 0.03], [0.4, 0.22], [1, 0.5]], oscuro: [[0, 0.1], [0.4, 0.34], [1, 0.64]] },
+  neonCabeza: { claro: [[0, 0.62], [0.5, 0.36], [1, 0.1]], oscuro: [[0, 0.7], [0.5, 0.46], [1, 0.22]] },
 };
-// Un color (#rrggbb) mezclado hacia el blanco (k > 0) o hacia el negro (k < 0); guardado, que se pide en cada fotograma.
-const tonos = new Map();
-function tono(color, k) {
-  if (!k) return color;
-  const clave = `${color}${k}`;
-  let v = tonos.get(clave);
+// Los colores (#rrggbb o rgb(r, g, b)): en números, mezclados hacia el blanco (k > 0) o el negro (k < 0), entre sí y con
+// su transparencia; todo guardado, que se pide en cada fotograma.
+const rgbs = new Map();
+function rgbDe(color) {
+  let v = rgbs.get(color);
   if (!v) {
-    const hacia = k > 0 ? 255 : 0, t = Math.abs(k);
-    const rgb = [1, 3, 5].map((i) => parseInt(color.slice(i, i + 2), 16));
-    v = `rgb(${rgb.map((x) => Math.round(x + (hacia - x) * t)).join(', ')})`;
-    tonos.set(clave, v);
+    v = color[0] === '#' ? [1, 3, 5].map((i) => parseInt(color.slice(i, i + 2), 16)) : color.match(/[\d.]+/g).slice(0, 3).map(Number);
+    rgbs.set(color, v);
   }
   return v;
 }
+const colores = new Map();
+function guardado(clave, hacer) {
+  let v = colores.get(clave);
+  if (v === undefined) {
+    v = hacer();
+    colores.set(clave, v);
+  }
+  return v;
+}
+function tono(color, k) {
+  if (!k) return color;
+  return guardado(`t${color}${k}`, () => {
+    const hacia = k > 0 ? 255 : 0, t = Math.abs(k);
+    return `rgb(${rgbDe(color).map((x) => Math.round(x + (hacia - x) * t)).join(', ')})`;
+  });
+}
+function mezclaColor(a, b, t) {
+  return guardado(`m${a}${b}${t}`, () => {
+    const x = rgbDe(a), y = rgbDe(b);
+    return `rgb(${x.map((v, i) => Math.round(v + (y[i] - v) * t)).join(', ')})`;
+  });
+}
+function rgba(color, a) {
+  const q = Math.round(lim(a, 0, 1) * 100) / 100;
+  return guardado(`a${color}${q}`, () => `rgba(${rgbDe(color).join(', ')}, ${q})`);
+}
 const RAIZ = 0.42; // lo de arriba del brazo o del muslo que va con el tronco cuando la parte queda delante
+const HISTERESIS = 1; // unidades de más para cambiar de capa (así, en el límite, no salta de una a otra)
+
+// ——— Uniones de verdad ———
+// Dos tramos { a, b, r1, r2 } que salen de una misma articulación (o casi): si entre los dos queda una muesca (el
+// borde de cada uno, del lado del otro, se cruzan cerca de su arranque), un relleno con la curva tangente a los dos
+// bordes, de largo «L» a cada lado. Para engordarlo (el borde, el halo…) se mueven sus bordes (trazado()).
+function bordeHacia(T, hacia) {
+  const dx = T.b[0] - T.a[0], dy = T.b[1] - T.a[1], d = Math.hypot(dx, dy);
+  if (d <= Math.abs(T.r1 - T.r2) + 0.5) return null;
+  const ang = Math.atan2(dy, dx), g = Math.acos((T.r1 - T.r2) / d);
+  let mejor = null;
+  for (const s of [1, -1]) {
+    const n = [Math.cos(ang + s * g), Math.sin(ang + s * g)];
+    const k = n[0] * (hacia[0] - T.a[0]) + n[1] * (hacia[1] - T.a[1]);
+    if (!mejor || k > mejor.k) mejor = { k, n };
+  }
+  const n = mejor.n, p = [T.a[0] + T.r1 * n[0], T.a[1] + T.r1 * n[1]], q = [T.b[0] + T.r2 * n[0], T.b[1] + T.r2 * n[1]];
+  const l = Math.hypot(q[0] - p[0], q[1] - p[1]) || 1;
+  return { p, n, e: [(q[0] - p[0]) / l, (q[1] - p[1]) / l], l };
+}
+function filete(T1, T2, L, minimo = 0.12) {
+  const b1 = bordeHacia(T1, T2.b), b2 = bordeHacia(T2, T1.b);
+  if (!b1 || !b2) return null;
+  const den = b1.e[0] * b2.e[1] - b1.e[1] * b2.e[0];
+  if (Math.abs(den) < minimo) return null; // casi paralelos: no hay muesca (o tan poca que no se ve)
+  const wx = b2.p[0] - b1.p[0], wy = b2.p[1] - b1.p[1];
+  const t1 = (wx * b2.e[1] - wy * b2.e[0]) / den, t2 = (wx * b1.e[1] - wy * b1.e[0]) / den;
+  if (t1 < -2.5 || t2 < -2.5 || t1 > 0.6 * b1.l || t2 > 0.6 * b2.l) return null;
+  // una muesca de verdad: cada borde se va hacia el lado de fuera del otro
+  if (b1.n[0] * b2.e[0] + b1.n[1] * b2.e[1] <= 0.05 || b2.n[0] * b1.e[0] + b2.n[1] * b1.e[1] <= 0.05) return null;
+  const l = Math.min(L, 0.85 * b1.l - t1, 0.85 * b2.l - t2);
+  if (l < 0.5) return null;
+  const C = [b1.p[0] + b1.e[0] * t1, b1.p[1] + b1.e[1] * t1];
+  let P1 = [C[0] + b1.e[0] * l, C[1] + b1.e[1] * l], P2 = [C[0] + b2.e[0] * l, C[1] + b2.e[1] * l], n1 = b1.n, n2 = b2.n;
+  // en el mismo sentido que todo lo demás (así, si se solapa con otra forma, sigue dentro)
+  if ((P1[0] - C[0]) * (P2[1] - C[1]) - (P1[1] - C[1]) * (P2[0] - C[0]) < 0) [P1, P2, n1, n2] = [P2, P1, n2, n1];
+  return { f: true, C, P1, P2, n1, n2 };
+}
+const invertir = (T) => ({ a: T.b, b: T.a, r1: T.r2, r2: T.r1 });
 
 export function crearTrajeNeon(lienzo) {
-  const ctx = lienzo.getContext('2d');
+  const real = lienzo.getContext('2d');
+  let ctx = real; // donde se pinta (a medio brillo, el lienzo de la figura, que luego se pasa entero)
   const halo = document.createElement('canvas'); // el halo se pinta aparte para que no se acumule donde se cruzan
   const hctx = halo.getContext('2d');
-  const capa = document.createElement('canvas'); // y cada capa del cuerpo, para que su luz no se salga de ella
+  const haloAncho = document.createElement('canvas'); // y el halo ancho, aún más pequeño
+  const actx = haloAncho.getContext('2d');
+  const capa = document.createElement('canvas'); // y a medio brillo, toda la figura, que luego se pasa entera
   const cctx = capa.getContext('2d');
   let ancho = 0, alto = 0, dpr = 1, huesos = false, base = 1;
   let tema = 'claro', luz = 'verde', col = LUCES.verde.claro;
   let ox = 0, oy = 0, recorte = null; // dónde cae el lienzo (px del escenario) y la franja donde se ve
   let brillo = 1; // cuánto brilla su halo (su página de Ajustes: suave, normal o intenso)
+  let memoria = new Map(), tMemoria = -1; // en qué capa iba cada parte en el fotograma anterior (HISTERESIS)
 
   function ovalo(c, m, extra) {
     c.beginPath();
@@ -99,15 +199,25 @@ export function crearTrajeNeon(lienzo) {
   // Las formas del cuerpo, engordadas «extra» unidades, todas en un solo trazado (todas giran en el mismo sentido, así
   // que donde se solapan siguen dentro: es su unión), para rellenarlo de una vez o para recortar con él. Cada forma:
   // { c, r } (un disco), { a, b, r1, r2 } (un tramo que se estrecha: un círculo de radio r1 en a, otro de radio r2 en b y
-  // lo que hay entre los dos) o { m } (una mancha: un músculo, la barriga).
+  // lo que hay entre los dos), { m } (una mancha: un músculo, la barriga, la mano, el pie) o { f } (el relleno de una
+  // unión, filete()). Un tramo con «sinTapa» acaba en a con un corte recto, sin su media luna (D-139: la raíz de una
+  // pierna que va delante, sin un arco de borde en la ingle); si se ve de punta (hacia nosotros), no se pinta.
   function rellenar(c, lista, extra) {
     trazado(c, lista, extra);
     c.fill();
   }
-  function trazado(c, lista, extra) {
+  function trazado(c, lista, extra, sinFiletes = false) {
     c.beginPath();
     for (const s of lista) {
-      if (s.m) {
+      if (s.f) {
+        if (sinFiletes) continue; // el halo, sin uniones ni músculos (no se notan en un resplandor)
+        const k = extra / Math.max(0.3, 1 + s.n1[0] * s.n2[0] + s.n1[1] * s.n2[1]);
+        const C = [s.C[0] + (s.n1[0] + s.n2[0]) * k, s.C[1] + (s.n1[1] + s.n2[1]) * k];
+        c.moveTo(C[0], C[1]);
+        c.lineTo(s.P1[0] + s.n1[0] * extra, s.P1[1] + s.n1[1] * extra);
+        c.quadraticCurveTo(C[0], C[1], s.P2[0] + s.n2[0] * extra, s.P2[1] + s.n2[1] * extra);
+      } else if (s.m) {
+        if (sinFiletes && !s.m.bulto && !s.m.liso) continue;
         const m = s.m, rx = Math.max(0.1, m.rx + extra), ry = Math.max(0.1, m.ry + extra);
         c.moveTo(m.c[0] + rx * Math.cos(m.rot), m.c[1] + rx * Math.sin(m.rot));
         c.ellipse(m.c[0], m.c[1], rx, ry, m.rot, 0, TAU);
@@ -118,7 +228,13 @@ export function crearTrajeNeon(lienzo) {
       } else {
         const r1 = Math.max(0.1, s.r1 + extra), r2 = Math.max(0.1, s.r2 + extra);
         const dx = s.b[0] - s.a[0], dy = s.b[1] - s.a[1], d = Math.hypot(dx, dy);
-        if (d <= Math.abs(r1 - r2) + 1e-3) {
+        if (s.sinTapa) {
+          if (d <= Math.abs(r1 - r2) + 0.5) continue;
+          const ang = Math.atan2(dy, dx), g = Math.acos((r1 - r2) / d);
+          c.moveTo(s.a[0] + r1 * Math.cos(ang + g), s.a[1] + r1 * Math.sin(ang + g));
+          c.lineTo(s.a[0] + r1 * Math.cos(ang - g), s.a[1] + r1 * Math.sin(ang - g));
+          c.arc(s.b[0], s.b[1], r2, ang - g, ang + g);
+        } else if (d <= Math.abs(r1 - r2) + 1e-3) {
           const [q, r] = r1 >= r2 ? [s.a, r1] : [s.b, r2];
           c.moveTo(q[0] + r, q[1]);
           c.arc(q[0], q[1], r, 0, TAU);
@@ -133,91 +249,250 @@ export function crearTrajeNeon(lienzo) {
     }
   }
 
-  // ——— Un cuerpo de verdad (D-138) ———
-  // El tronco: la espalda (del cuello a la cintura), los hombros, que caen del cuello (el trapecio, de cada lado), los
-  // costados (de cada hombro a la cintura, más estrecha, y de ella a la cadera), la cadera, el cuello y sus manchas (el
-  // pecho, la barriga…). Visto de lado, los hombros y la cadera se juntan solos (el esqueleto ya los gira).
+  // ——— Un cuerpo de verdad (D-138), acabado ———
+  // El tronco: la espalda (de algo por debajo del cuello a la cintura: así se ve el cuello), los hombros, que caen del
+  // arranque del cuello (el trapecio, de cada lado, más fino que antes), los costados (de cada hombro a la cintura, más
+  // estrecha, y de ella a la cadera), la pelvis, el cuello y sus manchas (el pecho, la barriga…); y las uniones del
+  // cuello con los hombros y de la cintura. Visto de lado, los hombros y la cadera se juntan solos (el esqueleto ya los
+  // gira).
+  // D-139: sin la barra de la cadera (asomaba redonda entre los muslos): la pelvis es lisa, una U invertida; por
+  // abajo la cierran las raíces de las piernas, que se juntan en la ingle, y la cadera de cada lado acaba algo más fina
+  // que el muslo (así sigue en él, sin un bulto redondo). La cintura, según su sexo («cintura»).
   function troncoDe(f, tronco) {
     const p = f.cin.p;
-    const [[, , rT], [, , rC], [, , rH]] = tronco.segmentos;
-    const formas = [
-      { a: p.cuello, b: p.cintura, r1: rT, r2: rT * 0.94 },
-      { a: p.caderaI, b: p.caderaD, r1: rC, r2: rC },
-      { a: p.cuello, b: mezcla(p.cuello, p.cabeza, 0.6), r1: rT * 0.62, r2: rT * 0.5 }, // el cuello
-    ];
+    const [[, , rT], [a0, b0, rP], [, , rH]] = tronco.segmentos;
+    const ci = tronco.cintura || 1, rCad = f.cin.radios.pierna * (tronco.caderaR || 1.1);
+    const dx = p.lumbar[0] - p.cuello[0], dy = p.lumbar[1] - p.cuello[1], dl = Math.hypot(dx, dy) || 1;
+    const bajo = (k) => [p.cuello[0] + (dx / dl) * k, p.cuello[1] + (dy / dl) * k]; // bajando por la espalda
+    const espalda = { a: bajo(4.2), b: p.cintura, r1: rT * 0.88, r2: rT * 0.94 * ci };
+    const cuello = { a: bajo(2), b: mezcla(p.cuello, p.cabeza, 0.55), r1: rT * 0.6, r2: rT * 0.5 };
+    const formas = [espalda, { a: a0, b: b0, r1: rP, r2: rP }, cuello];
+    const uniones = [];
     for (const l of ['I', 'D']) {
-      const w = [p.cintura[0] + (p['cadera' + l][0] - p.pelvis[0]) * 0.7, p.cintura[1] + (p['cadera' + l][1] - p.pelvis[1]) * 0.7];
-      formas.push(
-        { a: p.cuello, b: p['hombro' + l], r1: rT * 0.78, r2: rH * 0.92 },   // el hombro, que cae del cuello
-        { a: p['hombro' + l], b: w, r1: rH * 0.95, r2: rT * 0.62 },          // el costado, hasta la cintura
-        { a: w, b: p['cadera' + l], r1: rT * 0.62, r2: rC * 1.05 },          // y hasta la cadera
-      );
+      const w = [p.cintura[0] + (p['cadera' + l][0] - p.pelvis[0]) * 0.7 * ci, p.cintura[1] + (p['cadera' + l][1] - p.pelvis[1]) * 0.7 * ci];
+      const trapecio = { a: bajo(2.4), b: p['hombro' + l], r1: rT * 0.5, r2: rH * 0.92 }; // el hombro, que cae del cuello
+      const costado = { a: p['hombro' + l], b: w, r1: rH * 0.95, r2: rT * 0.62 * ci };   // el costado, hasta la cintura
+      const cadera = { a: w, b: p['cadera' + l], r1: rT * 0.62 * ci, r2: rCad };          // y hasta la cadera
+      formas.push(trapecio, costado, cadera);
+      uniones.push(filete(cuello, trapecio, 2.4), filete(invertir(costado), cadera, 4.5));
     }
+    for (const u of uniones) if (u) formas.push(u);
     for (const m of tronco.manchas) if (!m.detras) formas.push({ m });
+    return { formas, costados: [formas[4], formas[7]] };
+  }
+  // La mano, una manopla (MANO): a lo largo del antebrazo (de punta, más redonda).
+  function manoDe(parte) {
+    const [[, E, r0], [, M]] = parte.segmentos;
+    let ux = M[0] - E[0], uy = M[1] - E[1];
+    const d = Math.hypot(ux, uy);
+    if (d < 1e-3) [ux, uy] = [0, 1];
+    else [ux, uy] = [ux / d, uy / d];
+    const k = lim(d / 15, 0, 1); // cuánto se ve el antebrazo de largo
+    const largo = r0 * (MANO.ancho + (MANO.largo - MANO.ancho) * k), anchoM = r0 * MANO.ancho;
+    const c = [M[0] + ux * MANO.avance * k, M[1] + uy * MANO.avance * k];
+    const formas = [{ m: { c, rx: largo, ry: anchoM, rot: Math.atan2(uy, ux), musculos: [], bulto: true } }];
     return formas;
   }
-  // Un brazo o una pierna: cada tramo, más grueso en la raíz que en la punta, con su mano, y sus músculos. Si queda
-  // delante del tronco, va en su propia capa, pero su raíz (lo de arriba del primer tramo y el deltoides) va también
-  // con el tronco y su borde empieza más abajo: así sale del cuerpo sin costura y, más abajo, se ve delante.
+  // El pie (PIE): un elipsoide a lo largo del pie, con su ancho de lado a lado y su alto, visto desde la pantalla: de
+  // frente, un óvalo achatado; de lado, una zapatilla. Con la suela en el suelo.
+  function pieDe(parte) {
+    const K = parte.segmentos[1][0], A = parte.segmentos[1][1], P = parte.segmentos[2][1];
+    const k = 0.88 + 0.12 * (parte.segmentos[0][2] / 4.7);
+    const sub = (u, v) => [u[0] - v[0], u[1] - v[1], u[2] - v[2]];
+    const uni = (v) => { const l = Math.hypot(v[0], v[1], v[2]) || 1; return [v[0] / l, v[1] / l, v[2] / l]; };
+    const cruz = (u, v) => [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
+    const dF = uni(sub(P, A));
+    let arriba = uni(sub(K, A)), lado = cruz(dF, arriba);
+    lado = Math.hypot(...lado) < 0.2 ? [1, 0, 0] : uni(lado);
+    arriba = cruz(lado, dF);
+    const bajar = PIE.suela - PIE.alto * k;
+    const c = [A[0] + dF[0] * PIE.avance * k - arriba[0] * bajar, A[1] + dF[1] * PIE.avance * k - arriba[1] * bajar];
+    let sxx = 0, sxy = 0, syy = 0;
+    for (const [v, r] of [[dF, PIE.largo * k], [lado, PIE.ancho * k], [arriba, PIE.alto * k]]) {
+      const x = v[0] * r, y = v[1] * r;
+      sxx += x * x; sxy += x * y; syy += y * y;
+    }
+    const tr = (sxx + syy) / 2, de = Math.sqrt(((sxx - syy) / 2) ** 2 + sxy * sxy);
+    return { m: { c, rx: Math.sqrt(tr + de), ry: Math.sqrt(Math.max(0.5, tr - de)), rot: 0.5 * Math.atan2(2 * sxy, sxx - syy),
+      musculos: [], bulto: true } };
+  }
+  // Un brazo o una pierna: cada tramo, más grueso en la raíz que en la punta, con su mano o su pie, sus músculos y la
+  // unión del codo o la rodilla. Si queda delante del tronco, va en su propia capa, pero su raíz (lo de arriba del
+  // primer tramo y el deltoides) va también con el tronco y su borde empieza más abajo: así sale del cuerpo sin
+  // costura y, más abajo, se ve delante.
   function extremidad(parte) {
     const brazo = parte.nombre.startsWith('brazo');
     const k = brazo ? AFINAR.brazo : AFINAR.pierna;
-    const tramos = parte.segmentos.map(([a, b, r], i) => ({ a, b, r1: r * (k[i]?.[0] ?? 1), r2: r * (k[i]?.[1] ?? 1) }));
-    const mano = brazo ? [{ c: parte.segmentos[1][1], r: parte.segmentos[0][2] * MANO }] : [];
+    const tramos = parte.segmentos.slice(0, 2).map(([a, b, r], i) => ({ a, b, r1: r * k[i][0], r2: r * k[i][1] }));
+    const punta = brazo ? manoDe(parte) : [pieDe(parte)];
+    const union = filete(invertir(tramos[0]), tramos[1], Math.min(tramos[0].r2, tramos[1].r1) * 1.1, 0.42); // doblado más de 25°
     const manchas = parte.manchas.filter((m) => !m.detras).map((m) => ({ m }));
     const hombro = manchas.filter((s) => s.m.musculos.some((x) => x.startsWith('hombros')));
     const t0 = tramos[0];
     const desde = (u) => ({ ...t0, a: mezcla(t0.a, t0.b, u), r1: t0.r1 + (t0.r2 - t0.r1) * u });
-    // las franjas de luz de cada tramo (sin el pie); si queda delante, desde algo más abajo de su raíz
-    const bandas = tramos.slice(0, 2).map((t) => ({ a: t.a, b: t.b, r: Math.min(t.r1, t.r2) }));
-    const corta = desde(RAIZ + 0.06);
+    const tubos = tramos.map((t) => ({ a: t.a, b: t.b, r1: t.r1, r2: t.r2 }));
+    // D-139: en la pierna, su borde empieza sin tapa (sin un arco en la ingle)
+    const arranque = brazo ? desde(RAIZ + 0.04) : { ...desde(RAIZ + 0.04), sinTapa: true };
+    const resto = [...tramos.slice(1), ...punta, ...(union ? [union] : [])];
     return {
-      formas: [...tramos, ...mano, ...manchas],
+      formas: [...tramos, ...resto, ...manchas],
       raiz: [{ ...t0, b: mezcla(t0.a, t0.b, RAIZ), r2: t0.r1 + (t0.r2 - t0.r1) * RAIZ }, ...hombro],
-      conBorde: [desde(RAIZ + 0.04), ...tramos.slice(1), ...mano, ...manchas.filter((s) => !hombro.includes(s))],
-      bandas,
-      bandasDelante: [{ a: corta.a, b: corta.b, r: Math.min(corta.r1, corta.r2) }, ...bandas.slice(1)],
+      conBorde: [arranque, ...resto, ...manchas.filter((s) => !hombro.includes(s))],
+      tubos,
+      tubosDelante: [desde(RAIZ + 0.06), ...tubos.slice(1)],
+      tramo0: t0,
     };
   }
-  // Las capas del cuerpo, de atrás adelante. Cada una se pinta entera de una vez (primero su borde, todas sus formas
-  // engordadas; luego su cuerpo encima), así que lo que va en la misma capa es un solo cuerpo, sin costuras: lo que
-  // queda muy detrás (más oscuro); el tronco, con el cuello y lo que está a su altura (de pie, las piernas); y cada parte
-  // que queda delante (un brazo, la cabeza…), una a una, en su orden.
+  // Las capas del cuerpo, de atrás adelante. Cada una se pinta entera de una vez (su contorno, todas sus formas
+  // engordadas; su línea de neón; su cuerpo encima), así que lo que va en la misma capa es un solo cuerpo, sin costuras:
+  // lo que queda muy detrás (más oscuro); el tronco, con el cuello y lo que está a su altura (de pie, las piernas); y
+  // cada parte que queda delante (un brazo, la cabeza…), una a una, en su orden. Cada parte se queda en su capa hasta
+  // pasar el límite por HISTERESIS unidades (así no salta de una a otra en un par de fotogramas).
   function capasDe(f) {
-    const partes = f.cin.partes;
+    const dt = f.t - tMemoria;
+    if (!(dt > 0 && dt < 0.3)) memoria = new Map();
+    tMemoria = f.t;
+    const partes = f.cin.partes, p = f.cin.p;
     const tronco = partes.find((x) => x.nombre === 'tronco');
-    const formasTronco = troncoDe(f, tronco);
-    // el tronco, sin franjas (le basta su degradado; una franja en medio del pecho parecería una costura)
-    const medio = { formas: [...formasTronco], borde: [...formasTronco], bandas: [], color: col.cuerpo, tronco };
-    const lejos = { formas: [], borde: [], bandas: [], color: col.lejos };
-    const delante = [];
+    const tr = troncoDe(f, tronco);
+    const medio = { formas: [...tr.formas], borde: [...tr.formas], tubos: [], color: col.cuerpo, tronco, troncoFormas: tr.formas };
+    const lejos = { formas: [], borde: [], tubos: [], color: col.lejos, lejos: true };
+    const delanteCapas = [];
+    const enMedio = {};
     for (const parte of partes) {
       if (parte === tronco) continue;
       if (parte.centro) {
         const s = [{ c: parte.centro, r: parte.radio }];
-        delante.push({ formas: s, borde: s, bandas: [], color: col.cuerpo, cabeza: parte });
+        delanteCapas.push({ formas: s, borde: s, tubos: [], color: col.cuerpo, cabeza: parte });
         continue;
       }
       const e = extremidad(parte);
-      if (parte.clave < -3) {
+      const previa = memoria.get(parte.nombre);
+      // D-139: una pierna solo va «lejos» (aparte, detrás) si su cadera está detrás de verdad (casi de perfil): si no,
+      // el tronco acabaría en un bulto redondo encima de ella; así su raíz sigue con el tronco. Por eso, en las piernas,
+      // la histéresis solo va hacia el tronco: para irse detrás o delante hace falta pasar el límite de siempre por
+      // HISTERESIS; para quedarse, basta el de siempre (nunca va donde no iría sin ella)
+      const pierna = parte.nombre.startsWith('pierna');
+      const margen = (estado) => (previa === estado ? (pierna ? 0 : HISTERESIS) : previa ? -HISTERESIS : 0);
+      const ml = margen('lejos');
+      const atras = parte.clave < -3 + ml && (!pierna || p['cadera' + parte.nombre.slice(-1)][2] < -3.5 + ml);
+      const estado = atras ? 'lejos' : parte.clave <= tronco.clave - margen('delante') ? 'medio' : 'delante';
+      memoria.set(parte.nombre, estado);
+      if (estado === 'lejos') {
         lejos.formas.push(...e.formas);
         lejos.borde.push(...e.formas);
-        lejos.bandas.push(...e.bandas);
-      } else if (parte.clave <= tronco.clave) {
+        lejos.tubos.push(...e.tubos);
+      } else if (estado === 'medio') {
         medio.formas.push(...e.formas);
         medio.borde.push(...e.formas);
-        medio.bandas.push(...e.bandas);
+        medio.tubos.push(...e.tubos);
+        enMedio[parte.nombre] = e;
       } else {
         medio.formas.push(...e.raiz);
         medio.borde.push(...e.raiz);
-        delante.push({ formas: e.formas, borde: e.conBorde, bandas: e.bandasDelante, color: col.cuerpo });
+        delanteCapas.push({ formas: e.formas, borde: e.conBorde, tubos: e.tubosDelante, color: col.cuerpo });
       }
     }
-    return [...(lejos.formas.length ? [lejos] : []), medio, ...delante];
+    // las axilas (con el brazo a la altura del tronco) y la ingle (con las dos piernas)
+    const uniones = [];
+    for (const l of ['I', 'D']) {
+      const b = enMedio['brazo' + l];
+      if (b) uniones.push(filete(b.tramo0, tr.costados[l === 'I' ? 0 : 1], 2.2));
+    }
+    if (enMedio.piernaI && enMedio.piernaD) uniones.push(filete(enMedio.piernaI.tramo0, enMedio.piernaD.tramo0, 2.6));
+    for (const u of uniones) if (u) { medio.formas.push(u); medio.borde.push(u); }
+    const capas = [...(lejos.formas.length ? [lejos] : []), medio, ...delanteCapas];
+    const cab = partes.find((x) => x.centro);
+    if (f.coleta && cab) {
+      // La coleta de «Ella» (D-139, D-141): detrás de todo si queda detrás del cuerpo; si no, junto a la cabeza (detrás
+      // o delante de ella)
+      const cola = coletaDe(f);
+      const cp = { formas: cola, borde: cola, tubos: cola, color: col.cuerpo, coleta: true };
+      const zc = cola[2].a[2], zH = cab.centro[2];
+      const i = capas.findIndex((x) => x.cabeza);
+      if (zc < tronco.clave - 2) capas.unshift(cp);
+      else capas.splice(zc < zH ? i : i + 1, 0, cp);
+    }
+    return capas;
   }
-  // todos los volúmenes, engordados «extra» unidades (para el halo)
-  function formas(c, capas, extra) {
-    rellenar(c, capas.flatMap((cp) => cp.formas), extra);
+  // La coleta (D-141): sus puntos (COLETA), en la cabeza, unidos por tramos que se afinan; algo hacia un lado y con su
+  // vaivén: un balanceo suave y un muelle que se queda atrás cuando la cabeza se mueve de lado (como el pelo de verdad).
+  let muelle = { x: 0, v: 0, t: -1, hx: 0 };
+  function coletaDe(f) {
+    const cara = f.cin.cara;
+    // cuánto se mueve en la pantalla un paso a su derecha (de frente, a la derecha; de espaldas o en espejo, al revés;
+    // de lado, casi nada)
+    const sx = cara(1, 0, 8, true)[0] - cara(0, 0, 8, true)[0];
+    const hx = f.raiz[0] / f.escala + f.cin.p.cabeza[0];
+    const dt = f.t - muelle.t;
+    if (!(dt > 0 && dt < 0.3)) muelle = { x: 0, v: 0, t: f.t, hx };
+    else {
+      const meta = lim(-((hx - muelle.hx) / dt) * 0.05, -4, 4); // al revés de como se mueve la cabeza, en pantalla
+      muelle.v += ((meta - muelle.x) * 70 - muelle.v * 9) * dt;
+      muelle.x += muelle.v * dt;
+      muelle.t = f.t;
+      muelle.hx = hx;
+    }
+    const goma = cara(0, COLETA_GOMA.y, COLETA_GOMA.fuera, true);
+    const af = cara(0, -5, 7, true), ad = cara(0, -5, COLETA_GOMA.fuera, true);
+    const atras = [af[0] - ad[0], af[1] - ad[1]]; // hacia fuera de la cabeza, en la pantalla
+    // de lado a lado, en la pantalla: hacia su derecha (de serie), el balanceo y el muelle
+    const lado = COLETA_LADO * lim(sx, -1, 1) + Math.sin(f.t * 2.1) * 0.5;
+    // el suelo (la superficie de debajo, la de su sombra): tumbada, la coleta se queda encima, hacia atrás
+    const suelo = f.sombra ? (f.sombra.y - f.raiz[1]) / f.escala : Infinity;
+    const tramos = [];
+    let a = goma, r1 = COLETA_R0;
+    COLETA.forEach(([fuera, cae, r2], i) => {
+      const k = (i + 1) / COLETA.length;
+      const b = [a[0] + atras[0] * fuera + lado + muelle.x * 0.45 * k, a[1] + atras[1] * fuera + cae, goma[2]];
+      if (b[1] > suelo - r2) {
+        const sobra = Math.min(cae, b[1] - (suelo - r2));
+        b[1] -= sobra;
+        b[0] += (Math.sign(atras[0]) || 1) * sobra;
+      }
+      tramos.push({ a, b, r1, r2 });
+      a = b;
+      r1 = r2;
+    });
+    return tramos;
+  }
+  // Los mechones de la coleta (D-141): dos líneas finas a lo largo, algo más oscuras, y una de luz hacia la luz; y la
+  // goma, una banda clara de lado a lado, junto a la cabeza.
+  function pintarMechones(c, cp, oscuro) {
+    const t = cp.formas;
+    const centro = [t[0].a, ...t.map((x) => x.b)], radios = [t[0].r1, ...t.map((x) => x.r2)];
+    const normal = (i) => {
+      const a = centro[Math.max(0, i - 1)], b = centro[Math.min(centro.length - 1, i + 1)];
+      const dx = b[0] - a[0], dy = b[1] - a[1], d = Math.hypot(dx, dy) || 1;
+      return [-dy / d, dx / d];
+    };
+    // la normal que va hacia la luz (arriba a la izquierda), para el mechón de luz
+    const n2 = normal(2), haciaLuz = n2[0] * LUZ[0] + n2[1] * LUZ[1] >= 0 ? 1 : -1;
+    const linea = (off, desde, hasta, color, ancho) => {
+      c.strokeStyle = color;
+      c.lineWidth = ancho;
+      c.beginPath();
+      for (let i = desde; i <= hasta; i++) {
+        const n = normal(i), r = radios[i] * off;
+        const x = centro[i][0] + n[0] * r, y = centro[i][1] + n[1] * r;
+        if (i === desde) c.moveTo(x, y);
+        else c.lineTo(x, y);
+      }
+      c.stroke();
+    };
+    const fin = centro.length - 2;
+    linea(-0.3 * haciaLuz, 1, fin, rgba(tono(cp.color, -0.5), oscuro ? 0.5 : 0.42), 0.75);
+    linea(0.12 * haciaLuz, 2, fin, rgba(tono(cp.color, -0.5), oscuro ? 0.4 : 0.32), 0.6);
+    linea(0.58 * haciaLuz, 1, fin - 1, rgba(tono(cp.color, 0.75), oscuro ? 0.6 : 0.55), 0.65);
+    const n = normal(0), g = mezcla(centro[0], centro[1], 0.3), rg = (radios[0] + (radios[1] - radios[0]) * 0.3) * 1.08;
+    for (const [color, ancho] of [[col.borde, 2.7], [oscuro ? '#fdf2f8' : '#ffffff', 1.5]]) {
+      c.strokeStyle = color;
+      c.lineWidth = ancho;
+      c.beginPath();
+      c.moveTo(g[0] + n[0] * rg, g[1] + n[1] * rg);
+      c.lineTo(g[0] - n[0] * rg, g[1] - n[1] * rg);
+      c.stroke();
+    }
   }
   // dónde está, en px del escenario, con margen para el halo
   function caja(f) {
@@ -230,27 +505,42 @@ export function crearTrajeNeon(lienzo) {
       for (const [a, b, r] of p.segmentos) { ver(a[0], a[1], r); ver(b[0], b[1], r); }
       for (const m of p.manchas) ver(m.c[0], m.c[1], Math.max(m.rx, m.ry));
     }
-    const k = f.escala, mg = 14 * k;
+    const k = f.escala, mg = 16 * k;
     return [
       lim(Math.floor(f.raiz[0] + x0 * k - mg), ox, ox + ancho), lim(Math.floor(f.raiz[1] + y0 * k - mg), oy, oy + alto),
       lim(Math.ceil(f.raiz[0] + x1 * k + mg), ox, ox + ancho), lim(Math.ceil(f.raiz[1] + y1 * k + mg), oy, oy + alto),
     ];
   }
 
-  function pintarHalo(f, capas) {
+  // El halo: uno ancho y suave (a muy poca resolución: al ampliarlo se difumina solo) y otro pegado al cuerpo; en claro,
+  // más estrecho y de un color más hondo. Y el músculo que siente, encendido, con algo más de halo.
+  function pintarHalo(f, capas, vivos) {
     const [x0, y0, x1, y1] = caja(f), w = x1 - x0, h = y1 - y0;
     if (w <= 0 || h <= 0) return;
-    const intensidad = brillo * Math.max(0.25, f.carga ?? 1); // en el descanso, la carga: de apagada a recargada
-    const hr = dpr * HALO_RES; // el halo, a media resolución: es un resplandor (y así cuesta la cuarta parte)
-    for (const [extra, alfa] of [[10 * (0.8 + 0.2 * brillo), col.halo2 * (1 + 2 * f.destello) * intensidad], [4.5, col.halo1 * (1 + 1.6 * f.destello) * intensidad]]) {
-      hctx.setTransform(hr, 0, 0, hr, -ox * hr, -oy * hr);
-      hctx.clearRect(x0, y0, w, h);
-      hctx.translate(f.raiz[0], f.raiz[1]);
-      hctx.scale(f.escala, f.escala);
-      hctx.fillStyle = col.halo;
-      formas(hctx, capas, extra);
+    // en el descanso, la carga: de apagada a recargada; y su luz respira, despacio (D-141, del camino «neón»)
+    const intensidad = brillo * Math.max(0.25, f.carga ?? 1) * (0.92 + 0.08 * Math.sin(f.t * 1.25));
+    const oscuro = tema === 'oscuro';
+    const color = oscuro ? col.halo : tono(col.halo, -0.1);
+    const ancha = oscuro ? 1 : 0.72;
+    const todas = capas.flatMap((cp) => cp.formas);
+    const pasar = (c, lc, res, extra, alfa, lista = todas, colorP = color, resumido = true) => {
+      const hr = dpr * res;
+      c.setTransform(hr, 0, 0, hr, -ox * hr, -oy * hr);
+      c.clearRect(x0, y0, w, h);
+      c.translate(f.raiz[0], f.raiz[1]);
+      c.scale(f.escala, f.escala);
+      c.fillStyle = colorP;
+      trazado(c, lista, extra, resumido);
+      c.fill();
       ctx.globalAlpha = Math.min(1, alfa) * base;
-      ctx.drawImage(halo, (x0 - ox) * hr, (y0 - oy) * hr, w * hr, h * hr, x0, y0, w, h);
+      ctx.drawImage(lc, (x0 - ox) * hr, (y0 - oy) * hr, w * hr, h * hr, x0, y0, w, h);
+    };
+    // (D-141: con un tope, para que con brillo intenso en oscuro no quede casi opaco, como un cuerpo más)
+    pasar(actx, haloAncho, HALO_ANCHO_RES, 7.5 * ancha * (0.8 + 0.2 * brillo),
+      Math.min(0.7 + 0.25 * f.destello, (col.halo1 + col.halo2) * 1.15 * (1 + 1.8 * f.destello) * intensidad));
+    if (vivos.length) {
+      const fuerza = Math.max(...vivos.map((v) => v.i));
+      pasar(hctx, halo, HALO_RES, 3.5, 0.32 * fuerza * intensidad, vivos.map((v) => ({ m: v.m })), tono(col.halo, 0.25), false);
     }
     ctx.globalAlpha = 1;
   }
@@ -270,40 +560,68 @@ export function crearTrajeNeon(lienzo) {
     ctx.restore();
   }
 
-  // Las capas del cuerpo (D-138), una a una: su borde (todas sus formas, engordadas) y su cuerpo encima, ya con su luz
-  // (un degradado de arriba a la izquierda, el mismo en todas las capas, así que casan), y lo demás de su luz
-  // (iluminar()). A pleno brillo, directamente en el lienzo; a medio brillo (cargándose en el descanso), cada capa en un
-  // lienzo aparte y luego al de verdad, entera (si no, se verían sus formas solapadas). Tras la cabeza, la cara y la cinta.
-  function pintarCuerpo(f, capas) {
+  // Los músculos que siente, encendidos: los 3 que más (los demás, mucho menos), con su forma (para su halo).
+  function encendidos(f) {
+    const luzM = f.cuerpo?.luz || {};
+    const top = new Set(Object.keys(luzM).filter((k) => luzM[k] >= 0.04).sort((a, b) => luzM[b] - luzM[a]).slice(0, 3));
+    const intensidad = (m) => Math.max(0, ...m.musculos.map((k) => (luzM[k] || 0) * (top.has(k) ? 1 : 0.3)));
+    const vivos = [];
+    for (const parte of f.cin.partes) {
+      for (const m of parte.manchas) {
+        if (m.detras || m.liso) continue;
+        const i = intensidad(m);
+        if (i > 0.15) vivos.push({ m, i });
+      }
+    }
+    return { intensidad, vivos };
+  }
+
+  // Las capas del cuerpo, una a una, encima del contorno de fuera de toda la figura (más grueso hacia la sombra, con su
+  // color de la luz a la sombra): su contorno de dentro (fino y más suave, sobre lo de debajo), su línea de neón y su
+  // cuerpo, ya con su luz (un degradado de arriba a la izquierda, el mismo en todas las capas, así que casan), y lo demás
+  // de su luz (iluminar()). A medio brillo (cargándose en el descanso), toda la figura en un lienzo aparte y luego al de
+  // verdad, entera (si no, se verían sus capas solapadas). Tras la cabeza, la cara y la cinta.
+  function pintarCuerpo(f, capas, luces) {
     const marco = marcoDe(f);
     const aparte = base < 0.999;
-    for (const cp of capas) {
-      let c = ctx, x0 = 0, y0 = 0, w = 0, h = 0;
-      if (aparte) {
-        [x0, y0, w, h] = cajaDe(f, cp);
-        w -= x0;
-        h -= y0;
-        if (w <= 0 || h <= 0) continue;
-        c = cctx;
-        c.setTransform(dpr, 0, 0, dpr, -ox * dpr, -oy * dpr);
-        c.clearRect(x0, y0, w, h);
-      } else ctx.save();
-      c.translate(f.raiz[0], f.raiz[1]);
-      c.scale(f.escala, f.escala);
-      c.fillStyle = col.borde;
-      rellenar(c, cp.borde, BORDE);
-      c.fillStyle = cp.cabeza ? luzDeCabeza(c, cp.cabeza, cp.color) : luzDe(c, marco, cp.color, TONOS.cuerpo);
-      rellenar(c, cp.formas, 0);
-      iluminar(c, f, cp, marco);
-      if (aparte) {
-        ctx.globalAlpha = base;
-        ctx.drawImage(capa, (x0 - ox) * dpr, (y0 - oy) * dpr, w * dpr, h * dpr, x0, y0, w, h);
-        ctx.globalAlpha = 1;
-      } else ctx.restore();
+    const baseReal = base;
+    let zona = null;
+    if (aparte) {
+      zona = caja(f);
+      if (zona[2] <= zona[0] || zona[3] <= zona[1]) return;
+      cctx.setTransform(dpr, 0, 0, dpr, -ox * dpr, -oy * dpr);
+      cctx.clearRect(zona[0], zona[1], zona[2] - zona[0], zona[3] - zona[1]);
+      ctx = cctx;
+      base = 1;
+    }
+    const oscuro = tema === 'oscuro';
+    const kB = f.escala < 0.75 ? 1 + (0.75 - f.escala) * 1.1 : 1; // en pequeño, algo más gruesos
+    const neon = GROSOR.neon * kB;
+    const g = gradientes(ctx, f, marco, oscuro);
+    ctx.save();
+    ctx.translate(f.raiz[0], f.raiz[1]);
+    ctx.scale(f.escala, f.escala);
+    ctx.save();
+    ctx.translate(GROSOR.sesgo[0] * kB, GROSOR.sesgo[1] * kB);
+    ctx.fillStyle = g.fuera;
+    rellenar(ctx, capas.flatMap((cp) => cp.borde), neon + GROSOR.fuera * kB);
+    ctx.restore();
+    capas.forEach((cp, i) => {
+      // el contorno de dentro, solo en lo que va encima del tronco (brazos, cabeza, la pierna de delante): la primera
+      // capa no tiene nada debajo (le basta el de fuera, que hacia la luz es del mismo color y casi del mismo grosor), y
+      // el tronco, encima de lo de muy detrás, se separa de ello con su línea de neón (D-139: con una raya oscura más,
+      // la redondez de la cadera quedaba colgando encima de la pierna de detrás)
+      ctx.fillStyle = g.dentro;
+      if (i > 0 && !cp.tronco) rellenar(ctx, cp.borde, neon + GROSOR.dentro * kB);
+      // la línea de neón (lo de muy detrás, sin ella: así se queda al fondo; y D-139: su borde sigue siendo borde, como
+      // antes, sin una franja de luz que deje la cadera colgando encima de la pierna de detrás)
+      ctx.fillStyle = cp.cabeza ? g.neonCabeza : g.neon;
+      if (!cp.lejos) rellenar(ctx, cp.borde, neon);
+      ctx.fillStyle = cp.cabeza ? luzDeCabeza(ctx, cp.cabeza, cp.color) : cp.lejos ? g.cuerpoLejos : cp.coleta ? g.coleta : g.cuerpo;
+      rellenar(ctx, cp.formas, 0);
+      iluminar(ctx, f, cp, luces, oscuro);
       if (cp.cabeza) {
         ctx.save();
-        ctx.translate(f.raiz[0], f.raiz[1]);
-        ctx.scale(f.escala, f.escala);
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
         ctx.globalAlpha = base;
@@ -311,51 +629,60 @@ export function crearTrajeNeon(lienzo) {
         if (f.cinta) pintarCinta(f, cp.cabeza);
         ctx.restore();
       }
+    });
+    ctx.restore();
+    if (aparte) {
+      ctx = real;
+      base = baseReal;
+      const [x0, y0, x1, y1] = zona;
+      ctx.globalAlpha = base;
+      ctx.drawImage(capa, (x0 - ox) * dpr, (y0 - oy) * dpr, (x1 - x0) * dpr, (y1 - y0) * dpr, x0, y0, x1 - x0, y1 - y0);
+      ctx.globalAlpha = 1;
     }
   }
-  // Dónde cae una capa, en px del escenario: solo eso se limpia, se ilumina y se pasa al lienzo (una capa de un brazo es
-  // mucho más pequeña que todo el cuerpo).
-  function cajaDe(f, cp) {
-    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-    const ver = (x, y, r) => {
-      if (x - r < x0) x0 = x - r;
-      if (y - r < y0) y0 = y - r;
-      if (x + r > x1) x1 = x + r;
-      if (y + r > y1) y1 = y + r;
-    };
-    for (const s of cp.formas) {
-      if (s.m) ver(s.m.c[0], s.m.c[1], Math.max(s.m.rx, s.m.ry) + 3);
-      else if (s.c) ver(s.c[0], s.c[1], s.r);
-      else {
-        ver(s.a[0], s.a[1], s.r1);
-        ver(s.b[0], s.b[1], s.r2);
-      }
-    }
-    const k = f.escala, mg = (BORDE + 1) * k + 2;
-    return [
-      lim(Math.floor(f.raiz[0] + x0 * k - mg), ox, ox + ancho), lim(Math.floor(f.raiz[1] + y0 * k - mg), oy, oy + alto),
-      lim(Math.ceil(f.raiz[0] + x1 * k + mg), ox, ox + ancho), lim(Math.ceil(f.raiz[1] + y1 * k + mg), oy, oy + alto),
-    ];
-  }
-  // Dónde está todo su cuerpo, en unidades (para su luz, que va de una esquina a otra, sea cual sea su postura).
+  // Su marco fijo, en unidades, alrededor de la pelvis (para su luz, que va de una esquina a otra: así no cambia al
+  // mover los brazos).
   function marcoDe(f) {
-    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-    for (const k in f.cin.p) {
-      const [x, y] = f.cin.p[k];
-      if (x < x0) x0 = x;
-      if (x > x1) x1 = x;
-      if (y < y0) y0 = y;
-      if (y > y1) y1 = y;
-    }
-    const R = 18;
-    return { x0: x0 - R, y0: y0 - R, x1: x1 + R, y1: y1 + R };
+    const P = f.cin.p.pelvis;
+    return { x0: P[0] - 50, y0: P[1] - 82, x1: P[0] + 50, y1: P[1] + 42 };
   }
-  // El degradado de su luz, de arriba a la izquierda de todo su cuerpo («marco») a abajo a la derecha, con su color
-  // mezclado hacia el blanco o el negro en cada punto (TONOS).
-  function luzDe(c, marco, color, tonos) {
-    const g = c.createLinearGradient(marco.x0, marco.y0, marco.x1, marco.y1);
-    for (const [t, k] of tonos) g.addColorStop(t, tono(color, k));
-    return g;
+  // Los degradados del fotograma: el cuerpo (y lo de detrás), la línea de neón (apagada en la cadera y más viva arriba a
+  // la izquierda: dos círculos, el de dentro en la pelvis y el de fuera, grande, abajo a la derecha), la de la cabeza, el
+  // contorno de fuera (de algo más claro hacia la luz a más oscuro en la sombra) y el de dentro.
+  function gradientes(c, f, marco, oscuro) {
+    const p = f.cin.p, m = mezcla(p.cuello, p.cintura, 0.3), lx = m[0] - 6, ly = m[1] - 7;
+    const bola = (color, tonos) => {
+      const gr = c.createRadialGradient(lx, ly, 1, lx + 5, ly + 7, 74);
+      for (const [t, k] of tonos) gr.addColorStop(t, tono(color, k));
+      return gr;
+    };
+    const lineal = (color, tonos) => {
+      const gr = c.createLinearGradient(marco.x0, marco.y0, marco.x1, marco.y1);
+      for (const [t, k] of tonos) gr.addColorStop(t, tono(color, k));
+      return gr;
+    };
+    const P = f.cin.p.pelvis;
+    const radial = (color, tonos) => {
+      const gr = c.createRadialGradient(P[0], P[1] + 2, 6, P[0] + 16, P[1] + 22, 46);
+      for (const [t, k] of tonos) gr.addColorStop(t, tono(color, k));
+      return gr;
+    };
+    const tn = TONOS.neon[oscuro ? 'oscuro' : 'claro'];
+    const borde = col.borde;
+    const fuera = c.createLinearGradient(marco.x0, marco.y0, marco.x1, marco.y1);
+    const dentro = oscuro ? tono(borde, -0.32) : mezclaColor(borde, col.cuerpo, 0.3);
+    fuera.addColorStop(0, oscuro ? mezclaColor(borde, col.cuerpo, 0.3) : dentro);
+    fuera.addColorStop(0.45, borde);
+    fuera.addColorStop(1, tono(borde, oscuro ? -0.22 : -0.3));
+    return {
+      cuerpo: bola(col.cuerpo, TONOS.cuerpo),
+      cuerpoLejos: bola(col.lejos, TONOS.cuerpo),
+      coleta: bola(tono(col.cuerpo, -0.17), TONOS.cuerpo), // el pelo, algo más hondo que el cuerpo (D-141)
+      neon: radial(col.cuerpo, tn),
+      neonCabeza: lineal(col.cuerpo, TONOS.neonCabeza[oscuro ? 'oscuro' : 'claro']),
+      fuera,
+      dentro,
+    };
   }
   // La cabeza, una bola: más clara arriba a la izquierda y más oscura en el borde de abajo a la derecha.
   function luzDeCabeza(c, cabeza, color) {
@@ -366,91 +693,174 @@ export function crearTrajeNeon(lienzo) {
     g.addColorStop(1, tono(color, -0.2));
     return g;
   }
-  // Lo demás de la luz de una capa (dentro de ella): cada tubo, redondo (una franja de sombra abajo a la derecha y otra
-  // de luz arriba a la izquierda, en tonos del mismo degradado); los músculos, con un brillo suave (y el que siente,
-  // encendido); en el tronco, las líneas de un cuerpo definido y la sombra de la cabeza; y en la cabeza, su brillo.
-  function iluminar(c, f, cp, marco) {
-    c.save();
+  // Lo demás de la luz de una capa, dentro de ella (ya recortada a su cuerpo): el tronco, con su luz de bola; cada tubo,
+  // sombreado a lo ancho; los músculos, la mano y el pie, un bulto (y el músculo que siente, encendido por dentro); en
+  // el tronco, las líneas de un cuerpo definido (en relieve) y la sombra de la cabeza; y en la cabeza, su brillo.
+  function iluminar(c, f, cp, luces, oscuro) {
     c.lineCap = 'round';
     c.lineJoin = 'round';
+    const claro = tono(cp.color, 0.62), hondo = tono(cp.color, -0.55);
     if (cp.cabeza) {
-      const [x, y] = cp.cabeza.centro, R = cp.cabeza.radio, bx = x - R * 0.38, by = y - R * 0.42;
-      const b = c.createRadialGradient(bx, by, 0, bx, by, R * 0.55);
+      const [x, y] = cp.cabeza.centro, R = cp.cabeza.radio, bx = x - R * 0.36, by = y - R * 0.4;
+      const b = c.createRadialGradient(bx, by, 0, bx, by, R * 0.5);
       b.addColorStop(0, col.brillo);
       b.addColorStop(1, col.brillo0);
       c.fillStyle = b;
-      disco(c, bx, by, R * 0.55);
-      c.restore();
+      disco(c, bx, by, R * 0.5);
+      // un brillo fino, como el de un juguete de vinilo, junto al borde de arriba a la izquierda (lejos de la cara)
+      c.strokeStyle = oscuro ? 'rgba(255, 255, 255, 0.7)' : 'rgba(255, 255, 255, 0.8)';
+      c.lineWidth = 1.4;
+      c.beginPath();
+      c.arc(x, y, R * 0.84, Math.PI * 1.06, Math.PI * 1.24);
+      c.stroke();
       return;
     }
-    if (cp.bandas.length) {
-      const sombra = luzDe(c, marco, cp.color, TONOS.sombra), luz = luzDe(c, marco, cp.color, TONOS.luz);
-      for (const t of cp.bandas) bandas(c, t, sombra, luz);
-    }
+    for (const t of cp.tubos) tubo(c, t, claro, hondo);
+    let degradado = null; // uno para todos los bultos de la capa (cada uno lo pinta en su sitio y a su tamaño)
     for (const s of cp.formas) {
-      if (!s.m) continue;
-      const m = s.m, r = Math.min(m.rx, m.ry);
-      c.fillStyle = 'rgba(255, 255, 255, 0.2)';
-      c.beginPath();
-      c.ellipse(m.c[0] - 0.3 * r, m.c[1] - 0.36 * r, m.rx * 0.5, m.ry * 0.34, m.rot, 0, TAU);
-      c.fill();
-      // el músculo que siente: se le enciende y late
-      const i = Math.max(0, ...m.musculos.map((k) => f.cuerpo.luz[k] || 0));
-      if (i < 0.04) continue;
-      const late = i * (0.7 + 0.3 * Math.sin(f.t * TAU * 3.2));
-      c.fillStyle = col.vivo;
-      c.globalAlpha = late * 0.5;
-      ovalo(c, m, 2.6);
-      c.globalAlpha = late;
-      ovalo(c, m, -0.5);
-      c.globalAlpha = 1;
+      if (!s.m || s.m.liso || s.m.bulto) continue;
+      degradado ??= degradadoBulto(c, claro, hondo);
+      bulto(c, s.m, degradado);
     }
     if (cp.tronco) {
-      // las líneas de un cuerpo definido (las de delante, de frente; las de detrás, de espaldas)
-      c.strokeStyle = col.detalle;
-      c.lineWidth = 0.9;
-      for (const d of f.cin.detalles) {
-        const v = lim(d.cara * f.cin.frente * 2.5, 0, 1) * d.fuerza;
-        if (v < 0.03) continue;
-        const [a, b, e] = d.puntos;
-        c.globalAlpha = v * 0.85;
-        c.beginPath();
-        c.moveTo(a[0], a[1]);
-        if (e) c.quadraticCurveTo(b[0], b[1], e[0], e[1]);
-        else c.lineTo(b[0], b[1]);
-        c.stroke();
-      }
-      c.globalAlpha = 1;
-      // la sombra de la cabeza en el cuello y los hombros (solo sobre el cuerpo)
-      const H = f.cin.p.cabeza, R = 17;
-      const s = c.createRadialGradient(H[0] + 1, H[1] + R * 0.95, 0, H[0] + 1, H[1] + R * 0.95, R * 0.95);
-      s.addColorStop(0, 'rgba(0, 0, 0, 0.22)');
-      s.addColorStop(1, 'rgba(0, 0, 0, 0)');
+      // su luz por dentro (D-141, del camino «neón»): un resplandor de su color en el pecho, que late despacio; lejos de
+      // la barriga baja, y recortado a la capa
+      const p = f.cin.p, h = mezcla(p.cuello, p.pelvis, 0.27), R = 15;
+      const g = c.createRadialGradient(h[0] - 1, h[1], 0, h[0] - 1, h[1], R);
+      const dentro = tono(cp.color, oscuro ? 0.42 : 0.3);
+      g.addColorStop(0, rgba(dentro, 1));
+      g.addColorStop(1, rgba(dentro, 0));
       c.save();
       trazado(c, cp.formas, 0);
       c.clip();
-      c.fillStyle = s;
-      c.fillRect(H[0] - R, H[1], 2 * R, 2 * R);
+      c.globalAlpha = (oscuro ? 0.5 : 0.34) * (0.85 + 0.15 * Math.sin(f.t * 1.7));
+      c.fillStyle = g;
+      c.fillRect(h[0] - R - 1, h[1] - R, 2 * R, 2 * R);
       c.restore();
     }
-    c.restore();
+    // los músculos que siente; los dos pectorales o los dos dorsales, encendidos a la vez, como una sola franja (D-141,
+    // del camino «neón»: dos manchas de luz parecían un pecho)
+    const encendidas = [], pares = new Map();
+    for (const s of cp.formas) {
+      if (!s.m || !s.m.musculos.length) continue;
+      const m = s.m, i = luces.intensidad(m);
+      if (i < 0.04) continue;
+      const par = cp.tronco && !m.liso ? m.musculos.join().replace(/[ID]$/, '') : null;
+      if (par === 'pecho' || par === 'dorsales') {
+        if (!pares.has(par)) pares.set(par, []);
+        pares.get(par).push([m, i]);
+      } else encendidas.push([m, i]);
+    }
+    for (const lista of pares.values()) {
+      if (lista.length < 2) {
+        encendidas.push(lista[0]);
+        continue;
+      }
+      const [[a, ia], [b, ib]] = lista;
+      const dx = b.c[0] - a.c[0], dy = b.c[1] - a.c[1], d = Math.hypot(dx, dy);
+      encendidas.push([{ c: mezcla(a.c, b.c, 0.5), rx: d / 2 + (a.rx + b.rx) * 0.45, ry: Math.max(a.ry, b.ry) + 0.4,
+        rot: d > 0.5 ? Math.atan2(dy, dx) : a.rot, musculos: a.musculos }, Math.max(ia, ib)]);
+    }
+    for (const [m, i] of encendidas) {
+      const late = i * (0.7 + 0.3 * Math.sin(f.t * TAU * 3.2));
+      if (m.liso) {
+        // lo liso (la franja de los glúteos, la del pecho de «Ella», D-139), con una luz suave de su color, no blanca
+        c.fillStyle = tono(cp.color, 0.4);
+        c.globalAlpha = late * 0.7;
+        ovalo(c, m, 0);
+        c.globalAlpha = 1;
+        continue;
+      }
+      // encendido por dentro: el neón del músculo, de su centro (casi blanco) a su borde (D-139: dentro de su capa)
+      // (con la forma de su mancha: un dorsal, una franja en diagonal, no un óvalo redondo)
+      const vivo = tono(cp.color, oscuro ? 0.7 : 0.6);
+      c.save();
+      c.translate(m.c[0], m.c[1]);
+      c.rotate(m.rot);
+      c.scale(Math.max(0.1, m.rx), Math.max(0.1, m.ry));
+      const gr = c.createRadialGradient(0, 0, 0, 0, 0, 1);
+      gr.addColorStop(0, rgba(vivo, 0.9 * late));
+      gr.addColorStop(0.5, rgba(vivo, 0.5 * late));
+      gr.addColorStop(1, rgba(vivo, 0));
+      c.fillStyle = gr;
+      disco(c, 0, 0, 1);
+      c.restore();
+    }
+    if (cp.tronco) {
+      // las líneas de un cuerpo definido (las de delante, de frente; las de detrás, de espaldas), en relieve: una ranura
+      // con su labio de luz encima; las que van de lado a lado, algo curvas
+      for (const d of f.cin.detalles) {
+        const v = lim(d.cara * f.cin.frente * 2.5, 0, 1) * d.fuerza;
+        if (v < 0.03) continue;
+        let [a, b, e] = d.puntos;
+        if (!e && Math.abs(b[0] - a[0]) > Math.abs(b[1] - a[1])) {
+          // (D-141, del camino «orgánico»: los abdominales, lóbulos, no una cremallera en «#»)
+          e = b;
+          b = [(a[0] + e[0]) / 2, (a[1] + e[1]) / 2 + 2.2];
+        }
+        for (const [color, alfa, ancho, dx, dy] of [[claro, 0.5, 0.9, -0.35, -0.45], [hondo, 0.62, 0.75, 0, 0]]) {
+          c.strokeStyle = rgba(color, alfa * v);
+          c.lineWidth = ancho;
+          c.beginPath();
+          c.moveTo(a[0] + dx, a[1] + dy);
+          if (e) c.quadraticCurveTo(b[0] + dx, b[1] + dy, e[0] + dx, e[1] + dy);
+          else c.lineTo(b[0] + dx, b[1] + dy);
+          c.stroke();
+        }
+      }
+      // la sombra de la cabeza en el cuello (solo en él: así no hace falta recortar)
+      const H = f.cin.p.cabeza, R = 17;
+      const s = c.createRadialGradient(H[0] + 1, H[1] + R * 0.9, 0, H[0] + 1, H[1] + R * 0.9, R * 0.75);
+      s.addColorStop(0, 'rgba(0, 0, 0, 0.3)');
+      s.addColorStop(1, 'rgba(0, 0, 0, 0)');
+      c.fillStyle = s;
+      rellenar(c, [cp.troncoFormas[2]], 0);
+    }
+    if (cp.coleta) pintarMechones(c, cp, oscuro);
   }
-  // Un tramo redondo: una franja de sombra abajo a la derecha y otra de luz arriba a la izquierda, dentro de él (con su
-  // radio más fino, para que no se salgan) y opacas (así, donde se solapan, en las articulaciones, no se nota nada).
-  function bandas(c, { a, b, r }, sombra, luz) {
-    const linea = (dx, dy) => {
-      c.beginPath();
-      c.moveTo(a[0] + dx, a[1] + dy);
-      c.lineTo(b[0] + dx + 0.01, b[1] + dy);
-    };
-    c.strokeStyle = sombra;
-    c.lineWidth = r * 0.8;
-    linea(r * 0.45, r * 0.42);
-    c.stroke();
-    c.strokeStyle = luz;
-    c.lineWidth = r * 0.4;
-    linea(-r * 0.36, -r * 0.4);
-    c.stroke();
+  // Un tubo (brazo, muslo…), redondo: sombreado a lo ancho, con luz en su lado hacia la luz y sombra en el otro, que se
+  // desvanecen hacia el medio (así, donde se tocan dos tramos, apenas se nota). De punta, nada.
+  function tubo(c, { a, b, r1, r2 }, claro, hondo) {
+    const dx = b[0] - a[0], dy = b[1] - a[1], d = Math.hypot(dx, dy);
+    if (d < Math.min(r1, r2) * 1.4) return;
+    const ux = dx / d, uy = dy / d;
+    let nx = -uy, ny = ux, s = nx * LUZ[0] + ny * LUZ[1];
+    if (s < 0) [nx, ny, s] = [-nx, -ny, -s];
+    const mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2, rm = (r1 + r2) / 2;
+    const gr = c.createLinearGradient(mx + nx * rm, my + ny * rm, mx - nx * rm, my - ny * rm);
+    gr.addColorStop(0, rgba(claro, 0.34 * (0.35 + 0.65 * s)));
+    gr.addColorStop(0.32, rgba(claro, 0));
+    gr.addColorStop(0.55, rgba(hondo, 0));
+    gr.addColorStop(1, rgba(hondo, 0.3 * (0.5 + 0.5 * s)));
+    c.fillStyle = gr;
+    c.beginPath();
+    c.moveTo(a[0] + nx * r1, a[1] + ny * r1);
+    c.lineTo(b[0] + nx * r2, b[1] + ny * r2);
+    c.lineTo(b[0] - nx * r2, b[1] - ny * r2);
+    c.lineTo(a[0] - nx * r1, a[1] - ny * r1);
+    c.closePath();
+    c.fill();
+  }
+  // Un bulto (un músculo): más claro arriba a la izquierda y algo más oscuro en su borde de abajo a la derecha, como un
+  // volumen (no un pegote). El degradado, en un círculo de radio 1 (degradadoBulto()), se lleva a cada músculo.
+  function degradadoBulto(c, claro, hondo) {
+    const gr = c.createRadialGradient(LUZ[0] * 0.4, LUZ[1] * 0.4, 0, 0, 0, 1);
+    gr.addColorStop(0, rgba(claro, 0.34));
+    gr.addColorStop(0.5, rgba(claro, 0));
+    gr.addColorStop(0.8, rgba(hondo, 0));
+    gr.addColorStop(1, rgba(hondo, 0.2));
+    return gr;
+  }
+  function bulto(c, m, degradado) {
+    const R = Math.max(0.1, (m.rx + m.ry) * 0.55);
+    c.save();
+    c.translate(m.c[0], m.c[1]);
+    c.scale(R, R);
+    c.fillStyle = degradado;
+    c.beginPath();
+    c.ellipse(0, 0, Math.max(0.01, m.rx / R), Math.max(0.01, m.ry / R), m.rot, 0, TAU);
+    c.fill();
+    c.restore();
   }
 
   // La cinta (D-135, la 4): mientras entrenas, una cinta blanca alrededor de la cabeza, a la altura de la frente. Se
@@ -495,13 +905,19 @@ export function crearTrajeNeon(lienzo) {
     ctx.restore();
   }
 
+  // La cara. La mirada mueve los ojos, las cejas y la boca, pero menos cuanto más cerca del borde (de perfil, el ojo
+  // de cerca casi no se mueve) y nunca fuera de la cabeza (antes, de perfil, el ojo y su brillo se salían).
   function pintarCara(f, parte) {
-    const cin = f.cin, zH = parte.centro[2];
+    const cin = f.cin, zH = parte.centro[2], [hx, hy] = parte.centro, dentro = parte.radio - 3.4;
     const [mx, my] = f.mirada;
     const vis = (q) => lim((q[2] - zH) / 5, 0, 1);
     const en = (x, y, seguir = 1) => {
       const q = cin.cara(x, y);
-      return [q[0] + mx * seguir, q[1] + my * seguir, q[2]];
+      const k = seguir * lim((q[2] - zH) / 9, 0, 1);
+      let X = q[0] + mx * k, Y = q[1] + my * k;
+      const dx = X - hx, dy = Y - hy, d = Math.hypot(dx, dy);
+      if (d > dentro) [X, Y] = [hx + (dx * dentro) / d, hy + (dy * dentro) / d];
+      return [X, Y, q[2]];
     };
     const i0 = cin.cara(-4, 0), i1 = cin.cara(4, 0);
     const ang = Math.atan2(i1[1] - i0[1], i1[0] - i0[0]); // la horizontal de la cara, en pantalla
@@ -555,13 +971,13 @@ export function crearTrajeNeon(lienzo) {
       [-6.3, 6.3].forEach((ex) => {
         const s = Math.sign(ex), tipoCeja = c.cejas === 'una' ? (s < 0 ? 'altas' : 'relajadas') : c.cejas;
         if (!tipoCeja) return;
-        const fuera = ex + 3 * s, dentro = ex - 3 * s;
+        const fuera = ex + 3 * s, dentroC = ex - 3 * s;
         ctx.globalAlpha = luz * vis(en(ex, -8.5)) * base;
-        if (tipoCeja === 'alegres') curva(fuera, -8.1, ex, -10.6, dentro, -8.1, 0.6);
-        else if (tipoCeja === 'altas') curva(fuera, -10.2, ex, -12.8, dentro, -10.2, 0.6);
-        else if (tipoCeja === 'fruncidas') curva(fuera, -10, ex, -9.1, dentro, -7.6, 0.6);
-        else if (tipoCeja === 'preocupadas') curva(fuera, -7.8, ex, -8.9, dentro, -10.2, 0.6);
-        else if (tipoCeja === 'relajadas') curva(fuera, -8.4, ex, -9.3, dentro, -8.4, 0.6);
+        if (tipoCeja === 'alegres') curva(fuera, -8.1, ex, -10.6, dentroC, -8.1, 0.6);
+        else if (tipoCeja === 'altas') curva(fuera, -10.2, ex, -12.8, dentroC, -10.2, 0.6);
+        else if (tipoCeja === 'fruncidas') curva(fuera, -10, ex, -9.1, dentroC, -7.6, 0.6);
+        else if (tipoCeja === 'preocupadas') curva(fuera, -7.8, ex, -8.9, dentroC, -10.2, 0.6);
+        else if (tipoCeja === 'relajadas') curva(fuera, -8.4, ex, -9.3, dentroC, -8.4, 0.6);
       });
       const centro = en(0, 9, 0.4), vb = vis(centro);
       ctx.globalAlpha = luz * vb * base;
@@ -737,6 +1153,7 @@ export function crearTrajeNeon(lienzo) {
 
   function dibujar(f, origen = [0, 0]) {
     [ox, oy] = origen;
+    ctx = real;
     ctx.setTransform(dpr, 0, 0, dpr, -ox * dpr, -oy * dpr);
     ctx.clearRect(ox, oy, ancho, alto);
     if (!f) return;
@@ -759,9 +1176,10 @@ export function crearTrajeNeon(lienzo) {
       ctx.clip();
     }
     const capas = capasDe(f);
+    const luces = encendidos(f);
     pintarSombra(f);
-    pintarHalo(f, capas);
-    pintarCuerpo(f, capas);
+    pintarHalo(f, capas, luces.vivos);
+    pintarCuerpo(f, capas, luces);
     ctx.translate(f.raiz[0], f.raiz[1]);
     ctx.scale(f.escala, f.escala);
     ctx.lineCap = 'round';
@@ -786,6 +1204,8 @@ export function crearTrajeNeon(lienzo) {
       }
       halo.width = Math.round(w * r * HALO_RES);
       halo.height = Math.round(h * r * HALO_RES);
+      haloAncho.width = Math.max(1, Math.round(w * r * HALO_ANCHO_RES));
+      haloAncho.height = Math.max(1, Math.round(h * r * HALO_ANCHO_RES));
     },
     set tema(t) {
       tema = t === 'oscuro' ? 'oscuro' : 'claro';

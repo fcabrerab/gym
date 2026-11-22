@@ -1,12 +1,21 @@
 // Versión de la app. La misma VERSION está en ../sw.js y en la meta «gym-beta-version» de ../index.html: cada
 // cambio en un archivo de la app obliga a subirla en los tres sitios (una prueba de tests/ comprueba que coinciden).
 // Hasta la 0.2.10 fue la beta, en beta/; desde la 1.0.0, es la app, en la dirección de siempre (D-121).
-export const VERSION = "1.4.0";
+export const VERSION = "1.5.0";
 export const FECHA_VERSION = "2026-11-22";
 
 // Novedades por versión, de la más nueva a la más vieja. Se enseñan en Ajustes → La app → Novedades y, la primera
 // vez, en «Qué tiene de nuevo».
 export const NOVEDADES = [
+  {
+    version: "1.5.0",
+    fecha: "2026-11-22",
+    cambios: [
+      "La mascota, más acabada: cuello, uniones sin muescas, manos como manoplas y pies como zapatillas, brazos y piernas más rellenos, un contorno más fino hacia la luz, una línea de neón por dentro, la cabeza como una bombilla, una luz en el pecho que late y un halo que respira. Sus músculos, con volumen, sin manchas blancas.",
+      "Puedes elegir su sexo en su página (Ajustes → Mascota → «Personalizarla»): «Sin definir» (como hasta ahora), «Ella» (con su coleta) o «Él»; solo cambia cómo se ve, y sus textos concuerdan.",
+      "Nada en su barriga baja ni entre sus piernas que pueda parecer lo que no es, en ninguna postura: lo comprueba una prueba automática.",
+    ],
+  },
   {
     version: "1.4.0",
     fecha: "2026-11-22",
