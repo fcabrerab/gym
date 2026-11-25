@@ -17,9 +17,11 @@ const LUCES = [["verde", "Verde"], ["cian", "Cian"], ["rosa", "Rosa"], ["ambar",
 const BRILLOS = [["suave", "Suave"], ["normal", "Normal"], ["intenso", "Intenso"]];
 const SEXOS = [
   ["neutro", "Sin definir", "A medio camino entre los dos."],
-  ["ella", "Ella", "Hombros más estrechos, cadera algo más ancha y su coleta."],
+  ["ella", "Ella", "Hombros más estrechos, cintura marcada, cadera algo más ancha y su pelo."],
   ["el", "Él", "Hombros más anchos que la cadera."],
 ];
+// El pelo de «Ella» (D-141).
+const PEINADOS = [["coletas", "Dos coletas"], ["alta", "Coleta alta"], ["mono", "Moño"], ["coleta", "Coleta baja"]];
 // Con «Él», en masculino (D-140).
 const masculino = (a) => a.sexo === "el";
 const entrenoDe = (m) => [
@@ -103,6 +105,7 @@ export function pintarPaginaMascota(contenedor) {
       ayuda("Para ti: no habla, así que no lo dice nunca.")),
     seccion("Sexo", opciones(SEXOS, a.sexo, "mascota-sexo", "Sexo", { desactivadas: fija }),
       ayuda("Solo cambia cómo se ve, no cómo se pone en forma: tus entrenos la cambian igual.")),
+    a.sexo === "ella" ? seccion("Su pelo", opciones(PEINADOS, a.peinado, "mascota-peinado", "Su pelo", { desactivadas: fija })) : null,
     seccion("Tamaño", opciones(TAMANOS, a.tamano, "mascota-tamano", "Tamaño", { desactivadas: fija })),
     seccion("Color de su luz", opciones(LUCES, a.luz, "mascota-luz", "Color de su luz", {
       desactivadas: fija, muestra: (valor) => h("span", { class: ["muestra-luz", `luz-${valor}`], "aria-hidden": "true" }),
@@ -135,6 +138,7 @@ export function alAccionMascota(accion, el) {
     case "mascota-entreno": return cambiar({ entreno: el.dataset.valor });
     case "mascota-brillo": return cambiar({ brillo: el.dataset.valor });
     case "mascota-sexo": return cambiar({ sexo: el.dataset.valor });
+    case "mascota-peinado": return cambiar({ peinado: el.dataset.valor });
     default: return undefined;
   }
 }

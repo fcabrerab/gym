@@ -685,6 +685,47 @@ export async function ejecutar(c) {
     `MA40 su sexo: de serie, «Sin definir»; hombros (forma 1) ${ella.hombros.toFixed(1)} · ${neutro.hombros.toFixed(1)} · ${el.hombros.toFixed(1)} y cadera ${ella.cadera.toFixed(1)} · ${neutro.cadera.toFixed(1)} · ${el.cadera.toFixed(1)} (Ella · Sin definir · Él); «Ella», con su coleta; «${masc}»`);
   }
 
+  // MA43 El pelo de «Ella» (D-141): de serie, dos coletas; en su ficha, solo lo que vale; el cerebro lo pasa al traje (en
+  // el fotograma, solo con «Ella») y el traje pinta cada peinado (el mismo fotograma, de perfil, con y sin pelo: distinto)
+  {
+    const { PEINADOS } = await import("/js/mascota/cerebro.js");
+    const { crearTrajeNeon } = await import("/js/mascota/traje-neon.js");
+    const m = crearMascota({ superficies: () => [{ id: "a", x1: 20, x2: 380, y: 300 }], azar: azarDe(4), autonoma: false, escala: 1.2 });
+    const deSerie = m.peinado;
+    m.peinado = "otro";
+    const malo = m.peinado;
+    m.sexo = "ella";
+    for (let i = 0; i < 20; i++) m.paso(1 / 30);
+    m.hacer("pasear");
+    let f = null;
+    for (let i = 0; i < 16; i++) f = m.paso(1 / 30); // andando: de perfil
+    const lienzo = document.createElement("canvas");
+    const traje = crearTrajeNeon(lienzo);
+    traje.medidas(400, 400, 1);
+    const pintar = (g) => {
+      traje.dibujar(g);
+      return lienzo.getContext("2d").getImageData(0, 0, 400, 400).data.slice();
+    };
+    const sin = pintar({ ...f, coleta: false });
+    const distintos = {};
+    for (const p of PEINADOS) {
+      const con = pintar({ ...f, coleta: true, peinado: p });
+      let n = 0;
+      for (let i = 0; i < con.length; i += 4) {
+        if (Math.abs(con[i] - sin[i]) + Math.abs(con[i + 1] - sin[i + 1]) + Math.abs(con[i + 2] - sin[i + 2]) + Math.abs(con[i + 3] - sin[i + 3]) > 40) n += 1;
+      }
+      distintos[p] = n;
+    }
+    const conElla = f.coleta === true && f.peinado === "coletas";
+    m.sexo = "el";
+    const conEl = m.paso(1 / 30).coleta;
+    const limpio = memoria.limpiarAjustes({ peinado: "mono" }), raro = memoria.limpiarAjustes({ peinado: "rastas" });
+    caso(deSerie === "coletas" && malo === "coletas" && conElla && conEl === false && memoria.AJUSTES.peinado === "coletas"
+      && limpio.peinado === "mono" && !("peinado" in raro) && PEINADOS.join() === "coletas,alta,mono,coleta"
+      && PEINADOS.every((p) => distintos[p] > 60),
+    `MA43 el pelo de «Ella»: de serie, dos coletas; cada peinado se pinta (de perfil, puntos distintos: ${Object.entries(distintos).map(([k, v]) => `${k} ${v}`).join(", ")}); con «Él», sin pelo`);
+  }
+
   const preparar = async () => {
     await limpiarBeta();
     guardar("gym-beta-datos", await datosBeta());
@@ -1172,6 +1213,68 @@ export async function ejecutar(c) {
       && fichaEl === "el" && sexoEl === "el" && sexoElla === "ella" && m?.sexo === "neutro" && leerJson(memoria.CLAVE)?.ajustes.sexo === "neutro",
     `MA41 su página: su sexo (${opciones}; de serie, ${marcadaAntes}); con «Él», en masculino y al momento (${sexoEl}); con «Sin definir», en femenino otra vez`);
     sinErrores(b, "MA41");
+    quitar(b);
+  }
+
+  // MA44 En la app (D-141): con «Ella», su página tiene «Su pelo» (de serie, dos coletas) y cambiarlo la cambia al momento;
+  // con otro sexo, no sale
+  {
+    await preparar();
+    guardar(memoria.CLAVE, { v: 1, nacida: ms("2026-10-20T10:00:00"), semilla: 7, ajustes: { sexo: "ella" }, vista: null, toques: 0 });
+    const b = await cargarBeta({ canal: "beta" });
+    await hastaQue(() => b.w.__gymMascota?.viva, 200);
+    const m = b.w.__gymMascota;
+    b.d.querySelector('#nav [data-accion="ir-ajustes"]').click();
+    await esperar(100);
+    pulsar(b.d, "ir-mascota");
+    await esperar(100);
+    const opciones = [...b.d.querySelectorAll('[data-accion="mascota-peinado"]')].map((x) => x.dataset.valor).join(",");
+    const marcado = b.d.querySelector('[data-accion="mascota-peinado"][aria-checked="true"]')?.dataset.valor;
+    const antes = m?.peinado;
+    b.d.querySelector('[data-accion="mascota-peinado"][data-valor="mono"]')?.click();
+    await esperar(80);
+    const ahora = m?.peinado, guardado = leerJson(memoria.CLAVE)?.ajustes.peinado;
+    b.d.querySelector('[data-accion="mascota-sexo"][data-valor="el"]')?.click();
+    await esperar(80);
+    const sinPelo = !b.d.querySelector('[data-accion="mascota-peinado"]');
+    caso(opciones === "coletas,alta,mono,coleta" && marcado === "coletas" && antes === "coletas" && ahora === "mono" && guardado === "mono" && sinPelo,
+      `MA44 «Su pelo», con «Ella»: ${opciones} (de serie, ${marcado}); al elegir el moño, al momento (${ahora}) y en su ficha; con «Él», no sale`);
+    sinErrores(b, "MA44");
+    quitar(b);
+  }
+
+  // MA42 En la app: en lo fijo de abajo (el rincón del entreno o la barra de abajo), si la ventana cambia de alto (en el
+  // móvil, la barra de direcciones del navegador se esconde o sale al desplazar), va con la barra al momento, pegada por
+  // abajo como ella (antes se quedaba donde estaba hasta volver a medir y luego saltaba)
+  {
+    await preparar();
+    const b = await cargarBeta({ canal: "beta", alto: 700 });
+    await hastaQue(() => b.w.__gymMascota?.viva, 200);
+    const m = b.w.__gymMascota;
+    pulsar(b.d, "abrir-ejercicio", "pec-deck");
+    await esperar(150);
+    pulsar(b.d, "serie-hecha", "pec-deck");
+    await esperar(200);
+    pulsar(b.d, "descanso-saltar");
+    await esperar(200);
+    m?.avanzar(1);
+    const barra = () => {
+      for (const sel of [".barra-borrador", "#barra-descanso", "#nav"]) {
+        const e = b.d.querySelector(sel);
+        if (e && !e.hidden && e.offsetHeight > 0) return e.getBoundingClientRect().top;
+      }
+      return b.w.innerHeight;
+    };
+    const suya = () => m?.superficies.find((s) => s.id === m.superficie);
+    const antes = { sup: m?.superficie, y: suya()?.y, barra: barra(), abajo: m?.enAbajo };
+    b.f.style.height = "756px";
+    b.w.dispatchEvent(new b.w.Event("resize"));
+    m?.avanzar(1 / 30);
+    const despues = { y: suya()?.y, barra: barra(), abajo: m?.enAbajo };
+    caso(antes.sup === "rincon" && Math.abs(antes.y - antes.barra) < 1 && despues.barra - antes.barra > 40 && Math.abs(despues.y - despues.barra) < 1
+      && antes.abajo && despues.abajo,
+    `MA42 en el rincón, la ventana cambia de alto (la barra baja ${Math.round(despues.barra - antes.barra)} px): ella, con la barra al momento (a ${(despues.y - despues.barra).toFixed(1)} px de ella) y pegada por abajo`);
+    sinErrores(b, "MA42");
     quitar(b);
   }
 

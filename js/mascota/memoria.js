@@ -17,9 +17,10 @@ export const OPCIONES = {
   entreno: ["rincon", "escondida"],
   brillo: ["suave", "normal", "intenso"],
   sexo: ["neutro", "ella", "el"], // D-140: «Sin definir» (el de serie, también el de una ficha de antes), «Ella» o «Él»
+  peinado: ["coletas", "alta", "mono", "coleta"], // D-141: el pelo de «Ella» (de serie, dos coletas)
 };
 // «encendida: null» es lo de la app: en la beta, sí; en la normal, todavía no (D-133).
-export const AJUSTES = { encendida: null, tamano: "normal", luz: "verde", entreno: "rincon", nombre: "", brillo: "normal", sexo: "neutro" };
+export const AJUSTES = { encendida: null, tamano: "normal", luz: "verde", entreno: "rincon", nombre: "", brillo: "normal", sexo: "neutro", peinado: "coletas" };
 
 function semillaNueva() {
   try {

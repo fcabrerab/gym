@@ -37,11 +37,17 @@ export const CAMPOS = Object.keys(POSE_BASE);
 // ni manchas redondas ni líneas debajo; con el pecho encendido, una franja plana arriba, junto a las clavículas).
 export const SEXOS = Object.freeze(['neutro', 'ella', 'el']);
 export const CUERPOS = Object.freeze({
-  el: Object.freeze({ hombros: [8.5, 3.2], rHombros: 1, cadera: 4.5, caderaR: 1.1, cintura: 1, gluteos: 0, piernas: 0, brazos: 1, pecho: 1 }),
-  neutro: Object.freeze({ hombros: [7.9, 2.2], rHombros: 0.95, cadera: 5, caderaR: 1.15, cintura: 0.91, gluteos: 0.25, piernas: 0.22, brazos: 0.95, pecho: 0.55 }),
-  ella: Object.freeze({ hombros: [7.2, 1.2], rHombros: 0.9, cadera: 5.5, caderaR: 1.12, cintura: 0.82, gluteos: 0.5, piernas: 0.45, brazos: 0.9, pecho: 0 }),
+  el: Object.freeze({ hombros: [8.5, 3.2], rHombros: 1, cadera: 4.5, caderaR: 1.1, cintura: 1, gluteos: 0, piernas: 0, brazos: 1, pecho: 1, manos: 1, pies: 1, barriga: 1 }),
+  neutro: Object.freeze({ hombros: [7.9, 2.2], rHombros: 0.95, cadera: 5, caderaR: 1.15, cintura: 0.91, gluteos: 0.25, piernas: 0.22, brazos: 0.95, pecho: 0.55, manos: 0.97, pies: 0.97, barriga: 1 }),
+  // D-141, más femenina: hombros más estrechos (y que crecen menos), cintura más marcada, cadera algo más ancha, brazos
+  // más finos, manos y pies algo más pequeños y, gordita, una barriga algo menos honda (con la cintura más estrecha,
+  // de lado sobresalía de más: D-139); nunca con forma de pecho
+  ella: Object.freeze({ hombros: [6.6, 0.9], rHombros: 0.84, cadera: 5.8, caderaR: 1.1, cintura: 0.74, gluteos: 0.55, piernas: 0.5, brazos: 0.85, pecho: 0, manos: 0.88, pies: 0.9, barriga: 0.82 }),
 });
 export const cuerpoDeSexo = (sexo) => CUERPOS[sexo] || CUERPOS.neutro;
+// Su pelo, con «Ella» (D-141): dos coletas (el de serie), una coleta alta, un moño o una coleta baja (la de la 1.5.0).
+// Cómo es cada uno, en PEINADOS de traje-neon.js.
+export const PEINADOS = Object.freeze(['coletas', 'alta', 'mono', 'coleta']);
 
 export const lerp = (a, b, t) => a + (b - a) * t;
 export const limitar = (v, a, b) => (v < a ? a : v > b ? b : v);
@@ -191,7 +197,7 @@ export function cinematica(pose, cuerpo, { espejo = false, apoyo = 'pies' } = {}
   const r = cuerpo.vientre;
   if (r > 2) {
     mancha('tronco', [], mas(mas(q.pelvis, uL, 10.5 + r * 0.15), fL, r * 0.36), uL, r * 0.78, rT * 0.9 + r * 0.2,
-      { lado: dL, prof: r * 0.66, frente: fL, liso: true });
+      { lado: dL, prof: r * 0.66 * (S.barriga ?? 1), frente: fL, liso: true });
   }
 
   // Visto desde la pantalla: girado hacia donde mira, en espejo, estirado y girado en el plano.
