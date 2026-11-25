@@ -13,8 +13,8 @@
 // la coges: va de pie en tu dedo, haciendo equilibrios, y al soltarla cae donde toque y se sacude. Y el ritmo del día
 // (D-135, la 6; dia.js, que se lo da mascota.js en «ritmo»): de noche, más dormilona; por la mañana, se despereza. Qué
 // hace cada pieza y cómo añadir algo, en LEEME.md.
-import { POSE_BASE, MEDIDAS, mezclar, normalizar, cinematica, lerp, limitar, suave, tramo, SEXOS, cuerpoDeSexo } from './esqueleto.js';
-export { SEXOS, CUERPOS } from './esqueleto.js'; // su sexo, a elegir (D-139)
+import { POSE_BASE, MEDIDAS, mezclar, normalizar, cinematica, lerp, limitar, suave, tramo, SEXOS, cuerpoDeSexo, PEINADOS } from './esqueleto.js';
+export { SEXOS, CUERPOS, PEINADOS } from './esqueleto.js'; // su sexo, a elegir (D-139, D-140), y el pelo de «Ella» (D-141)
 import { GESTOS, GRUPOS, CARAS, MUSCULOS, REGIONES, CON_TROFEO, IMITAR } from './gestos.js';
 import { formaVisible, BOMBEO_SERIE, GENERAL_SERIE } from './forma.js';
 
@@ -95,7 +95,8 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
     pendiente: null, // lo que hará con ellos si no llega otro: { n, cuando }
     cogida: null,    // si la llevas en el dedo: { x, y }, donde van sus pies
     sexo: 'neutro',  // D-140: «ella», «el» o «neutro» (sin definir, el de serie)
-    coleta: true,    // D-141: «Ella» lleva siempre su coleta (se puede quitar para probar)
+    coleta: true,    // D-141: «Ella» lleva siempre su pelo (se puede quitar para probar)
+    peinado: 'coletas', // su pelo, con «Ella» (PEINADOS de esqueleto.js; de serie, dos coletas)
   };
 
   // ——— Dónde está ———
@@ -1107,7 +1108,7 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
       t: m.t, cin, raiz, escala: m.escala, pose, apoyo: salida.apoyo, cuerpo, cara, abiertos,
       mirada: [m.mirada.x, m.mirada.y], efectos: m.efectos.map((e) => ({ ...e, edad: m.t - e.t0 })),
       ocultar, sombra, destello: m.destello, accion: m.accion.nombre, carga: m.carga, objeto: salida.objeto || null, cinta: m.cinta,
-      coleta: m.coleta && m.sexo === 'ella',
+      coleta: m.coleta && m.sexo === 'ella', peinado: m.peinado,
     };
     m.ultimo = f;
     return f;
@@ -1157,6 +1158,8 @@ export function crearMascota({ superficies, escala = 0.55, azar = Math.random, a
     get sexo() { return m.sexo; },
     set sexo(v) { m.sexo = SEXOS.includes(v) ? v : 'neutro'; },
     get coleta() { return m.coleta; },
+    get peinado() { return m.peinado; },
+    set peinado(v) { m.peinado = PEINADOS.includes(v) ? v : 'coletas'; },
     set coleta(v) { m.coleta = Boolean(v); },
     // Un toque en el escenario: si es en ella, reacciona (tocarla()); si no, mira hacia allí (y a veces se acerca).
     tocar(px, py) {

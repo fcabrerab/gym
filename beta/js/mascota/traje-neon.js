@@ -17,7 +17,8 @@
 //  · El volumen: cada tubo, sombreado a lo ancho; el tronco, con su luz de bola; los músculos, un bulto sombreado; el
 //    que siente se enciende por dentro (como mucho 3 a la vez; los dos pectorales o dorsales, como una franja), con algo
 //    más de halo.
-//  · «Ella» (D-140, D-141), con su coleta: cuelga por su peso, con su goma, sus mechones y su vaivén (coletaDe()).
+//  · «Ella» (D-140, D-141), con su pelo, a elegir (PEINADOS: dos coletas, de serie; coleta alta, moño o coleta baja):
+//    cada cola cuelga por su peso, con su goma, sus mechones y su vaivén (peloDe(), pintarMechones()).
 //  · D-139: nada en la entrepierna ni en la barriga baja que pueda parecer genitales (su prueba: tests/mascota-d139.js).
 // Una sola luz, de arriba a la izquierda, para todo, sobre un marco fijo (no cambia al subir los brazos).
 // No decide nada: otro estilo sería otro traje como este.
@@ -72,14 +73,26 @@ const AFINAR = {
 // La mano, una manopla: un óvalo a lo largo del antebrazo, más ancho que la muñeca y algo grande, que le da encanto
 // (por el radio del brazo); desde D-141, algo más estrecha: más mano y menos bola.
 const MANO = { largo: 1.42, ancho: 1.1, avance: 1.4 };
-// La coleta de «Ella» (D-141): sale de la goma, arriba en la parte de atrás de la cabeza, se separa de ella y cae por su
-// peso (hacia abajo en la pantalla, como el pelo de verdad: también tumbada o dando una vuelta), más gruesa justo tras la
-// goma y en punta al final, algo hacia un lado, con mechones y su vaivén. Cada tramo: cuánto se separa de la cabeza
-// (por la dirección hacia atrás, que de lado mide unas 6 unidades y de frente o de espaldas casi nada), cuánto cae y su
-// grosor al acabar; el primero empieza en la goma (COLETA_GOMA, de grosor COLETA_R0).
-const COLETA = [[0.55, 2.6, 3.6], [0.45, 7.2, 3.9], [0.22, 8.4, 3.4], [0.06, 8.6, 2.2], [0, 7.6, 0.6]];
-const COLETA_GOMA = { y: -8.5, fuera: 0.6 }, COLETA_R0 = 2.5;
-const COLETA_LADO = 0.9; // cuánto cae hacia un lado, de serie (a su derecha), en unidades por tramo, de frente o de espaldas
+// El pelo de «Ella» (D-141; sus peinados, a prueba): colas que salen de su goma, se separan de la cabeza y caen por su
+// peso (hacia abajo en la pantalla, como el pelo de verdad: también tumbada o dando una vuelta), más gruesas tras la goma
+// y en punta al final, con mechones y su vaivén; y bolas (un moño). Cada cola: su goma (en la cabeza: x a su derecha, y
+// hacia abajo desde el centro, lo que sale de ella y si es por detrás), su grosor allí, lo que cae hacia un lado por
+// tramo (de frente o de espaldas) y sus tramos: cuánto se separa de la cabeza (por la dirección hacia fuera desde la
+// goma, que de lado mide unas 6 unidades), cuánto cae (negativo: sube) y su grosor al acabar. Cada bola: dónde (igual)
+// y su radio.
+const PEINADOS = {
+  // una coleta baja, en la parte de atrás de la cabeza (la de la 1.5.0)
+  coleta: { colas: [{ goma: [0, -8.5, 0.6, true], r0: 2.5, lado: 0.9,
+    tramos: [[0.55, 2.6, 3.6], [0.45, 7.2, 3.9], [0.22, 8.4, 3.4], [0.06, 8.6, 2.2], [0, 7.6, 0.6]] }] },
+  // una coleta alta: de la coronilla, sube un poco hacia atrás y cae
+  alta: { colas: [{ goma: [0, -13.5, 0.6, true], r0: 2.7, lado: 0.7,
+    tramos: [[0.55, -2.4, 3.7], [0.5, 2.6, 4.1], [0.3, 6.8, 3.8], [0.1, 7.6, 3], [0, 7.2, 1.8], [0, 5, 0.5]] }] },
+  // dos coletas, una a cada lado, algo por detrás: se ven también de frente
+  coletas: { colas: [-1, 1].map((s) => ({ goma: [s * 14, -5, 0.6, true], r0: 2.4, lado: 0,
+    tramos: [[0.6, 0.8, 3], [0.4, 5.2, 3.3], [0.16, 6.4, 2.9], [0.05, 6.2, 2], [0, 4.6, 0.55]] })) },
+  // un moño, arriba y algo atrás: de frente, asoma por encima de la cabeza
+  mono: { colas: [], bolas: [{ en: [0, -15, 4.6, true], r: 6.4 }] },
+};
 // El pie, una zapatilla pequeña y redondeada: un elipsoide de largo, ancho y alto, adelantado desde el tobillo, con la
 // suela en el suelo.
 const PIE = { largo: 6, ancho: 4.4, alto: 2.6, avance: 2.7, suela: 3.6 };
@@ -288,7 +301,7 @@ export function crearTrajeNeon(lienzo) {
     if (d < 1e-3) [ux, uy] = [0, 1];
     else [ux, uy] = [ux / d, uy / d];
     const k = lim(d / 15, 0, 1); // cuánto se ve el antebrazo de largo
-    const largo = r0 * (MANO.ancho + (MANO.largo - MANO.ancho) * k), anchoM = r0 * MANO.ancho;
+    const largo = r0 * (MANO.ancho + (MANO.largo - MANO.ancho) * k) * manos, anchoM = r0 * MANO.ancho * manos;
     const c = [M[0] + ux * MANO.avance * k, M[1] + uy * MANO.avance * k];
     const formas = [{ m: { c, rx: largo, ry: anchoM, rot: Math.atan2(uy, ux), musculos: [], bulto: true } }];
     return formas;
@@ -297,7 +310,7 @@ export function crearTrajeNeon(lienzo) {
   // frente, un óvalo achatado; de lado, una zapatilla. Con la suela en el suelo.
   function pieDe(parte) {
     const K = parte.segmentos[1][0], A = parte.segmentos[1][1], P = parte.segmentos[2][1];
-    const k = 0.88 + 0.12 * (parte.segmentos[0][2] / 4.7);
+    const k = (0.88 + 0.12 * (parte.segmentos[0][2] / 4.7)) * pies;
     const sub = (u, v) => [u[0] - v[0], u[1] - v[1], u[2] - v[2]];
     const uni = (v) => { const l = Math.hypot(v[0], v[1], v[2]) || 1; return [v[0] / l, v[1] / l, v[2] / l]; };
     const cruz = (u, v) => [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
@@ -348,7 +361,11 @@ export function crearTrajeNeon(lienzo) {
   // lo que queda muy detrás (más oscuro); el tronco, con el cuello y lo que está a su altura (de pie, las piernas); y
   // cada parte que queda delante (un brazo, la cabeza…), una a una, en su orden. Cada parte se queda en su capa hasta
   // pasar el límite por HISTERESIS unidades (así no salta de una a otra en un par de fotogramas).
+  // el tamaño de sus manos y sus pies, por su sexo (D-141: los de «Ella», algo más pequeños)
+  let manos = 1, pies = 1;
   function capasDe(f) {
+    manos = f.cuerpo?.proporciones?.manos ?? 1;
+    pies = f.cuerpo?.proporciones?.pies ?? 1;
     const dt = f.t - tMemoria;
     if (!(dt > 0 && dt < 0.3)) memoria = new Map();
     tMemoria = f.t;
@@ -404,22 +421,22 @@ export function crearTrajeNeon(lienzo) {
     const capas = [...(lejos.formas.length ? [lejos] : []), medio, ...delanteCapas];
     const cab = partes.find((x) => x.centro);
     if (f.coleta && cab) {
-      // La coleta de «Ella» (D-139, D-141): detrás de todo si queda detrás del cuerpo; si no, junto a la cabeza (detrás
-      // o delante de ella)
-      const cola = coletaDe(f);
-      const cp = { formas: cola, borde: cola, tubos: cola, color: col.cuerpo, coleta: true };
-      const zc = cola[2].a[2], zH = cab.centro[2];
-      const i = capas.findIndex((x) => x.cabeza);
-      if (zc < tronco.clave - 2) capas.unshift(cp);
-      else capas.splice(zc < zH ? i : i + 1, 0, cp);
+      // El pelo de «Ella» (D-139, D-141): cada cola y cada bola, en su capa: detrás de todo si queda detrás del cuerpo;
+      // si no, junto a la cabeza (detrás o delante de ella)
+      const zH = cab.centro[2];
+      for (const cp of peloDe(f)) {
+        const i = capas.findIndex((x) => x.cabeza);
+        if (cp.z < tronco.clave - 2) capas.unshift(cp);
+        else capas.splice(cp.z < zH ? i : i + 1, 0, cp);
+      }
     }
     return capas;
   }
-  // La coleta (D-141): sus puntos (COLETA), en la cabeza, unidos por tramos que se afinan; algo hacia un lado y con su
-  // vaivén: un balanceo suave y un muelle que se queda atrás cuando la cabeza se mueve de lado (como el pelo de verdad).
+  // El pelo (D-141): su peinado (PEINADOS; de serie, dos coletas), con su vaivén: un balanceo suave y un muelle que se queda
+  // atrás cuando la cabeza se mueve de lado (como el pelo de verdad). Devuelve sus capas.
   let muelle = { x: 0, v: 0, t: -1, hx: 0 };
-  function coletaDe(f) {
-    const cara = f.cin.cara;
+  function peloDe(f) {
+    const cara = f.cin.cara, peinado = PEINADOS[f.peinado] || PEINADOS.coletas;
     // cuánto se mueve en la pantalla un paso a su derecha (de frente, a la derecha; de espaldas o en espejo, al revés;
     // de lado, casi nada)
     const sx = cara(1, 0, 8, true)[0] - cara(0, 0, 8, true)[0];
@@ -433,32 +450,70 @@ export function crearTrajeNeon(lienzo) {
       muelle.t = f.t;
       muelle.hx = hx;
     }
-    const goma = cara(0, COLETA_GOMA.y, COLETA_GOMA.fuera, true);
-    const af = cara(0, -5, 7, true), ad = cara(0, -5, COLETA_GOMA.fuera, true);
-    const atras = [af[0] - ad[0], af[1] - ad[1]]; // hacia fuera de la cabeza, en la pantalla
-    // de lado a lado, en la pantalla: hacia su derecha (de serie), el balanceo y el muelle
-    const lado = COLETA_LADO * lim(sx, -1, 1) + Math.sin(f.t * 2.1) * 0.5;
-    // el suelo (la superficie de debajo, la de su sombra): tumbada, la coleta se queda encima, hacia atrás
+    // el suelo (la superficie de debajo, la de su sombra): tumbada, el pelo se queda encima
     const suelo = f.sombra ? (f.sombra.y - f.raiz[1]) / f.escala : Infinity;
-    const tramos = [];
-    let a = goma, r1 = COLETA_R0;
-    COLETA.forEach(([fuera, cae, r2], i) => {
-      const k = (i + 1) / COLETA.length;
-      const b = [a[0] + atras[0] * fuera + lado + muelle.x * 0.45 * k, a[1] + atras[1] * fuera + cae, goma[2]];
-      if (b[1] > suelo - r2) {
-        const sobra = Math.min(cae, b[1] - (suelo - r2));
-        b[1] -= sobra;
-        b[0] += (Math.sign(atras[0]) || 1) * sobra;
-      }
-      tramos.push({ a, b, r1, r2 });
-      a = b;
-      r1 = r2;
-    });
-    return tramos;
+    const balanceo = Math.sin(f.t * 2.1) * 0.5;
+    const capas = [];
+    for (const c of peinado.colas) {
+      const [gx, gy, gf, detras] = c.goma;
+      const goma = cara(gx, gy, gf, detras);
+      const af = cara(gx, gy, gf + 6, detras);
+      const fuera = [af[0] - goma[0], af[1] - goma[1]]; // hacia fuera de la cabeza, en la pantalla
+      const lado = c.lado * lim(sx, -1, 1) + balanceo;
+      const tramos = [];
+      let a = goma, r1 = c.r0;
+      c.tramos.forEach(([k, cae, r2], i) => {
+        const q = (i + 1) / c.tramos.length;
+        const b = [a[0] + fuera[0] * k + lado + muelle.x * 0.45 * q, a[1] + fuera[1] * k + cae, goma[2]];
+        if (b[1] > suelo - r2) {
+          const sobra = Math.min(Math.max(cae, 0), b[1] - (suelo - r2));
+          b[1] -= sobra;
+          b[0] += (Math.sign(fuera[0]) || 1) * sobra;
+        }
+        tramos.push({ a, b, r1, r2 });
+        a = b;
+        r1 = r2;
+      });
+      capas.push({ formas: tramos, borde: tramos, tubos: tramos, color: col.cuerpo, coleta: true, z: goma[2] });
+    }
+    for (const b of peinado.bolas || []) {
+      const [bx, by, bf, detras] = b.en;
+      const c = cara(bx, by, bf, detras), base = cara(bx * 0.9, by * 0.9, 0.4, detras);
+      const s = [{ c, r: b.r }];
+      capas.push({ formas: s, borde: s, tubos: [], color: col.cuerpo, coleta: true, bola: { c, r: b.r, base }, z: c[2] });
+    }
+    return capas;
   }
-  // Los mechones de la coleta (D-141): dos líneas finas a lo largo, algo más oscuras, y una de luz hacia la luz; y la
-  // goma, una banda clara de lado a lado, junto a la cabeza.
+  // Los mechones (D-141). En una cola: dos líneas finas a lo largo, algo más oscuras, y una de luz hacia la luz; y la
+  // goma, una banda clara de lado a lado, junto a la cabeza. En una bola (el moño): dos arcos, como el pelo enrollado,
+  // y su goma, donde se junta con la cabeza.
+  function goma(c, centro, n, r, oscuro) {
+    for (const [color, ancho] of [[col.borde, 2.7], [oscuro ? '#fdf2f8' : '#ffffff', 1.5]]) {
+      c.strokeStyle = color;
+      c.lineWidth = ancho;
+      c.beginPath();
+      c.moveTo(centro[0] + n[0] * r, centro[1] + n[1] * r);
+      c.lineTo(centro[0] - n[0] * r, centro[1] - n[1] * r);
+      c.stroke();
+    }
+  }
   function pintarMechones(c, cp, oscuro) {
+    const oscuroMechon = rgba(tono(cp.color, -0.5), oscuro ? 0.5 : 0.42), luzMechon = rgba(tono(cp.color, 0.75), oscuro ? 0.6 : 0.55);
+    if (cp.bola) {
+      const { c: o, r, base } = cp.bola;
+      c.lineWidth = 0.7;
+      for (const [color, k, a0, a1] of [[oscuroMechon, 0.62, 0.15, 2.6], [oscuroMechon, 0.3, 3.4, 5.6], [luzMechon, 0.78, 3.6, 4.5]]) {
+        c.strokeStyle = color;
+        c.beginPath();
+        c.arc(o[0], o[1], r * k, a0, a1);
+        c.stroke();
+      }
+      // la goma: entre la bola y la cabeza, de lado a lado
+      const dx = o[0] - base[0], dy = o[1] - base[1], d = Math.hypot(dx, dy) || 1;
+      const g = [o[0] - (dx / d) * r * 0.82, o[1] - (dy / d) * r * 0.82];
+      goma(c, g, [-dy / d, dx / d], r * 0.62, oscuro);
+      return;
+    }
     const t = cp.formas;
     const centro = [t[0].a, ...t.map((x) => x.b)], radios = [t[0].r1, ...t.map((x) => x.r2)];
     const normal = (i) => {
@@ -481,18 +536,10 @@ export function crearTrajeNeon(lienzo) {
       c.stroke();
     };
     const fin = centro.length - 2;
-    linea(-0.3 * haciaLuz, 1, fin, rgba(tono(cp.color, -0.5), oscuro ? 0.5 : 0.42), 0.75);
+    linea(-0.3 * haciaLuz, 1, fin, oscuroMechon, 0.75);
     linea(0.12 * haciaLuz, 2, fin, rgba(tono(cp.color, -0.5), oscuro ? 0.4 : 0.32), 0.6);
-    linea(0.58 * haciaLuz, 1, fin - 1, rgba(tono(cp.color, 0.75), oscuro ? 0.6 : 0.55), 0.65);
-    const n = normal(0), g = mezcla(centro[0], centro[1], 0.3), rg = (radios[0] + (radios[1] - radios[0]) * 0.3) * 1.08;
-    for (const [color, ancho] of [[col.borde, 2.7], [oscuro ? '#fdf2f8' : '#ffffff', 1.5]]) {
-      c.strokeStyle = color;
-      c.lineWidth = ancho;
-      c.beginPath();
-      c.moveTo(g[0] + n[0] * rg, g[1] + n[1] * rg);
-      c.lineTo(g[0] - n[0] * rg, g[1] - n[1] * rg);
-      c.stroke();
-    }
+    linea(0.58 * haciaLuz, 1, fin - 1, luzMechon, 0.65);
+    goma(c, mezcla(centro[0], centro[1], 0.3), normal(0), (radios[0] + (radios[1] - radios[0]) * 0.3) * 1.08, oscuro);
   }
   // dónde está, en px del escenario, con margen para el halo
   function caja(f) {
@@ -677,7 +724,7 @@ export function crearTrajeNeon(lienzo) {
     return {
       cuerpo: bola(col.cuerpo, TONOS.cuerpo),
       cuerpoLejos: bola(col.lejos, TONOS.cuerpo),
-      coleta: bola(tono(col.cuerpo, -0.17), TONOS.cuerpo), // el pelo, algo más hondo que el cuerpo (D-141)
+      coleta: bola(tono(col.cuerpo, -0.1), TONOS.cuerpo), // el pelo, algo más hondo que el cuerpo (D-141)
       neon: radial(col.cuerpo, tn),
       neonCabeza: lineal(col.cuerpo, TONOS.neonCabeza[oscuro ? 'oscuro' : 'claro']),
       fuera,

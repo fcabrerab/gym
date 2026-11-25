@@ -868,6 +868,9 @@ body.con-borrador:not(.con-descanso):not(.con-hoja) .avisos { bottom: calc(var(-
    recibe toques: los mira js/mascota/escenario.js. */
 .mascota-capa { position: fixed; left: 0; top: 0; z-index: 15; pointer-events: none; will-change: transform; }
 .mascota-capa.en-pagina { position: absolute; }
+/* En la barra de abajo o en el rincón: pegada por abajo, como la barra (en el móvil, al esconderse o salir la barra de
+   direcciones del navegador, se mueven juntas). */
+.mascota-capa.en-abajo { top: auto; bottom: 0; }
 .mascota-capa[hidden] { display: none; }
 /* En tu dedo o cayendo de él (D-135, la 5): por encima de la cabecera, las barras de abajo y la navegación (30), pero
    por debajo de las hojas (50) y los avisos (60). */

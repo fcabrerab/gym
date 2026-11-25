@@ -116,7 +116,8 @@ function nacer(ficha) {
     bombeoDura: BOMBEO_HORAS * 3600,
   });
   cerebro.pesos = pesosDe(rasgos);
-  cerebro.sexo = ficha.ajustes.sexo; // D-140: sus proporciones (y, «Ella», su coleta)
+  cerebro.sexo = ficha.ajustes.sexo; // D-140: sus proporciones (y, «Ella», su pelo: D-141)
+  cerebro.peinado = ficha.ajustes.peinado;
   escenario = crearEscenario({ doc, win, alto: () => ALTO_DE_PIE * cerebro.escala + 8 });
   escenario.alCalcular = () => cerebro.reubicar();
   const traje = crearTrajeNeon(escenario.lienzo);
@@ -229,7 +230,10 @@ function nacer(ficha) {
     // encima de una tarjeta, pegada a la página (al desplazarla va con ella, sin tirones); en la barra de abajo o en tu
     // dedo, a la pantalla; y en tu dedo o cayendo de él, por encima de todo
     const s = escenario.superficies().find((x) => x.id === cerebro.superficie);
-    const origen = escenario.colocar(f, { pegadaAPagina: !cerebro.cogida && Boolean(s && s.yDoc != null), encima: cerebro.enElAire });
+    const origen = escenario.colocar(f, {
+      pegadaAPagina: !cerebro.cogida && Boolean(s && s.yDoc != null), encima: cerebro.enElAire,
+      abajo: !cerebro.cogida && !cerebro.enElAire && Boolean(s && s.yDoc == null),
+    });
     traje.dibujar(f, origen);
   }
 
@@ -305,6 +309,7 @@ function nacer(ficha) {
     ajustar(f) {
       cerebro.escala = ESCALAS[f.ajustes.tamano] || ESCALAS.normal;
       cerebro.sexo = f.ajustes.sexo;
+      cerebro.peinado = f.ajustes.peinado;
       traje.luz = f.ajustes.luz;
       traje.brillo = BRILLOS[f.ajustes.brillo] ?? 1;
       entreno = f.ajustes.entreno;
@@ -337,8 +342,10 @@ if (esLocal()) {
     get luz() { return viva?.traje.luz ?? null; },
     get oculta() { return Boolean(viva?.oculta); },
     get enPagina() { return Boolean(viva?.escenario.enPagina); },
+    get enAbajo() { return Boolean(viva?.escenario.enAbajo); },
     get brillo() { return viva?.traje.brillo ?? null; },
     get sexo() { return viva?.cerebro.sexo ?? null; },
+    get peinado() { return viva?.cerebro.peinado ?? null; },
     get carga() { return viva?.cerebro.carga ?? null; },
     get descanso() { return viva?.cerebro.descanso ?? null; },
     // su cuerpo: la forma que se le ve, la de fondo, el bombeo general, cada músculo y lo último de forma.js

@@ -1,12 +1,21 @@
 // Versión de la app. La misma VERSION está en ../sw.js y en la meta «gym-beta-version» de ../index.html: cada
 // cambio en un archivo de la app obliga a subirla en los tres sitios (una prueba de tests/ comprueba que coinciden).
 // Hasta la 0.2.10 fue la beta, en beta/; desde la 1.0.0, es la app, en la dirección de siempre (D-121).
-export const VERSION = "1.5.0";
-export const FECHA_VERSION = "2026-11-22";
+export const VERSION = "1.5.1";
+export const FECHA_VERSION = "2026-11-25";
 
 // Novedades por versión, de la más nueva a la más vieja. Se enseñan en Ajustes → La app → Novedades y, la primera
 // vez, en «Qué tiene de nuevo».
 export const NOVEDADES = [
+  {
+    version: "1.5.1",
+    fecha: "2026-11-25",
+    cambios: [
+      "«Ella», más femenina: hombros más estrechos, cintura más marcada, brazos más finos y manos y pies algo más pequeños.",
+      "Y su pelo, a elegir en su página (Ajustes → Mascota → «Personalizarla» → «Su pelo»): dos coletas (de serie), una coleta alta, un moño o la coleta baja de antes.",
+      "Arreglado: sentada en la barra de abajo, al desplazar la pantalla en el móvil, a veces daba un saltito.",
+    ],
+  },
   {
     version: "1.5.0",
     fecha: "2026-11-22",

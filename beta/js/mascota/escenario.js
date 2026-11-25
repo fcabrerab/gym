@@ -131,6 +131,7 @@ export function crearEscenario({ doc = document, win = window, alto, anchoMin = 
   let dpr = 1;
   let colocado = null;
   let enPagina = false;
+  let enAbajo = false; // pegado a la pantalla por abajo, como la barra de abajo (en ella o en el rincón)
   let porEncima = false;
   let evitar = null; // un selector: lo que no tapar (en el descanso, el ejercicio abierto)
   let alCalcular = () => {};
@@ -172,12 +173,25 @@ export function crearEscenario({ doc = document, win = window, alto, anchoMin = 
     pendiente = win.setTimeout(calcular, ms);
   }
   // En cada fotograma: la «y» de las de la página, con lo desplazada que está (sin medir: no cuesta); y las de «vivas» (la
-  // suya y adónde salta), midiéndolas: si la app mueve su tarjeta (al desplegar otra), va con ella al momento.
+  // suya y adónde salta), midiéndolas: si la app mueve su tarjeta (al desplegar otra), va con ella al momento. Lo fijo (la
+  // barra de abajo y el rincón), si es de «vivas», también, midiendo la barra: en el móvil, al desplazar, la barra de
+  // direcciones del navegador se esconde o sale y la barra de abajo baja o sube con ella; si no, sentada en ella, se
+  // quedaba flotando o tapada hasta volver a medir, y luego saltaba.
   function ponerAlDia(vivas = []) {
     const sy = win.scrollY;
     let falta = false;
+    let abajo;
     for (const s of lista) {
-      if (s.yDoc == null) continue;
+      if (s.yDoc == null) {
+        if (!vivas.includes(s.id)) continue;
+        if (abajo === undefined) {
+          const r = barraAbajo()?.getBoundingClientRect();
+          abajo = r && r.height ? r.top : win.innerHeight;
+          region.y2 = abajo;
+        }
+        s.y = abajo;
+        continue;
+      }
       if (!s.el?.isConnected) falta = true;
       else if (vivas.includes(s.id)) {
         s.y = s.el.getBoundingClientRect().top;
@@ -346,9 +360,11 @@ export function crearEscenario({ doc = document, win = window, alto, anchoMin = 
     traje.medidas(l, l, r);
   }
   // Pone el lienzo donde está ella (centrado en su cuerpo): pegado a la página (en una tarjeta) o a la pantalla (en la
-  // barra de abajo, en el rincón o en tu dedo); con «encima» (en tu dedo o cayendo de él), por encima de la cabecera y
-  // de las barras de abajo. Devuelve dónde cae su esquina, en px de la ventana.
-  function colocar(f, { pegadaAPagina = true, encima = false } = {}) {
+  // barra de abajo, en el rincón o en tu dedo); con «abajo» (en la barra de abajo o en el rincón), pegado por abajo, como
+  // la barra: en el móvil, cuando la barra de direcciones del navegador se esconde o sale, el navegador los mueve juntos,
+  // sin esperar a su siguiente fotograma; con «encima» (en tu dedo o cayendo de él), por encima de la cabecera y de las
+  // barras de abajo. Devuelve dónde cae su esquina, en px de la ventana.
+  function colocar(f, { pegadaAPagina = true, encima = false, abajo = false } = {}) {
     if (encima !== porEncima) {
       porEncima = encima;
       lienzo.classList.toggle("encima", encima);
@@ -375,13 +391,22 @@ export function crearEscenario({ doc = document, win = window, alto, anchoMin = 
       ponerLienzo(true, px, py);
       return [px - sx, py - sy];
     }
+    if (abajo) {
+      // su borde de abajo, respecto al de la pantalla (lo que hay que subirlo desde ahí): el de la navegación, que va
+      // pegada abajo del todo (si no está, el de la ventana)
+      const r = doc.getElementById("nav")?.getBoundingClientRect();
+      ponerLienzo(false, ox, oy + lado - (r && r.height ? r.bottom : win.innerHeight), true);
+      return [ox, oy];
+    }
     ponerLienzo(false, ox, oy);
     return [ox, oy];
   }
-  function ponerLienzo(pagina_, x, y) {
-    if (pagina_ !== enPagina) {
+  function ponerLienzo(pagina_, x, y, abajo_ = false) {
+    if (pagina_ !== enPagina || abajo_ !== enAbajo) {
       lienzo.classList.toggle("en-pagina", pagina_);
+      lienzo.classList.toggle("en-abajo", abajo_);
       enPagina = pagina_;
+      enAbajo = abajo_;
       colocado = null;
     }
     if (!colocado || colocado[0] !== x || colocado[1] !== y) {
@@ -402,6 +427,7 @@ export function crearEscenario({ doc = document, win = window, alto, anchoMin = 
     medirLienzo,
     colocar,
     get enPagina() { return enPagina; },
+    get enAbajo() { return enAbajo; },
     // En el descanso: lo que no tapar (un selector, o null).
     get evitar() { return evitar; },
     set evitar(sel) {
